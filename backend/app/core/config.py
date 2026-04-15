@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_v1_prefix: str = "/api/v1"
     app_port: int = 8080
-    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/asset_flow"
+    # Default to embedded SQLite for the simplest and most stable cloud deployment.
+    database_url: str = "sqlite:////data/app.db"
+    # Keep strict startup by default; SQLite is local and should be immediately available.
+    db_init_required: bool = True
 
     jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
