@@ -1,10 +1,14 @@
 # 后端基础工程（FastAPI）
 
+## 目标：最简单、最平稳地上云
+默认采用 **内置 SQLite**（单容器即可运行），不强依赖外部 PostgreSQL。  
+这样部署时只要把容器跑起来就能工作，避免因为数据库服务编排导致反复重启。
+
 ## 技术栈
 - FastAPI
 - SQLAlchemy 2.x
 - Pydantic 2.x
-- PostgreSQL
+- SQLite（默认）/ PostgreSQL（可选）
 - JWT
 
 ## 目录说明
@@ -14,21 +18,33 @@
 - `app/models/`: ORM 模型（users/roles/user_roles）
 - `app/api/v1/`: v1 接口
 
-## 环境变量
-在 `backend` 目录下创建 `.env`：
+## 环境变量（极简）
+在 `backend` 目录下创建 `.env`（可选）：
 
 ```env
-DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/asset_flow
+# 不填则默认使用 sqlite:////data/app.db
+DATABASE_URL=sqlite:////data/app.db
+
+# 默认 true：启动时创建表并初始化基础数据（推荐保留）
+DB_INIT_REQUIRED=true
+
 JWT_SECRET_KEY=change-this-in-production
 JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=480
 INITIAL_ADMIN_USERNAME=admin
 INITIAL_ADMIN_PASSWORD=zhongqin123
 INITIAL_ADMIN_REAL_NAME=系统管理员
-DB_INIT_REQUIRED=false
 ```
 
-## 本地运行
+## 云上部署（推荐）
+### 方式 1：直接用仓库根目录 Dockerfile
+- 镜像入口已配置为 `sh ./start`
+- 默认监听 `PORT`（平台注入）或回退 `APP_PORT=8080`
+- 默认数据库文件在 `/data/app.db`
+
+建议给容器挂载持久化卷到 `/data`，避免重启后数据丢失。
+
+### 方式 2：本地运行
 ```bash
 cd backend
 python -m venv .venv
@@ -41,11 +57,6 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 ./start
 ```
-
-> 云平台（如 Zeabur）通常会注入 `PORT` 环境变量，`start` 脚本已自动读取 `PORT`，避免因为固定端口导致网关 404。
-> 若平台按“容器端口 8080”暴露（你截图就是这种），`start` 也会自动回退到 `APP_PORT`（默认 8080）。
-> 若云环境数据库尚未就绪，可将 `DB_INIT_REQUIRED=false`（默认即为 false），服务会先启动并在日志提示数据库初始化失败。
-> 数据库就绪后建议设置 `DB_INIT_REQUIRED=true`，确保启动时强校验数据库连通性。
 
 ## 默认账号
 - 用户名: `admin`
