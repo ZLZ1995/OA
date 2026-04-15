@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     app_name: str = "资产评估项目流程管理系统 API"
     app_version: str = "0.1.0"
     api_v1_prefix: str = "/api/v1"
+codex/develop-asset-evaluation-project-management-system-u5i2vk
     app_port: int = 8080
-
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/asset_flow"
 
     jwt_secret_key: str = "change-this-in-production"
