@@ -1,11 +1,12 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
-cd "$(dirname "$0")/backend"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$SCRIPT_DIR/backend"
 
-if [[ ! -d ".venv" ]]; then
-  echo "[提示] 建议先创建虚拟环境并安装依赖: python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
+if [ ! -d ".venv" ]; then
+  echo "[提示] 建议先创建虚拟环境并安装依赖: python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt"
 fi
 
 PORT="${PORT:-${APP_PORT:-8080}}"
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT}"
+exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT"

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     app_port: int = 8080
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/asset_flow"
+    db_init_required: bool = False
 
     jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
