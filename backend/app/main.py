@@ -1,16 +1,27 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.db.init_db import init_db
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Initialize database objects and seed basic data on startup."""
-    init_db()
+    try:
+        init_db()
+        logger.info("Database initialized successfully.")
+    except SQLAlchemyError as exc:
+        logger.exception("Database initialization failed during startup: %s", exc)
+        if settings.db_init_required:
+            raise
+        logger.warning("Continue startup without database initialization because DB_INIT_REQUIRED=false")
     yield
 
 
