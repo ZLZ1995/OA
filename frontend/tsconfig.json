@@ -7,13 +7,11 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "jsx": "preserve",
-    "jsxImportSource": "vue",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "skipLibCheck": true,
     "esModuleInterop": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "types": ["vite/client", "node", "vue/jsx"],
+    "types": ["node"],
     "paths": {
       "@/*": ["src/*"]
     }

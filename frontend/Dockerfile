@@ -7,8 +7,7 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-# Explicitly run Vite build to avoid any typecheck script hooks in container build chain.
-RUN npx vite build
+RUN npm run build
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
