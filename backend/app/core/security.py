@@ -20,10 +20,14 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(subject: str, expires_minutes: int | None = None) -> str:
     """Create JWT access token for authenticated user."""
-    expire_delta = timedelta(minutes=expires_minutes or settings.jwt_access_token_expire_minutes)
+    expire_delta = timedelta(
+        minutes=expires_minutes or settings.jwt_access_token_expire_minutes
+    )
     expire_at = datetime.now(timezone.utc) + expire_delta
     payload = {
         "sub": subject,
         "exp": expire_at,
     }
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )

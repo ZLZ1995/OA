@@ -34,8 +34,9 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES=480
 INITIAL_ADMIN_USERNAME=admin
 INITIAL_ADMIN_PASSWORD=zhongqin123
 INITIAL_ADMIN_REAL_NAME=系统管理员
-DB_INIT_REQUIRED=false
 ```
+
+> Zeabur 建议直接按 `backend/.env.zeabur.example` 配置平台环境变量，避免遗漏关键项。
 
 ## 云上部署（推荐）
 ### 方式 1：直接用仓库根目录 Dockerfile
@@ -61,8 +62,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 > 云平台（如 Zeabur）通常会注入 `PORT` 环境变量，`start` 脚本已自动读取 `PORT`，避免因为固定端口导致网关 404。
 > 若平台按“容器端口 8080”暴露（你截图就是这种），`start` 也会自动回退到 `APP_PORT`（默认 8080）。
-> 若云环境数据库尚未就绪，可将 `DB_INIT_REQUIRED=false`（默认即为 false），服务会先启动并在日志提示数据库初始化失败。
-> 数据库就绪后建议设置 `DB_INIT_REQUIRED=true`，确保启动时强校验数据库连通性。
+> 若云环境数据库尚未就绪，可临时将 `DB_INIT_REQUIRED=false`，服务会先启动并在日志提示数据库初始化失败。
+> 数据库就绪后建议设置 `DB_INIT_REQUIRED=true`，确保启动时强校验数据库连通性（Dockerfile 默认值即为 `true`）。
 ## 默认账号
 - 用户名: `admin`
 - 密码: `zhongqin123`
