@@ -1,14 +1,13 @@
 # 后端基础工程（FastAPI）
 
 ## 目标：最简单、最平稳地上云
-默认采用 **内置 SQLite**（单容器即可运行），不强依赖外部 PostgreSQL。  
+默认采用 **内置 SQLite**（单容器即可运行），不强依赖额外部 PostgreSQL。
 这样部署时只要把容器跑起来就能工作，避免因为数据库服务编排导致反复重启。
-
 ## 技术栈
 - FastAPI
 - SQLAlchemy 2.x
 - Pydantic 2.x
-- SQLite（默认）/ PostgreSQL（可选）
+- SQLite（默认） / PostgreSQL（可选）
 - JWT
 
 ## 目录说明
@@ -36,6 +35,7 @@ INITIAL_ADMIN_PASSWORD=zhongqin123
 INITIAL_ADMIN_REAL_NAME=系统管理员
 ```
 
+## 本地运行
 > Zeabur 建议直接按 `backend/.env.zeabur.example` 配置平台环境变量，避免遗漏关键项。
 
 ## 云上部署（推荐）
@@ -74,3 +74,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me`
+## 阶段1固化文档
+- `docs/architecture.md`
+- `docs/db-schema.md`
+- `docs/workflow-state-machine.md`
+- `docs/permission-matrix.md`

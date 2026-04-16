@@ -4,6 +4,7 @@ from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.base import Base
 from app.db.session import engine
+from app import models  # noqa: F401  # Import all models for metadata registration.
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
