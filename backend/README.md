@@ -63,7 +63,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - 密码: `zhongqin123`
 
 ## 已提供基础 API
-- `GET /` 根接口
+- `GET /` 登录页面（可直接输入账号密码）
 - `GET /api/v1/health`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
