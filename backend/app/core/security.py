@@ -15,6 +15,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     """Generate password hash."""
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > 72:
+        raise ValueError(
+            "initial_admin_password exceeds bcrypt 72-byte limit; "
+            "please shorten it or change the hash scheme."
+        )
     return pwd_context.hash(password)
 
 
