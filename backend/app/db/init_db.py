@@ -40,7 +40,9 @@ def seed_fixed_roles(db: Session) -> None:
 
 
 def seed_initial_admin(db: Session) -> None:
-    admin = db.query(User).filter(User.username == settings.initial_admin_username).first()
+    admin = (
+        db.query(User).filter(User.username == settings.initial_admin_username).first()
+    )
     if not admin:
         admin = User(
             username=settings.initial_admin_username,
@@ -58,7 +60,10 @@ def seed_initial_admin(db: Session) -> None:
 
     # Ensure super admin has all fixed roles.
     all_role_ids = [role.id for role in db.query(Role).all()]
-    bound_role_ids = {item.role_id for item in db.query(UserRole).filter(UserRole.user_id == admin.id).all()}
+    bound_role_ids = {
+        item.role_id
+        for item in db.query(UserRole).filter(UserRole.user_id == admin.id).all()
+    }
     for role_id in all_role_ids:
         if role_id not in bound_role_ids:
             db.add(UserRole(user_id=admin.id, role_id=role_id))
