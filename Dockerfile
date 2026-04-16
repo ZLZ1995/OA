@@ -14,5 +14,6 @@ COPY . /app
 RUN chmod +x /app/start && mkdir -p /data
 
 VOLUME ["/data"]
+
 EXPOSE 8080
 CMD ["sh", "./start"]

@@ -21,7 +21,9 @@ async def lifespan(_: FastAPI):
         logger.exception("Database initialization failed during startup: %s", exc)
         if settings.db_init_required:
             raise
-        logger.warning("Continue startup without database initialization because DB_INIT_REQUIRED=false")
+        logger.warning(
+            "Continue startup without database initialization because DB_INIT_REQUIRED is false."
+        )
     yield
 
 
