@@ -87,11 +87,118 @@ def root() -> str:
           }
 
           localStorage.setItem('access_token', data.access_token || '');
-          msg.textContent = '登录成功！Token 已保存到浏览器 localStorage。你现在可以继续调用接口。';
+          msg.textContent = '登录成功，正在跳转...';
+          window.location.href = '/dashboard';
         } catch (e) {
           msg.textContent = '登录失败：' + e;
         }
       }
+    </script>
+  </body>
+</html>
+"""
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard() -> str:
+    return """
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>主操作界面 - 资产评估项目流程管理系统</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1220; color: #fff; margin: 0; padding: 24px; }
+      .card { width: min(720px, 96vw); margin: 0 auto; background: #1b1f36; border-radius: 14px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+      h1 { margin-top: 0; font-size: 24px; }
+      input, textarea { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid #3b426f; background: #13172a; color: #fff; }
+      button { margin-right: 8px; padding: 8px 14px; border: 0; border-radius: 8px; background: #6f4bff; color: #fff; cursor: pointer; }
+      pre { background: #13172a; border: 1px solid #3b426f; border-radius: 10px; padding: 12px; white-space: pre-wrap; word-break: break-word; }
+      .muted { color: #c9ccea; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>主操作界面</h1>
+      <p class="muted">支持新建工单、查询我的工单进度。</p>
+      <h3>新建工单</h3>
+      <input id="wo-title" placeholder="工单标题（例如：补充项目资料）" />
+      <textarea id="wo-desc" rows="3" placeholder="工单描述"></textarea>
+      <div>
+        <button onclick="createWorkOrder()">提交工单</button>
+        <button onclick="loadMine()">查询我的工单</button>
+        <button onclick="logout()">退出登录</button>
+      </div>
+      <pre id="output">正在加载...</pre>
+    </div>
+    <script>
+      function getToken() {
+        return localStorage.getItem('access_token') || '';
+      }
+
+      async function createWorkOrder() {
+        const output = document.getElementById('output');
+        const token = getToken();
+        if (!token) {
+          output.textContent = '未检测到 access_token，请先登录。';
+          return;
+        }
+        const title = document.getElementById('wo-title').value.trim();
+        const description = document.getElementById('wo-desc').value.trim();
+        if (!title) {
+          output.textContent = '请先输入工单标题。';
+          return;
+        }
+        try {
+          const resp = await fetch('/api/v1/work-orders', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + token
+            },
+            body: JSON.stringify({ title, description })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            output.textContent = '创建工单失败：' + (data.detail || JSON.stringify(data));
+            return;
+          }
+          output.textContent = '工单创建成功：\\n' + JSON.stringify(data, null, 2);
+          await loadMine();
+        } catch (e) {
+          output.textContent = '请求失败：' + e;
+        }
+      }
+
+      async function loadMine() {
+        const output = document.getElementById('output');
+        const token = getToken();
+        if (!token) {
+          output.textContent = '未检测到 access_token，请先登录。';
+          return;
+        }
+        try {
+          const resp = await fetch('/api/v1/work-orders/mine', {
+            headers: { Authorization: 'Bearer ' + token }
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            output.textContent = '查询工单失败：' + (data.detail || JSON.stringify(data));
+            return;
+          }
+          output.textContent = '我的工单：\\n' + JSON.stringify(data.items || [], null, 2);
+        } catch (e) {
+          output.textContent = '请求失败：' + e;
+        }
+      }
+
+      function logout() {
+        localStorage.removeItem('access_token');
+        window.location.href = '/';
+      }
+
+      loadMine();
     </script>
   </body>
 </html>
