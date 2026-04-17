@@ -1,12 +1,16 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.db.init_db import init_db
+from app.db.session import engine
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +106,29 @@ def root() -> str:
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
-def dashboard() -> str:
+def dashboard(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/", status_code=302)
+    try:
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
+        username: str | None = payload.get("sub")
+        if not username:
+            return RedirectResponse(url="/", status_code=302)
+    except JWTError:
+        return RedirectResponse(url="/", status_code=302)
+
+    with Session(engine) as db:
+        user = (
+            db.query(User)
+            .filter(User.username == username, User.is_active.is_(True))
+            .first()
+        )
+        if not user:
+            return RedirectResponse(url="/", status_code=302)
+
     return """
 <!doctype html>
 <html lang="zh-CN">
