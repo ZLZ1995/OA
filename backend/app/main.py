@@ -82,6 +82,7 @@ def root() -> str:
 
           const data = await resp.json();
           if (!resp.ok) {
+            localStorage.removeItem('access_token');
             msg.textContent = '登录失败：' + (data.detail || JSON.stringify(data));
             return;
           }
@@ -90,6 +91,7 @@ def root() -> str:
           msg.textContent = '登录成功，正在跳转...';
           window.location.href = '/dashboard';
         } catch (e) {
+          localStorage.removeItem('access_token');
           msg.textContent = '登录失败：' + e;
         }
       }
@@ -132,7 +134,7 @@ def dashboard() -> str:
         const output = document.getElementById('output');
         const token = localStorage.getItem('access_token') || '';
         if (!token) {
-          output.textContent = '未检测到 access_token，请先登录。';
+          window.location.href = '/';
           return;
         }
         try {
@@ -141,12 +143,14 @@ def dashboard() -> str:
           });
           const data = await resp.json();
           if (!resp.ok) {
-            output.textContent = '获取用户信息失败：' + (data.detail || JSON.stringify(data));
+            localStorage.removeItem('access_token');
+            window.location.href = '/';
             return;
           }
           output.textContent = '当前登录用户信息：\\n' + JSON.stringify(data, null, 2);
         } catch (e) {
-          output.textContent = '请求失败：' + e;
+          localStorage.removeItem('access_token');
+          window.location.href = '/';
         }
       }
 
