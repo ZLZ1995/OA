@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { login, me } from '@/api/auth'
@@ -27,9 +27,16 @@ const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({ username: 'admin', password: 'zhongqin123' })
 
+onMounted(() => {
+  // Entering login page means starting a fresh authentication flow.
+  // This avoids accidentally reusing an old valid token and being mistaken as "any credentials can log in".
+  auth.clearAuth()
+})
+
 async function onLogin() {
   try {
     loading.value = true
+    auth.clearAuth()
     const token = await login(form)
     auth.setToken(token.access_token)
     auth.setUser(await me())
@@ -41,6 +48,7 @@ async function onLogin() {
       window.location.assign('/dashboard')
     }
   } catch {
+    auth.clearAuth()
     ElMessage.error('登录失败，请检查账号密码')
   } finally {
     loading.value = false

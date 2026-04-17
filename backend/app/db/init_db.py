@@ -1,6 +1,5 @@
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.base import Base
 from app.db.session import engine
@@ -21,6 +20,9 @@ FIXED_ROLES: list[tuple[str, str, str]] = [
     ("FINANCE", "财务人员", "财务角色"),
     ("ARCHIVE_MANAGER", "档案管理员", "档案管理角色"),
 ]
+SUPER_ADMIN_USERNAME = "admin"
+SUPER_ADMIN_PASSWORD = "zhongqin123"
+SUPER_ADMIN_REAL_NAME = "超级管理员"
 
 
 def init_db() -> None:
@@ -40,22 +42,20 @@ def seed_fixed_roles(db: Session) -> None:
 
 
 def seed_initial_admin(db: Session) -> None:
-    admin = (
-        db.query(User).filter(User.username == settings.initial_admin_username).first()
-    )
+    admin = db.query(User).filter(User.username == SUPER_ADMIN_USERNAME).first()
     if not admin:
         admin = User(
-            username=settings.initial_admin_username,
-            password_hash=get_password_hash(settings.initial_admin_password),
-            real_name=settings.initial_admin_real_name,
+            username=SUPER_ADMIN_USERNAME,
+            password_hash=get_password_hash(SUPER_ADMIN_PASSWORD),
+            real_name=SUPER_ADMIN_REAL_NAME,
             is_active=True,
         )
         db.add(admin)
         db.flush()
     else:
         # Keep super admin credential aligned with configured bootstrap credential.
-        admin.password_hash = get_password_hash(settings.initial_admin_password)
-        admin.real_name = settings.initial_admin_real_name
+        admin.password_hash = get_password_hash(SUPER_ADMIN_PASSWORD)
+        admin.real_name = SUPER_ADMIN_REAL_NAME
         admin.is_active = True
 
     # Ensure super admin has all fixed roles.

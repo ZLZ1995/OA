@@ -75,7 +75,8 @@ async function loadProjects() {
 }
 
 async function onCreate() {
-  if (!auth.user?.id) {
+  const currentUser = auth.user ?? (await auth.ensureUserLoaded())
+  if (!currentUser?.id) {
     ElMessage.error('当前用户信息未加载')
     return
   }
@@ -85,8 +86,8 @@ async function onCreate() {
   }
   await createProject({
     ...form,
-    business_user_id: auth.user.id,
-    project_leader_id: auth.user.id
+    business_user_id: currentUser.id,
+    project_leader_id: currentUser.id
   })
   ElMessage.success('项目创建成功')
   form.project_code = ''

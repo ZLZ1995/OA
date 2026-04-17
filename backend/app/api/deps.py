@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
+SUPER_ADMIN_USERNAME = "admin"
 
 
 def get_current_user(
@@ -45,7 +46,12 @@ def get_current_role_codes(current_user: User = Depends(get_current_user)) -> se
 
 
 def require_roles(*required_role_codes: str):
-    def checker(role_codes: set[str] = Depends(get_current_role_codes)) -> set[str]:
+    def checker(
+        role_codes: set[str] = Depends(get_current_role_codes),
+        current_user: User = Depends(get_current_user),
+    ) -> set[str]:
+        if current_user.username == SUPER_ADMIN_USERNAME:
+            return role_codes.union(required_role_codes)
         if not role_codes.intersection(required_role_codes):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
