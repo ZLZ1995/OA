@@ -79,12 +79,6 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `GET/POST/PATCH/DELETE /api/v1/projects`
 - `GET/POST/PATCH/DELETE /api/v1/work-orders`
 - `GET /api/v1/dashboard/mine`
-- `POST /api/v1/files/upload`，`GET /api/v1/files/work-orders/{work_order_id}`
-- `POST /api/v1/reviews/submit`，`POST /api/v1/reviews/decision`，`GET /api/v1/reviews/work-orders/{work_order_id}`
-- `POST /api/v1/print-room/issue-official-contract`，`POST /api/v1/print-room/issue-paper-report`
-- `GET /api/v1/workflow-logs/work-orders/{work_order_id}`
-
-> 云服务器若已挂载硬盘到 `/data`，建议设置 `LOCAL_STORAGE_DIR=/data/asset-valuation/uploads`。
 ## 阶段1固化文档
 - `docs/architecture.md`
 - `docs/db-schema.md`

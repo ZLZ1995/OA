@@ -25,15 +25,3 @@ export async function createProject(payload: {
   const { data } = await http.post('/projects', payload)
   return data as ProjectItem
 }
-
-export async function updateProject(
-  projectId: number,
-  payload: Partial<Pick<ProjectItem, 'project_name' | 'client_name' | 'status'>>
-) {
-  const { data } = await http.patch(`/projects/${projectId}`, payload)
-  return data as ProjectItem
-}
-
-export async function deleteProject(projectId: number) {
-  await http.delete(`/projects/${projectId}`)
-}

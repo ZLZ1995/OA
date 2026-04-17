@@ -21,13 +21,9 @@ const router = useRouter()
 const auth = useAuthStore()
 const active = computed(() => route.path)
 
-async function onLogout() {
+function onLogout() {
   auth.clearAuth()
-  await router.replace('/login')
-
-  if (router.currentRoute.value.path !== '/login') {
-    window.location.assign('/login')
-  }
+  router.push('/login')
 }
 </script>
 
