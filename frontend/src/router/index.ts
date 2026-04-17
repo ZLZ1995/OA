@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
+import { pinia } from '@/store/pinia'
 import AppLayout from '@/layout/AppLayout.vue'
 
 const routes: RouteRecordRaw[] = [
@@ -27,7 +28,7 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const auth = useAuthStore()
+  const auth = useAuthStore(pinia)
   if (to.path !== '/login' && !auth.isLoggedIn) {
     return '/login'
   }
