@@ -16,7 +16,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     """Authenticate and return JWT token."""
     user = authenticate_user(db, payload.username, payload.password)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误"
+        )
 
     token = create_access_token(subject=user.username)
     return TokenResponse(access_token=token)

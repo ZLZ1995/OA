@@ -7,8 +7,9 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-# Explicitly run Vite build to avoid any typecheck script hooks in container build chain.
-RUN npx vite build
+RUN echo "FRONTEND_DOCKERFILE_V2"
+RUN node -e "const p=require('./package.json'); console.log('BUILD_SCRIPT=', p.scripts.build)"
+RUN npm run build
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
