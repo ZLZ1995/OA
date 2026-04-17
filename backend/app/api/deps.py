@@ -38,3 +38,19 @@ def get_current_user(
     if not user:
         raise credentials_exception
     return user
+
+
+def get_current_role_codes(current_user: User = Depends(get_current_user)) -> set[str]:
+    return {item.role.code for item in current_user.roles}
+
+
+def require_roles(*required_role_codes: str):
+    def checker(role_codes: set[str] = Depends(get_current_role_codes)) -> set[str]:
+        if not role_codes.intersection(required_role_codes):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权限执行该操作",
+            )
+        return role_codes
+
+    return checker
