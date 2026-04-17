@@ -8,7 +8,7 @@ from app.db.session import get_db
 from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
-SUPER_ADMIN_USERNAME = "admin"
+SUPER_ADMIN_USERNAME = "zhongqin123"
 
 
 def get_current_user(

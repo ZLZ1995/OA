@@ -25,7 +25,7 @@ def _seed_users_and_roles(db: Session) -> tuple[User, User, User]:
     db.add_all(roles)
     db.flush()
 
-    super_admin = User(username="admin", password_hash="x", real_name="SuperAdmin", is_active=True)
+    super_admin = User(username="zhongqin123", password_hash="x", real_name="SuperAdmin", is_active=True)
     another_admin = User(username="admin2", password_hash="x", real_name="AnotherAdmin", is_active=True)
     leader = User(username="leader", password_hash="x", real_name="Leader", is_active=True)
     db.add_all([super_admin, another_admin, leader])

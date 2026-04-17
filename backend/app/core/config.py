@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     local_storage_dir: str = "/data/asset-valuation/uploads"
 
-    initial_admin_username: str = "admin"
+    initial_admin_username: str = "zhongqin123"
     initial_admin_password: str = "zhongqin123"
     initial_admin_real_name: str = "系统管理员"
 
