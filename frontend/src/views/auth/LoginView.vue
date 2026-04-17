@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { login, me } from '@/api/auth'
@@ -26,6 +26,12 @@ const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({ username: 'zhongqin123', password: 'zhongqin123' })
+
+onMounted(() => {
+  // Entering login page means starting a fresh authentication flow.
+  // This avoids accidentally reusing an old valid token and being mistaken as "any credentials can log in".
+  auth.clearAuth()
+})
 
 async function onLogin() {
   try {
