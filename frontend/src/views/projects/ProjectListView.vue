@@ -53,9 +53,8 @@ async function loadProjects() {
 }
 
 async function onCreate() {
-  const profile = auth.user ?? (await auth.ensureUserLoaded())
-  if (!profile?.id) {
-    ElMessage.error('登录态已失效，请重新登录')
+  if (!auth.user?.id) {
+    ElMessage.error('当前用户信息未加载')
     return
   }
   if (!form.project_code || !form.project_name || !form.client_name) {
@@ -64,8 +63,8 @@ async function onCreate() {
   }
   await createProject({
     ...form,
-    business_user_id: profile.id,
-    project_leader_id: profile.id
+    business_user_id: auth.user.id,
+    project_leader_id: auth.user.id
   })
   ElMessage.success('项目创建成功')
   form.project_code = ''

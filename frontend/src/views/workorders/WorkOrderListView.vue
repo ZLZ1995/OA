@@ -37,9 +37,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listProjects, type ProjectItem } from '@/api/projects'
 import { createWorkOrder, listWorkOrders, type WorkOrderItem } from '@/api/workorders'
-import { useAuthStore } from '@/store/auth'
 
-const auth = useAuthStore()
 const loading = ref(false)
 const rows = ref<WorkOrderItem[]>([])
 const projectOptions = ref<ProjectItem[]>([])
@@ -62,11 +60,6 @@ async function loadData() {
 }
 
 async function onCreate() {
-  const profile = auth.user ?? (await auth.ensureUserLoaded())
-  if (!profile?.id) {
-    ElMessage.error('登录态已失效，请重新登录')
-    return
-  }
   if (!form.work_order_no || !form.title || !form.project_id) {
     ElMessage.warning('请填写完整工单信息')
     return

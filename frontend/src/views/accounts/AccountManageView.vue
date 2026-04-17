@@ -41,9 +41,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listRoles, type RoleItem } from '@/api/roles'
 import { createUser, listUsers, type UserItem } from '@/api/users'
-import { useAuthStore } from '@/store/auth'
 
-const auth = useAuthStore()
 const loading = ref(false)
 const rows = ref<UserItem[]>([])
 const roleOptions = ref<RoleItem[]>([])
@@ -67,15 +65,6 @@ async function loadData() {
 }
 
 async function onCreate() {
-  const profile = auth.user ?? (await auth.ensureUserLoaded())
-  if (!profile?.id) {
-    ElMessage.error('登录态已失效，请重新登录')
-    return
-  }
-  if (!profile.roles.includes('ADMIN')) {
-    ElMessage.error('仅管理员可新增账号')
-    return
-  }
   if (!form.username || !form.real_name || !form.password) {
     ElMessage.warning('请填写完整账号、姓名、密码')
     return
