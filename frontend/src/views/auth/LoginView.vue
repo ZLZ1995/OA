@@ -25,7 +25,7 @@ import { useAuthStore } from '@/store/auth'
 const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
-const form = reactive({ username: 'admin', password: 'zhongqin123' })
+const form = reactive({ username: 'zhongqin123', password: 'zhongqin123' })
 
 async function onLogin() {
   try {
@@ -41,6 +41,7 @@ async function onLogin() {
       window.location.assign('/dashboard')
     }
   } catch {
+    auth.clearAuth()
     ElMessage.error('登录失败，请检查账号密码')
   } finally {
     loading.value = false
