@@ -3,7 +3,7 @@
     <template #header>审核处理页</template>
     <el-form label-width="110px">
       <el-form-item label="工单">
-        <el-select v-model="form.work_order_id" placeholder="选择工单" style="width: 320px" @change="loadRecords">
+        <el-select v-model="form.work_order_id" placeholder="选择工单" style="width: 320px" @change="onWorkOrderChange">
           <el-option
             v-for="item in workOrderOptions"
             :key="item.id"
@@ -13,7 +13,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="审核轮次">
-        <el-select v-model="form.review_round" style="width: 200px">
+        <el-select v-model="form.review_round" style="width: 200px" @change="loadCandidates">
           <el-option label="一审" value="FIRST" />
           <el-option label="二审" value="SECOND" />
           <el-option label="三审" value="THIRD" />
@@ -21,7 +21,7 @@
       </el-form-item>
       <el-form-item label="审核老师">
         <el-select v-model="form.reviewer_user_id" placeholder="选择审核老师" style="width: 320px">
-          <el-option v-for="u in userOptions" :key="u.id" :label="`${u.real_name}(${u.username})`" :value="u.id" />
+          <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
         </el-select>
       </el-form-item>
       <el-form-item label="审核意见">
@@ -46,15 +46,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listWorkOrders, type WorkOrderItem } from '@/api/workorders'
-import { listUsers, type UserItem } from '@/api/users'
-import { decideReview, listReviews, submitReview, type ReviewRecordItem } from '@/api/reviews'
+import { decideReview, listReviewCandidates, listReviews, submitReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
 
 const loading = ref(false)
 const workOrderOptions = ref<WorkOrderItem[]>([])
-const userOptions = ref<UserItem[]>([])
+const userOptions = ref<ReviewCandidateItem[]>([])
 const records = ref<ReviewRecordItem[]>([])
 
 const form = reactive({
@@ -65,9 +64,17 @@ const form = reactive({
 })
 
 async function loadOptions() {
-  const [workOrders, users] = await Promise.all([listWorkOrders(), listUsers()])
+  const workOrders = await listWorkOrders()
   workOrderOptions.value = workOrders.items
-  userOptions.value = users.items
+}
+
+async function loadCandidates() {
+  if (!form.work_order_id) {
+    userOptions.value = []
+    return
+  }
+  const data = await listReviewCandidates(form.work_order_id, form.review_round)
+  userOptions.value = data.items
 }
 
 async function loadRecords() {
@@ -82,6 +89,10 @@ async function loadRecords() {
   } finally {
     loading.value = false
   }
+}
+
+async function onWorkOrderChange() {
+  await Promise.all([loadRecords(), loadCandidates()])
 }
 
 async function onSubmit() {
@@ -114,9 +125,15 @@ async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
   await loadRecords()
 }
 
+
+watch(() => form.review_round, () => {
+  form.reviewer_user_id = undefined
+})
+
 onMounted(async () => {
   try {
     await loadOptions()
+    await loadCandidates()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '审核页数据加载失败')
   }

@@ -5,16 +5,22 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
+from app.models.project import Project
 from app.models.review_record import ReviewRecord
+from app.models.role import Role
 from app.models.user import User
+from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.schemas.review import (
+    ReviewCandidateListResponse,
+    ReviewCandidateResponse,
     ReviewDecisionRequest,
     ReviewRecordListResponse,
     ReviewRecordResponse,
     ReviewSubmitRequest,
 )
 from app.services.workflow_log_service import create_workflow_log
+from app.workflows.guards import filter_candidates, validate_reviewer_avoidance
 from app.workflows.states import WorkOrderStatus
 from app.workflows.transitions import can_transit
 
@@ -44,6 +50,66 @@ ROUND_REJECTED_STATUS = {
     "THIRD": WorkOrderStatus.THIRD_REVIEW_REJECTED,
 }
 
+ROUND_ROLE_CODE = {
+    "FIRST": "FIRST_REVIEWER",
+    "SECOND": "SECOND_REVIEWER",
+    "THIRD": "THIRD_REVIEWER",
+}
+
+
+@router.get("/candidates", response_model=ReviewCandidateListResponse)
+def list_review_candidates(
+    work_order_id: int,
+    review_round: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
+) -> ReviewCandidateListResponse:
+    if review_round not in ROUND_ROLE_CODE:
+        raise HTTPException(status_code=400, detail="非法审核轮次")
+
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    if work_order.project_leader_id != current_user.id and "ADMIN" not in role_codes:
+        raise HTTPException(status_code=403, detail="仅项目负责人可查看审核候选人")
+
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    current_round_existing = {
+        "FIRST": work_order.first_reviewer_id,
+        "SECOND": work_order.second_reviewer_id,
+        "THIRD": work_order.third_reviewer_id,
+    }[review_round]
+
+    excluded_user_ids = {
+        work_order.project_leader_id,
+        project.business_user_id,
+        *(uid for uid in [work_order.first_reviewer_id, work_order.second_reviewer_id, work_order.third_reviewer_id] if uid),
+    }
+    if current_round_existing:
+        excluded_user_ids.discard(current_round_existing)
+
+    reviewer_users = (
+        db.query(User)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(Role.code == ROUND_ROLE_CODE[review_round], User.is_active.is_(True))
+        .order_by(User.id.asc())
+        .all()
+    )
+    allowed_ids = set(filter_candidates([u.id for u in reviewer_users], excluded_user_ids))
+
+    return ReviewCandidateListResponse(
+        items=[
+            ReviewCandidateResponse(user_id=user.id, username=user.username, real_name=user.real_name)
+            for user in reviewer_users
+            if user.id in allowed_ids
+        ]
+    )
+
 
 @router.post("/submit", response_model=ReviewRecordResponse)
 def submit_review(
@@ -58,6 +124,23 @@ def submit_review(
 
     if work_order.project_leader_id != current_user.id:
         raise HTTPException(status_code=403, detail="仅项目负责人可发起审核")
+
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    first_reviewer_id = payload.reviewer_user_id if payload.review_round == "FIRST" else work_order.first_reviewer_id
+    second_reviewer_id = payload.reviewer_user_id if payload.review_round == "SECOND" else work_order.second_reviewer_id
+    third_reviewer_id = payload.reviewer_user_id if payload.review_round == "THIRD" else work_order.third_reviewer_id
+    ok, msg = validate_reviewer_avoidance(
+        project_leader_id=work_order.project_leader_id,
+        business_user_id=project.business_user_id,
+        first_reviewer_id=first_reviewer_id,
+        second_reviewer_id=second_reviewer_id,
+        third_reviewer_id=third_reviewer_id,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
 
     from_status = WorkOrderStatus(work_order.current_status)
     to_status = ROUND_REVIEWING_STATUS[payload.review_round]
