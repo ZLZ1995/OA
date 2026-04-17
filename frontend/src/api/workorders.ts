@@ -22,15 +22,3 @@ export async function createWorkOrder(payload: {
   const { data } = await http.post('/work-orders', payload)
   return data as WorkOrderItem
 }
-
-export async function updateWorkOrder(
-  workOrderId: number,
-  payload: { title?: string; current_handler_user_id?: number | null }
-) {
-  const { data } = await http.patch(`/work-orders/${workOrderId}`, payload)
-  return data as WorkOrderItem
-}
-
-export async function deleteWorkOrder(workOrderId: number) {
-  await http.delete(`/work-orders/${workOrderId}`)
-}

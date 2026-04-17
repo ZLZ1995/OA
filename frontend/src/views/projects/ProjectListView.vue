@@ -22,12 +22,6 @@
       <el-table-column prop="client_name" label="客户名称" />
       <el-table-column prop="project_leader_id" label="项目负责人ID" />
       <el-table-column prop="status" label="状态" />
-      <el-table-column label="操作" width="220">
-        <template #default="scope">
-          <el-button link type="primary" @click="openEditDialog(scope.row)">编辑</el-button>
-          <el-button link type="danger" @click="removeProject(scope.row.id)">删除</el-button>
-        </template>
-      </el-table-column>
     </el-table>
 
     <el-dialog v-model="editDialogVisible" title="编辑项目" width="460px">
@@ -56,8 +50,8 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { createProject, deleteProject, listProjects, type ProjectItem, updateProject } from '@/api/projects'
+import { ElMessage } from 'element-plus'
+import { createProject, listProjects, type ProjectItem } from '@/api/projects'
 import { useAuthStore } from '@/store/auth'
 
 const auth = useAuthStore()
@@ -68,14 +62,6 @@ const form = reactive({
   project_code: '',
   project_name: '',
   client_name: ''
-})
-
-const editDialogVisible = ref(false)
-const editingId = ref<number | null>(null)
-const editing = reactive({
-  project_name: '',
-  client_name: '',
-  status: 'ACTIVE'
 })
 
 async function loadProjects() {
@@ -89,9 +75,8 @@ async function loadProjects() {
 }
 
 async function onCreate() {
-  const profile = auth.user ?? (await auth.ensureUserLoaded())
-  if (!profile?.id) {
-    ElMessage.error('登录态已失效，请重新登录')
+  if (!auth.user?.id) {
+    ElMessage.error('当前用户信息未加载')
     return
   }
   if (!form.project_code || !form.project_name || !form.client_name) {
@@ -100,40 +85,13 @@ async function onCreate() {
   }
   await createProject({
     ...form,
-    business_user_id: profile.id,
-    project_leader_id: profile.id
+    business_user_id: auth.user.id,
+    project_leader_id: auth.user.id
   })
   ElMessage.success('项目创建成功')
   form.project_code = ''
   form.project_name = ''
   form.client_name = ''
-  await loadProjects()
-}
-
-function openEditDialog(row: ProjectItem) {
-  editingId.value = row.id
-  editing.project_name = row.project_name
-  editing.client_name = row.client_name
-  editing.status = row.status
-  editDialogVisible.value = true
-}
-
-async function saveProject() {
-  if (!editingId.value) return
-  await updateProject(editingId.value, {
-    project_name: editing.project_name,
-    client_name: editing.client_name,
-    status: editing.status
-  })
-  ElMessage.success('项目已更新')
-  editDialogVisible.value = false
-  await loadProjects()
-}
-
-async function removeProject(projectId: number) {
-  await ElMessageBox.confirm('确认删除该项目？此操作不可恢复。', '删除确认', { type: 'warning' })
-  await deleteProject(projectId)
-  ElMessage.success('项目已删除')
   await loadProjects()
 }
 

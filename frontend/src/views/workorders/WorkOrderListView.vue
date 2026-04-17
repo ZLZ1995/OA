@@ -28,12 +28,6 @@
       <el-table-column prop="title" label="标题" />
       <el-table-column prop="project_id" label="项目ID" />
       <el-table-column prop="current_status" label="状态" />
-      <el-table-column label="操作" width="220">
-        <template #default="scope">
-          <el-button link type="primary" @click="openEditDialog(scope.row)">编辑</el-button>
-          <el-button link type="danger" @click="removeWorkOrder(scope.row.id)">删除</el-button>
-        </template>
-      </el-table-column>
     </el-table>
 
     <el-dialog v-model="editDialogVisible" title="编辑工单" width="420px">
@@ -52,18 +46,10 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { listProjects, type ProjectItem } from '@/api/projects'
-import {
-  createWorkOrder,
-  deleteWorkOrder,
-  listWorkOrders,
-  type WorkOrderItem,
-  updateWorkOrder
-} from '@/api/workorders'
-import { useAuthStore } from '@/store/auth'
+import { createWorkOrder, listWorkOrders, type WorkOrderItem } from '@/api/workorders'
 
-const auth = useAuthStore()
 const loading = ref(false)
 const rows = ref<WorkOrderItem[]>([])
 const projectOptions = ref<ProjectItem[]>([])
@@ -73,10 +59,6 @@ const form = reactive({
   title: '',
   project_id: undefined as number | undefined
 })
-
-const editDialogVisible = ref(false)
-const editingId = ref<number | null>(null)
-const editingTitle = ref('')
 
 async function loadData() {
   loading.value = true
@@ -90,11 +72,6 @@ async function loadData() {
 }
 
 async function onCreate() {
-  const profile = auth.user ?? (await auth.ensureUserLoaded())
-  if (!profile?.id) {
-    ElMessage.error('登录态已失效，请重新登录')
-    return
-  }
   if (!form.work_order_no || !form.title || !form.project_id) {
     ElMessage.warning('请填写完整工单信息')
     return
@@ -108,31 +85,6 @@ async function onCreate() {
   form.work_order_no = ''
   form.title = ''
   form.project_id = undefined
-  await loadData()
-}
-
-function openEditDialog(row: WorkOrderItem) {
-  editingId.value = row.id
-  editingTitle.value = row.title
-  editDialogVisible.value = true
-}
-
-async function saveWorkOrder() {
-  if (!editingId.value) return
-  if (!editingTitle.value.trim()) {
-    ElMessage.warning('标题不能为空')
-    return
-  }
-  await updateWorkOrder(editingId.value, { title: editingTitle.value.trim() })
-  ElMessage.success('工单已更新')
-  editDialogVisible.value = false
-  await loadData()
-}
-
-async function removeWorkOrder(workOrderId: number) {
-  await ElMessageBox.confirm('确认删除该工单？此操作不可恢复。', '删除确认', { type: 'warning' })
-  await deleteWorkOrder(workOrderId)
-  ElMessage.success('工单已删除')
   await loadData()
 }
 

@@ -25,11 +25,6 @@ export async function createUser(payload: {
   return data as UserItem
 }
 
-export async function updateUser(userId: number, payload: { real_name?: string; is_active?: boolean }) {
-  const { data } = await http.patch(`/users/${userId}`, payload)
-  return data as UserItem
-}
-
 export async function bindUserRoles(userId: number, roleCodes: string[]) {
   const { data } = await http.put(`/users/${userId}/roles`, { role_codes: roleCodes })
   return data as UserItem
