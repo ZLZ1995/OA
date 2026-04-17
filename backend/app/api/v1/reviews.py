@@ -116,7 +116,7 @@ def submit_review(
     payload: ReviewSubmitRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
+    _: set[str] = Depends(require_roles("PROJECT_LEADER")),
 ) -> ReviewRecordResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
