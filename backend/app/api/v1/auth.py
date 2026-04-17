@@ -9,6 +9,7 @@ from app.schemas.auth import CurrentUserResponse, LoginRequest, TokenResponse
 from app.services.auth_service import authenticate_user
 
 router = APIRouter(prefix="/auth", tags=["认证"])
+SUPER_ADMIN_USERNAME = "admin"
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -33,10 +34,12 @@ def logout() -> dict[str, str]:
 @router.get("/me", response_model=CurrentUserResponse)
 def me(current_user: User = Depends(get_current_user)) -> CurrentUserResponse:
     """Get current logged-in user information."""
-    roles = [r.role.code for r in current_user.roles]
+    roles = {r.role.code for r in current_user.roles}
+    if current_user.username == SUPER_ADMIN_USERNAME:
+        roles.add("ADMIN")
     return CurrentUserResponse(
         id=current_user.id,
         username=current_user.username,
         real_name=current_user.real_name,
-        roles=roles,
+        roles=sorted(roles),
     )
