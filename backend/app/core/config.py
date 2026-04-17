@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60 * 8
 
+    local_storage_dir: str = "/data/asset-valuation/uploads"
+
     initial_admin_username: str = "admin"
     initial_admin_password: str = "zhongqin123"
     initial_admin_real_name: str = "系统管理员"

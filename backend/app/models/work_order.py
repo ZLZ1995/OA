@@ -19,4 +19,5 @@ class WorkOrder(Base, TimestampMixin):
     first_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     second_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     third_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    priority: Mapped[str] = mapped_column(String(16), default="MEDIUM", nullable=False)
     deadline_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
