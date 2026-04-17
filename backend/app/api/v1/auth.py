@@ -9,7 +9,7 @@ from app.schemas.auth import CurrentUserResponse, LoginRequest, TokenResponse
 from app.services.auth_service import authenticate_user
 
 router = APIRouter(prefix="/auth", tags=["认证"])
-SUPER_ADMIN_USERNAME = "admin"
+SUPER_ADMIN_USERNAME = "zhongqin123"
 
 
 @router.post("/login", response_model=TokenResponse)
