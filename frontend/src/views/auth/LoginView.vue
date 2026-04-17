@@ -34,7 +34,12 @@ async function onLogin() {
     auth.setToken(token.access_token)
     auth.setUser(await me())
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+
+    await router.replace('/dashboard')
+
+    if (router.currentRoute.value.path === '/login') {
+      window.location.assign('/dashboard')
+    }
   } catch {
     ElMessage.error('登录失败，请检查账号密码')
   } finally {
