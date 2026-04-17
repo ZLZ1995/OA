@@ -33,6 +33,24 @@
         <template #default="scope">{{ scope.row.is_active ? '启用' : '禁用' }}</template>
       </el-table-column>
     </el-table>
+
+    <el-dialog v-model="roleDialogVisible" title="绑定角色" width="420px">
+      <el-select v-model="editingRoleCodes" multiple placeholder="选择角色" style="width: 100%">
+        <el-option v-for="role in roleOptions" :key="role.code" :label="role.name" :value="role.code" />
+      </el-select>
+      <template #footer>
+        <el-button @click="roleDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveRoles">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="nameDialogVisible" title="编辑姓名" width="420px">
+      <el-input v-model="editingRealName" placeholder="请输入姓名" />
+      <template #footer>
+        <el-button @click="nameDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveName">保存</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 

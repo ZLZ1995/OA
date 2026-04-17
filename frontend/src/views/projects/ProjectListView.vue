@@ -23,6 +23,28 @@
       <el-table-column prop="project_leader_id" label="项目负责人ID" />
       <el-table-column prop="status" label="状态" />
     </el-table>
+
+    <el-dialog v-model="editDialogVisible" title="编辑项目" width="460px">
+      <el-form label-width="88px">
+        <el-form-item label="项目名称">
+          <el-input v-model="editing.project_name" />
+        </el-form-item>
+        <el-form-item label="客户名称">
+          <el-input v-model="editing.client_name" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="editing.status" style="width: 100%">
+            <el-option label="ACTIVE" value="ACTIVE" />
+            <el-option label="CLOSED" value="CLOSED" />
+            <el-option label="CANCELLED" value="CANCELLED" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveProject">保存</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 

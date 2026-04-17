@@ -29,6 +29,18 @@
       <el-table-column prop="project_id" label="项目ID" />
       <el-table-column prop="current_status" label="状态" />
     </el-table>
+
+    <el-dialog v-model="editDialogVisible" title="编辑工单" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="标题">
+          <el-input v-model="editingTitle" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveWorkOrder">保存</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
