@@ -30,6 +30,7 @@ const form = reactive({ username: 'admin', password: 'zhongqin123' })
 async function onLogin() {
   try {
     loading.value = true
+    auth.clearAuth()
     const token = await login(form)
     auth.setToken(token.access_token)
     auth.setUser(await me())
@@ -41,6 +42,7 @@ async function onLogin() {
       window.location.assign('/dashboard')
     }
   } catch {
+    auth.clearAuth()
     ElMessage.error('登录失败，请检查账号密码')
   } finally {
     loading.value = false
