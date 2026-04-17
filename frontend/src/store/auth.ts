@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { me } from '@/api/auth'
 
 interface UserProfile {
   id: number
@@ -27,6 +28,23 @@ export const useAuthStore = defineStore('auth', {
     },
     setUser(user: UserProfile) {
       this.user = user
+    },
+    async ensureUserLoaded() {
+      if (!this.token) {
+        this.user = null
+        return null
+      }
+      if (this.user) {
+        return this.user
+      }
+      try {
+        const profile = await me()
+        this.user = profile
+        return profile
+      } catch {
+        this.clearAuth()
+        return null
+      }
     }
   }
 })
