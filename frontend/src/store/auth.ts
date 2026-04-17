@@ -10,7 +10,7 @@ interface UserProfile {
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    token: localStorage.getItem('token') || '',
+    token: localStorage.getItem('access_token') || localStorage.getItem('token') || '',
     user: null as UserProfile | null
   }),
   getters: {
@@ -20,11 +20,13 @@ export const useAuthStore = defineStore('auth', {
     setToken(token: string) {
       this.token = token
       localStorage.setItem('token', token)
+      localStorage.setItem('access_token', token)
     },
     clearAuth() {
       this.token = ''
       this.user = null
       localStorage.removeItem('token')
+      localStorage.removeItem('access_token')
     },
     setUser(user: UserProfile) {
       this.user = user
