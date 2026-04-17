@@ -16,7 +16,7 @@ from app.schemas.user import (
 )
 
 router = APIRouter(prefix="/users", tags=["用户"])
-SUPER_ADMIN_USERNAME = "admin"
+SUPER_ADMIN_USERNAME = "zhongqin123"
 
 
 def _is_super_admin(user: User) -> bool:
