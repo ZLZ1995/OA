@@ -59,7 +59,7 @@ def root() -> str:
     <div class="card">
       <h1>登录系统</h1>
       <label>用户名</label>
-      <input id="username" placeholder="admin" value="admin" />
+      <input id="username" placeholder="zhongqin123" value="zhongqin123" />
       <label>密码</label>
       <input id="password" type="password" placeholder="请输入密码" />
       <button onclick="login()">登录</button>
