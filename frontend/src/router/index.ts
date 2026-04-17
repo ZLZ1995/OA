@@ -16,7 +16,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'workorders', component: () => import('@/views/workorders/WorkOrderListView.vue') },
       { path: 'workorders/:id', component: () => import('@/views/workorders/WorkOrderDetailView.vue') },
       { path: 'reviews', component: () => import('@/views/reviews/ReviewHandleView.vue') },
+      { path: 'report-versions', component: () => import('@/views/report-versions/ReportVersionView.vue') },
+      { path: 'project-members', component: () => import('@/views/project-members/ProjectMemberView.vue') },
       { path: 'print-room', component: () => import('@/views/printroom/PrintRoomHandleView.vue') },
+      { path: 'finance', component: () => import('@/views/finance/FinanceView.vue') },
+      { path: 'archives', component: () => import('@/views/archives/ArchiveView.vue') },
       { path: 'accounts', component: () => import('@/views/accounts/AccountManageView.vue') }
     ]
   }

@@ -29,3 +29,13 @@ class ReviewRecordResponse(BaseModel):
 
 class ReviewRecordListResponse(BaseModel):
     items: list[ReviewRecordResponse]
+
+
+class ReviewCandidateResponse(BaseModel):
+    user_id: int
+    username: str
+    real_name: str
+
+
+class ReviewCandidateListResponse(BaseModel):
+    items: list[ReviewCandidateResponse]
