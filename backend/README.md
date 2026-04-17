@@ -74,6 +74,11 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me`
+- `GET/POST/PATCH /api/v1/users`，`PUT /api/v1/users/{id}/roles`
+- `GET /api/v1/roles`
+- `GET/POST/PATCH/DELETE /api/v1/projects`
+- `GET/POST/PATCH/DELETE /api/v1/work-orders`
+- `GET /api/v1/dashboard/mine`
 ## 阶段1固化文档
 - `docs/architecture.md`
 - `docs/db-schema.md`
