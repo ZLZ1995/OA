@@ -34,19 +34,17 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore(pinia)
 
-  if (!auth.isLoggedIn && to.path !== '/login') {
+  if (to.path === '/login') {
+    return true
+  }
+
+  if (!auth.isLoggedIn) {
     return '/login'
   }
 
-  if (auth.isLoggedIn) {
-    const profile = await auth.ensureUserLoaded()
-    if (!profile && to.path !== '/login') {
-      return '/login'
-    }
-  }
-
-  if (to.path === '/login' && auth.isLoggedIn) {
-    return '/dashboard'
+  const profile = await auth.ensureUserLoaded()
+  if (!profile) {
+    return '/login'
   }
 
   return true

@@ -30,6 +30,7 @@ const form = reactive({ username: 'zhongqin123', password: 'zhongqin123' })
 async function onLogin() {
   try {
     loading.value = true
+    auth.clearAuth()
     const token = await login(form)
     auth.setToken(token.access_token)
     auth.setUser(await me())
