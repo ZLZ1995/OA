@@ -63,7 +63,7 @@ def list_review_candidates(
     review_round: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("PROJECT_LEADER")),
+    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
 ) -> ReviewCandidateListResponse:
     if review_round not in ROUND_ROLE_CODE:
         raise HTTPException(status_code=400, detail="非法审核轮次")
@@ -71,7 +71,7 @@ def list_review_candidates(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    if work_order.project_leader_id != current_user.id:
+    if work_order.project_leader_id != current_user.id and "ADMIN" not in role_codes:
         raise HTTPException(status_code=403, detail="仅项目负责人可查看审核候选人")
 
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
@@ -141,14 +141,6 @@ def submit_review(
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-
-    reviewer_role_codes = {
-        code
-        for (code,) in db.query(Role.code).join(UserRole, UserRole.role_id == Role.id).filter(UserRole.user_id == payload.reviewer_user_id).all()
-    }
-    required_role_code = ROUND_ROLE_CODE[payload.review_round]
-    if required_role_code not in reviewer_role_codes:
-        raise HTTPException(status_code=400, detail=f"所选审核人不具备{payload.review_round}轮审核角色")
 
     from_status = WorkOrderStatus(work_order.current_status)
     to_status = ROUND_REVIEWING_STATUS[payload.review_round]
