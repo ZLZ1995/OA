@@ -20,7 +20,7 @@ FIXED_ROLES: list[tuple[str, str, str]] = [
     ("FINANCE", "财务人员", "财务角色"),
     ("ARCHIVE_MANAGER", "档案管理员", "档案管理角色"),
 ]
-SUPER_ADMIN_USERNAME = "admin"
+SUPER_ADMIN_USERNAME = "zhongqin123"
 SUPER_ADMIN_PASSWORD = "zhongqin123"
 SUPER_ADMIN_REAL_NAME = "超级管理员"
 

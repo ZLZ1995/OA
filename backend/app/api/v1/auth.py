@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -9,11 +9,15 @@ from app.schemas.auth import CurrentUserResponse, LoginRequest, TokenResponse
 from app.services.auth_service import authenticate_user
 
 router = APIRouter(prefix="/auth", tags=["认证"])
-SUPER_ADMIN_USERNAME = "admin"
+SUPER_ADMIN_USERNAME = "zhongqin123"
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def login(
+    payload: LoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
     """Authenticate and return JWT token."""
     user = authenticate_user(db, payload.username, payload.password)
     if not user:
@@ -22,12 +26,19 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         )
 
     token = create_access_token(subject=user.username)
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+    )
     return TokenResponse(access_token=token)
 
 
 @router.post("/logout")
-def logout() -> dict[str, str]:
+def logout(response: Response) -> dict[str, str]:
     """Stateless JWT logout endpoint for frontend compatibility."""
+    response.delete_cookie("access_token")
     return {"message": "已退出登录，请在前端清除令牌"}
 
 

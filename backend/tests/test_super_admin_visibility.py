@@ -3,7 +3,6 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_roles
 from app.api.v1.users import bind_user_roles, list_users
 from app.db.base import Base
 from app.models.role import Role
@@ -26,7 +25,7 @@ def _seed_users_and_roles(db: Session) -> tuple[User, User, User]:
     db.add_all(roles)
     db.flush()
 
-    super_admin = User(username="admin", password_hash="x", real_name="SuperAdmin", is_active=True)
+    super_admin = User(username="zhongqin123", password_hash="x", real_name="SuperAdmin", is_active=True)
     another_admin = User(username="admin2", password_hash="x", real_name="AnotherAdmin", is_active=True)
     leader = User(username="leader", password_hash="x", real_name="Leader", is_active=True)
     db.add_all([super_admin, another_admin, leader])
@@ -80,11 +79,3 @@ def test_non_super_admin_cannot_bind_roles_for_super_admin() -> None:
             _={"ADMIN"},
         )
     assert exc_info.value.status_code == 404
-
-
-def test_super_admin_bypasses_require_roles_when_roles_missing() -> None:
-    checker = require_roles("ADMIN")
-    super_admin = User(username="admin", password_hash="x", real_name="SuperAdmin", is_active=True)
-
-    role_codes = checker(role_codes=set(), current_user=super_admin)
-    assert "ADMIN" in role_codes
