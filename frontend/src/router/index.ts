@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 import { pinia } from '@/store/pinia'
 import AppLayout from '@/layout/AppLayout.vue'
@@ -36,27 +36,32 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(detectRouterBase()),
   routes
 })
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore(pinia)
 
-  if (to.path === '/login') {
+  try {
+    if (to.path === '/login') {
+      return true
+    }
+
+    if (!auth.isLoggedIn) {
+      return '/login'
+    }
+
+    const profile = await auth.ensureUserLoaded()
+    if (!profile) {
+      return '/login'
+    }
+
     return true
-  }
-
-  if (!auth.isLoggedIn) {
+  } catch {
+    auth.clearAuth()
     return '/login'
   }
-
-  const profile = await auth.ensureUserLoaded()
-  if (!profile) {
-    return '/login'
-  }
-
-  return true
 })
 
 export default router
