@@ -16,33 +16,38 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { login, me } from '@/api/auth'
 import { useAuthStore } from '@/store/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({ username: 'zhongqin123', password: 'zhongqin123' })
-
-onMounted(() => {
-  // Entering login page means starting a fresh authentication flow.
-  // This avoids accidentally reusing an old valid token and being mistaken as "any credentials can log in".
-  auth.clearAuth()
-})
 
 async function onLogin() {
   try {
     loading.value = true
     auth.clearAuth()
+
     const token = await login(form)
     auth.setToken(token.access_token)
     auth.setUser(await me())
-    ElMessage.success('登录成功')
 
-    await router.replace('/dashboard')
+    const redirectTo = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
+    await router.replace(redirectTo)
+
+    // Some production environments may keep the page on /login when route guards run concurrently.
+    // If that happens, force a hard navigation so users can still enter the main app.
+    if (router.currentRoute.value.path === '/login') {
+      window.location.assign(redirectTo)
+      return
+    }
+
+    ElMessage.success('登录成功')
   } catch {
     auth.clearAuth()
     ElMessage.error('登录失败，请检查账号密码')
