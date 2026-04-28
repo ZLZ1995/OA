@@ -31,7 +31,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'archives', component: () => import('@/views/archives/ArchiveView.vue') },
       { path: 'accounts', component: () => import('@/views/accounts/AccountManageView.vue') }
     ]
-  }
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/login' }
 ]
 
 const router = createRouter({
