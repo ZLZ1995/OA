@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.models.role import Role
@@ -16,7 +17,7 @@ from app.schemas.user import (
 )
 
 router = APIRouter(prefix="/users", tags=["用户"])
-SUPER_ADMIN_USERNAME = "zhongqin123"
+SUPER_ADMIN_USERNAME = settings.initial_admin_username
 
 
 def _is_super_admin(user: User) -> bool:

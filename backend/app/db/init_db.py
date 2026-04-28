@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.base import Base
 from app.db.session import engine
@@ -20,9 +21,9 @@ FIXED_ROLES: list[tuple[str, str, str]] = [
     ("FINANCE", "财务人员", "财务角色"),
     ("ARCHIVE_MANAGER", "档案管理员", "档案管理角色"),
 ]
-SUPER_ADMIN_USERNAME = "zhongqin123"
-SUPER_ADMIN_PASSWORD = "zhongqin123"
-SUPER_ADMIN_REAL_NAME = "超级管理员"
+SUPER_ADMIN_USERNAME = settings.initial_admin_username
+SUPER_ADMIN_PASSWORD = settings.initial_admin_password
+SUPER_ADMIN_REAL_NAME = settings.initial_admin_real_name
 
 
 def init_db() -> None:
