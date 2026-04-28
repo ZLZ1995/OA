@@ -8,11 +8,7 @@ function detectRouterBase() {
   if (configured) {
     return configured
   }
-  const path = window.location.pathname
-  if (path === '/frontend' || path.startsWith('/frontend/')) {
-    return '/frontend/'
-  }
-  return '/'
+  return window.location.pathname.startsWith('/frontend/') ? '/frontend/' : '/'
 }
 
 const routes: RouteRecordRaw[] = [
@@ -40,7 +36,7 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(detectRouterBase()),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes
 })
 
