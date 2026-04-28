@@ -43,10 +43,6 @@ async function onLogin() {
     ElMessage.success('登录成功')
 
     await router.replace('/dashboard')
-
-    if (router.currentRoute.value.path === '/login') {
-      window.location.assign('/dashboard')
-    }
   } catch {
     auth.clearAuth()
     ElMessage.error('登录失败，请检查账号密码')
