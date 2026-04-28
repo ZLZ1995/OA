@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 import { pinia } from '@/store/pinia'
 import AppLayout from '@/layout/AppLayout.vue'
@@ -23,11 +23,13 @@ const routes: RouteRecordRaw[] = [
       { path: 'archives', component: () => import('@/views/archives/ArchiveView.vue') },
       { path: 'accounts', component: () => import('@/views/accounts/AccountManageView.vue') }
     ]
-  }
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/login' }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  // Hash history avoids blank screens caused by server/subpath history fallback mismatch.
+  history: createWebHashHistory(),
   routes
 })
 

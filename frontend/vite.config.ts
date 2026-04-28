@@ -3,6 +3,8 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  // Use relative asset paths so the same build works at "/" and "/frontend/".
+  base: './',
   plugins: [vue()],
   resolve: {
     alias: {
