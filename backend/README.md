@@ -30,7 +30,7 @@ DB_INIT_REQUIRED=true
 JWT_SECRET_KEY=change-this-in-production
 JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=480
-INITIAL_ADMIN_USERNAME=admin
+INITIAL_ADMIN_USERNAME=zhongqin123
 INITIAL_ADMIN_PASSWORD=zhongqin123
 INITIAL_ADMIN_REAL_NAME=系统管理员
 ```
@@ -65,7 +65,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 > 若云环境数据库尚未就绪，可临时将 `DB_INIT_REQUIRED=false`，服务会先启动并在日志提示数据库初始化失败。
 > 数据库就绪后建议设置 `DB_INIT_REQUIRED=true`，确保启动时强校验数据库连通性（Dockerfile 默认值即为 `true`）。
 ## 默认账号
-- 用户名: `admin`
+- 用户名: `zhongqin123`
 - 密码: `zhongqin123`
 
 ## 已提供基础 API

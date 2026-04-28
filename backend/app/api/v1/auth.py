@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -9,7 +10,7 @@ from app.schemas.auth import CurrentUserResponse, LoginRequest, TokenResponse
 from app.services.auth_service import authenticate_user
 
 router = APIRouter(prefix="/auth", tags=["认证"])
-SUPER_ADMIN_USERNAME = "zhongqin123"
+SUPER_ADMIN_USERNAME = settings.initial_admin_username
 
 
 @router.post("/login", response_model=TokenResponse)

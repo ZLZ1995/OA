@@ -3,6 +3,18 @@ import { useAuthStore } from '@/store/auth'
 import { pinia } from '@/store/pinia'
 import AppLayout from '@/layout/AppLayout.vue'
 
+function detectRouterBase() {
+  const configured = import.meta.env.VITE_ROUTER_BASE as string | undefined
+  if (configured) {
+    return configured
+  }
+  const path = window.location.pathname
+  if (path === '/frontend' || path.startsWith('/frontend/')) {
+    return '/frontend/'
+  }
+  return '/'
+}
+
 const routes: RouteRecordRaw[] = [
   { path: '/login', component: () => import('@/views/auth/LoginView.vue') },
   {
@@ -23,11 +35,12 @@ const routes: RouteRecordRaw[] = [
       { path: 'archives', component: () => import('@/views/archives/ArchiveView.vue') },
       { path: 'accounts', component: () => import('@/views/accounts/AccountManageView.vue') }
     ]
-  }
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/login' }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(detectRouterBase()),
   routes
 })
 
