@@ -2,14 +2,8 @@
   <el-card class="page-card" shadow="never">
     <template #header>工单列表</template>
     <el-form inline @submit.prevent>
-      <el-form-item label="工单号">
-        <el-input v-model="form.work_order_no" />
-      </el-form-item>
-      <el-form-item label="标题">
-        <el-input v-model="form.title" />
-      </el-form-item>
       <el-form-item label="项目">
-        <el-select v-model="form.project_id" placeholder="选择项目" style="width: 220px">
+        <el-select v-model="form.project_id" placeholder="选择项目" style="width: 260px" @change="onProjectChange">
           <el-option
             v-for="project in projectOptions"
             :key="project.id"
@@ -17,6 +11,12 @@
             :value="project.id"
           />
         </el-select>
+      </el-form-item>
+      <el-form-item label="工单号">
+        <el-input v-model="form.work_order_no" disabled />
+      </el-form-item>
+      <el-form-item label="标题">
+        <el-input v-model="form.title" disabled />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="onCreate">创建工单</el-button>
@@ -29,18 +29,6 @@
       <el-table-column prop="project_id" label="项目ID" />
       <el-table-column prop="current_status" label="状态" />
     </el-table>
-
-    <el-dialog v-model="editDialogVisible" title="编辑工单" width="420px">
-      <el-form label-width="80px">
-        <el-form-item label="标题">
-          <el-input v-model="editingTitle" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveWorkOrder">保存</el-button>
-      </template>
-    </el-dialog>
   </el-card>
 </template>
 
@@ -54,11 +42,13 @@ const loading = ref(false)
 const rows = ref<WorkOrderItem[]>([])
 const projectOptions = ref<ProjectItem[]>([])
 
-const form = reactive({
-  work_order_no: '',
-  title: '',
-  project_id: undefined as number | undefined
-})
+const form = reactive({ work_order_no: '', title: '', project_id: undefined as number | undefined })
+
+function onProjectChange(projectId?: number) {
+  const project = projectOptions.value.find((item) => item.id === projectId)
+  form.work_order_no = project?.project_code ?? ''
+  form.title = project?.project_name ?? ''
+}
 
 async function loadData() {
   loading.value = true
@@ -73,14 +63,10 @@ async function loadData() {
 
 async function onCreate() {
   if (!form.work_order_no || !form.title || !form.project_id) {
-    ElMessage.warning('请填写完整工单信息')
+    ElMessage.warning('请先选择项目')
     return
   }
-  await createWorkOrder({
-    work_order_no: form.work_order_no,
-    title: form.title,
-    project_id: form.project_id
-  })
+  await createWorkOrder({ work_order_no: form.work_order_no, title: form.title, project_id: form.project_id })
   ElMessage.success('工单创建成功')
   form.work_order_no = ''
   form.title = ''
