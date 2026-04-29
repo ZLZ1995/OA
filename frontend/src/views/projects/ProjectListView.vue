@@ -33,8 +33,7 @@
       <el-table-column prop="client_name" label="客户名称" />
       <el-table-column prop="project_leader_id" label="项目负责人ID" />
       <el-table-column prop="status_display" label="状态显示" />
-      <el-table-column prop="status" label="状态" />
-      <el-table-column label="操作" width="200">
+            <el-table-column label="操作" width="200">
         <template #default="{ row }">
           <el-button type="warning" link @click="onArchive(row)">归档</el-button>
           <el-button type="danger" link @click="onDelete(row)">删除</el-button>
@@ -49,13 +48,6 @@
         </el-form-item>
         <el-form-item label="客户名称">
           <el-input v-model="editing.client_name" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="editing.status" style="width: 100%">
-            <el-option label="ACTIVE" value="ACTIVE" />
-            <el-option label="CLOSED" value="CLOSED" />
-            <el-option label="CANCELLED" value="CANCELLED" />
-          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>

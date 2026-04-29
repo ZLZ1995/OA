@@ -8,19 +8,25 @@
           <el-option v-for="p in projects" :key="p.id" :label="`${p.project_code} - ${p.project_name}`" :value="p.id" />
         </el-select>
       </el-form-item>
+      <el-form-item label="成员角色">
+        <el-select v-model="memberRole" style="width: 160px">
+          <el-option label="项目负责人" value="项目负责人" />
+          <el-option label="项目组成员" value="项目组成员" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="用户">
-        <el-select v-model="newUserId" style="width: 220px">
-          <el-option v-for="u in users" :key="u.id" :label="`${u.real_name}(${u.username})`" :value="u.id" />
+        <el-select v-model="newUserIds" multiple collapse-tags style="width: 360px">
+          <el-option v-for="u in users" :key="u.id" :label="`${u.real_name}（${u.username}）`" :value="u.id" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="onAdd">添加成员</el-button>
+        <el-button type="primary" @click="onAdd">批量添加成员</el-button>
       </el-form-item>
     </el-form>
 
     <el-table :data="members" v-loading="loading">
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="user_id" label="用户ID" width="100" />
+      <el-table-column prop="real_name" label="姓名" width="140" />
+      <el-table-column prop="username" label="账号" width="160" />
       <el-table-column prop="member_role" label="成员角色" width="140" />
       <el-table-column label="操作" width="120">
         <template #default="{ row }">
@@ -36,14 +42,15 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listProjects, type ProjectItem } from '@/api/projects'
 import { listUsers, type UserItem } from '@/api/users'
-import { createProjectMember, deleteProjectMember, listProjectMembers, type ProjectMemberItem } from '@/api/projectMembers'
+import { batchCreateProjectMembers, deleteProjectMember, listProjectMembers, type ProjectMemberItem } from '@/api/projectMembers'
 
 const loading = ref(false)
 const projects = ref<ProjectItem[]>([])
 const users = ref<UserItem[]>([])
 const members = ref<ProjectMemberItem[]>([])
 const projectId = ref<number>()
-const newUserId = ref<number>()
+const newUserIds = ref<number[]>([])
+const memberRole = ref<'项目负责人' | '项目组成员'>('项目组成员')
 
 async function loadBase() {
   const [p, u] = await Promise.all([listProjects(), listUsers()])
@@ -64,13 +71,13 @@ async function loadMembers() {
 }
 
 async function onAdd() {
-  if (!projectId.value || !newUserId.value) {
+  if (!projectId.value || newUserIds.value.length === 0) {
     ElMessage.warning('请选择项目和用户')
     return
   }
-  await createProjectMember({ project_id: projectId.value, user_id: newUserId.value, member_role: 'MEMBER' })
+  await batchCreateProjectMembers({ project_id: projectId.value, user_ids: newUserIds.value, member_role: memberRole.value })
   ElMessage.success('成员添加成功')
-  newUserId.value = undefined
+  newUserIds.value = []
   await loadMembers()
 }
 

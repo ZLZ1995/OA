@@ -4,6 +4,8 @@ export interface ProjectMemberItem {
   id: number
   project_id: number
   user_id: number
+  username: string
+  real_name: string
   member_role: string
   created_at: string
 }
@@ -13,9 +15,9 @@ export async function listProjectMembers(projectId: number) {
   return data as { items: ProjectMemberItem[] }
 }
 
-export async function createProjectMember(payload: { project_id: number; user_id: number; member_role: string }) {
-  const { data } = await http.post('/project-members', payload)
-  return data as ProjectMemberItem
+export async function batchCreateProjectMembers(payload: { project_id: number; user_ids: number[]; member_role: string }) {
+  const { data } = await http.post('/project-members/batch', payload)
+  return data as { items: ProjectMemberItem[] }
 }
 
 export async function deleteProjectMember(memberId: number) {

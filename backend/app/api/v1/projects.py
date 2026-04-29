@@ -45,9 +45,11 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
     data = ProjectResponse.model_validate(project, from_attributes=True).model_dump()
     data.pop("status_display", None)
     data.pop("current_status", None)
+    status_cn = _build_status_display(project, latest_status)
     return ProjectResponse(
         **data,
-        status_display=_build_status_display(project, latest_status),
+        status=status_cn,
+        status_display=status_cn,
     )
 
 
