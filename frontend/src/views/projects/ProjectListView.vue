@@ -51,10 +51,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { createProject, listProjects, type ProjectItem } from '@/api/projects'
 import { useAuthStore } from '@/store/auth'
 
 const auth = useAuthStore()
+const router = useRouter()
 const loading = ref(false)
 const rows = ref<ProjectItem[]>([])
 
@@ -77,7 +79,9 @@ async function loadProjects() {
 async function onCreate() {
   const currentUser = auth.user ?? (await auth.ensureUserLoaded())
   if (!currentUser?.id) {
-    ElMessage.error('当前用户信息未加载')
+    auth.clearAuth()
+    ElMessage.error('登录状态已失效，请重新登录')
+    await router.push('/login')
     return
   }
   if (!form.project_code || !form.project_name || !form.client_name) {
