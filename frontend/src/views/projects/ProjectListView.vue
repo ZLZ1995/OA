@@ -4,6 +4,9 @@
     <el-form inline @submit.prevent>
       <el-form-item label="项目编号">
         <el-input v-model="form.project_code" placeholder="可留空自动生成" />
+        <div style="margin-top: 8px">
+          <el-button text type="primary" :loading="generatingCode" @click="onGenerateCode">生成编号</el-button>
+        </div>
       </el-form-item>
       <el-form-item label="承接单位">
         <el-select v-model="form.undertaking_unit" style="width: 160px">
@@ -68,13 +71,21 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { archiveProject, createProject, deleteProject, listProjects, type ProjectItem } from '@/api/projects'
+import {
+  archiveProject,
+  createProject,
+  deleteProject,
+  generateProjectCode,
+  listProjects,
+  type ProjectItem
+} from '@/api/projects'
 import { useAuthStore } from '@/store/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
 const loading = ref(false)
 const rows = ref<ProjectItem[]>([])
+const generatingCode = ref(false)
 
 const form = reactive({
   project_code: '',
@@ -90,6 +101,21 @@ async function loadProjects() {
     rows.value = data.items
   } finally {
     loading.value = false
+  }
+}
+
+
+
+async function onGenerateCode() {
+  generatingCode.value = true
+  try {
+    const data = await generateProjectCode(form.undertaking_unit)
+    form.project_code = data.project_code
+    ElMessage.success('已生成项目编号')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '生成项目编号失败')
+  } finally {
+    generatingCode.value = false
   }
 }
 
