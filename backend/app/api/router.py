@@ -15,6 +15,7 @@ from app.api.v1.roles import router as roles_router
 from app.api.v1.users import router as users_router
 from app.api.v1.work_orders import router as work_orders_router
 from app.api.v1.workflow_logs import router as workflow_logs_router
+from app.api.v1.workbench import router as workbench_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -32,3 +33,5 @@ api_router.include_router(finance_router)
 api_router.include_router(archives_router)
 api_router.include_router(workflow_logs_router)
 api_router.include_router(dashboard_router)
+
+api_router.include_router(workbench_router)
