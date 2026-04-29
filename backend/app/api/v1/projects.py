@@ -8,6 +8,9 @@ from app.db.session import get_db
 from app.models.project import Project
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.models.project_member import ProjectMember
+from app.schemas.project_flow import ProjectFlowProject, ProjectFlowResponse
+from app.services.project_flow import FLOW_STEPS, assert_project_creator, build_todo_action, get_project_status_display, get_user_role_in_project, is_system_admin, normalize_project_step
 from app.schemas.project import (
     ProjectCreate,
     ProjectListResponse,
@@ -30,9 +33,7 @@ STATUS_DISPLAY_MAP = {
 
 
 def _build_status_display(project: Project, latest_work_order_status: str | None) -> str:
-    if project.archived_at:
-        return "已归档"
-    return STATUS_DISPLAY_MAP.get(latest_work_order_status or "", "项目创建")
+    return get_project_status_display(latest_work_order_status, project.archived_at is not None)
 
 
 def _serialize_project(db: Session, project: Project) -> ProjectResponse:
@@ -110,7 +111,7 @@ def list_project_options(
 def generate_project_code(
     undertaking_unit: str,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     return {"project_code": _generate_project_code(db, undertaking_unit)}
 
@@ -119,7 +120,7 @@ def generate_project_code(
 def create_project(
     payload: ProjectCreate,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
+    current_user: User = Depends(get_current_user),
 ) -> ProjectResponse:
     project_code = payload.project_code or _generate_project_code(db, payload.undertaking_unit)
     exists = db.query(Project).filter(Project.project_code == project_code).first()
@@ -150,11 +151,12 @@ def update_project(
     project_id: int,
     payload: ProjectUpdate,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
+    current_user: User = Depends(get_current_user),
 ) -> ProjectResponse:
     row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
     if not row:
         raise HTTPException(status_code=404, detail="项目不存在")
+    assert_project_creator(row, current_user)
 
     data = payload.model_dump(exclude_unset=True)
     for key, value in data.items():
@@ -168,11 +170,12 @@ def update_project(
 def delete_project(
     project_id: int,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN")),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
     if not row:
         raise HTTPException(status_code=404, detail="项目不存在")
+    assert_project_creator(row, current_user)
     row.deleted_at = datetime.now()
     db.commit()
 
@@ -181,13 +184,53 @@ def delete_project(
 def archive_project(
     project_id: int,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
+    current_user: User = Depends(get_current_user),
 ) -> ProjectResponse:
     row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
     if not row:
         raise HTTPException(status_code=404, detail="项目不存在")
+    assert_project_creator(row, current_user)
     if row.archived_at is None:
         row.archived_at = datetime.now()
     db.commit()
     db.refresh(row)
     return _serialize_project(db, row)
+
+
+@router.get("/{project_id}/flow", response_model=ProjectFlowResponse)
+def get_project_flow(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectFlowResponse:
+    if is_system_admin(current_user):
+        raise HTTPException(status_code=403, detail="系统管理员不参与业务流程")
+
+    project = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project_id).order_by(WorkOrder.id.desc()).first()
+    is_member = db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
+
+    role = get_user_role_in_project(project, work_order, current_user, is_member)
+    if role == "无权限":
+        raise HTTPException(status_code=403, detail="无权查看该项目")
+
+    step = normalize_project_step(work_order.current_status if work_order else None, project.archived_at is not None)
+    action = build_todo_action(step, role) or "当前暂无待办操作"
+    return ProjectFlowResponse(
+        project=ProjectFlowProject(
+            id=project.id,
+            project_no=project.project_code,
+            project_name=project.project_name,
+            client_name=project.client_name,
+            undertaking_unit=project.undertaking_unit,
+            current_step=step,
+            status_display=step,
+        ),
+        user_role_in_project=role,
+        available_action=action,
+        can_operate=role != "无权限",
+        flow_steps=FLOW_STEPS,
+    )

@@ -21,6 +21,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'dashboard', component: () => import('@/views/dashboard/HomeView.vue') },
       { path: 'projects', component: () => import('@/views/projects/ProjectListView.vue') },
       { path: 'projects/:id', component: () => import('@/views/projects/ProjectDetailView.vue') },
+      { path: 'projects/:id/flow', component: () => import('@/views/projects/ProjectFlowView.vue') },
       { path: 'workorders', component: () => import('@/views/workorders/WorkOrderListView.vue') },
       { path: 'workorders/:id', component: () => import('@/views/workorders/WorkOrderDetailView.vue') },
       { path: 'reviews', component: () => import('@/views/reviews/ReviewHandleView.vue') },
