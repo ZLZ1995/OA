@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     initial_admin_password: str = "zhongqin123"
     initial_admin_real_name: str = "系统管理员"
 
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,https://zhongqinoa01.zeabur.app"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,https://zhongqinoa01.zeabur.app,https://zhongqinoa.zeabur.app"
+    cors_origin_regex: str = r"^https://[a-z0-9-]+\.zeabur\.app$"
 
     def get_cors_origins(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(',') if item.strip()]
