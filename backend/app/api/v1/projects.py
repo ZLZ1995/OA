@@ -42,8 +42,11 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
         .limit(1)
         .scalar()
     )
+    data = ProjectResponse.model_validate(project, from_attributes=True).model_dump()
+    data.pop("status_display", None)
+    data.pop("current_status", None)
     return ProjectResponse(
-        **ProjectResponse.model_validate(project, from_attributes=True).model_dump(),
+        **data,
         status_display=_build_status_display(project, latest_status),
     )
 
