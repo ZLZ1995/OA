@@ -98,6 +98,17 @@ def list_project_options(
     return ProjectListResponse(items=[_serialize_project(db, row) for row in rows])
 
 
+
+
+@router.get("/generate-code")
+def generate_project_code(
+    undertaking_unit: str,
+    db: Session = Depends(get_db),
+    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
+) -> dict[str, str]:
+    return {"project_code": _generate_project_code(db, undertaking_unit)}
+
+
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create_project(
     payload: ProjectCreate,
