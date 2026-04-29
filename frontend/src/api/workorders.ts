@@ -2,9 +2,9 @@ import http from './http'
 
 export interface WorkOrderItem {
   id: number
-  work_order_no: string
+  work_order_no?: string
   project_id: number
-  title: string
+  title?: string
   current_status: string
 }
 
@@ -14,9 +14,9 @@ export async function listWorkOrders() {
 }
 
 export async function createWorkOrder(payload: {
-  work_order_no: string
+  work_order_no?: string
   project_id: number
-  title: string
+  title?: string
   description?: string
 }) {
   const { data } = await http.post('/work-orders', payload)
