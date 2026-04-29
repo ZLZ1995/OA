@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { login, me } from '@/api/auth'
@@ -27,10 +27,6 @@ const route = useRoute()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({ username: 'zhongqin123', password: 'zhongqin123' })
-
-onMounted(() => {
-  auth.clearAuth()
-})
 
 async function onLogin() {
   try {
@@ -44,8 +40,15 @@ async function onLogin() {
     const redirectTo = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
     await router.replace(redirectTo)
 
+    // Some production environments may keep the page on /login when route guards run concurrently.
+    // If that happens, force a hard navigation so users can still enter the main app.
+    if (router.currentRoute.value.path === '/login') {
+      window.location.assign(redirectTo)
+      return
+    }
+
     ElMessage.success('登录成功')
-  } catch (error: any) {
+  } catch {
     auth.clearAuth()
     const status = error?.response?.status
     if (status === 401) {
