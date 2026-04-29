@@ -69,6 +69,6 @@ async function onCreate(){ const u=auth.user ?? await auth.ensureUserLoaded(); i
 async function editProject(row:WorkbenchProjectItem){ await updateProject(row.id,{ project_name: row.project_name, client_name: row.client_name }); ElMessage.success('项目已更新'); await load() }
 async function archive(id:number){ await archiveProject(id); ElMessage.success('项目已归档'); await load() }
 async function remove(id:number){ await deleteProject(id); ElMessage.success('项目已删除'); await load() }
-function goProject(id:number){ router.push(`/projects/${id}/flow`) }
+function goProject(id:number){ router.push(`/projects/${id}`) }
 onMounted(load)
 </script>
