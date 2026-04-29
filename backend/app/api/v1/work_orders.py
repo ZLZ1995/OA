@@ -39,9 +39,17 @@ def create_work_order(
     if exists:
         raise HTTPException(status_code=400, detail="工单号已存在")
 
-    project = db.query(Project).filter(Project.id == payload.project_id).first()
+    project = (
+        db.query(Project)
+        .filter(
+            Project.id == payload.project_id,
+            Project.deleted_at.is_(None),
+            Project.archived_at.is_(None),
+        )
+        .first()
+    )
     if not project:
-        raise HTTPException(status_code=404, detail="关联项目不存在")
+        raise HTTPException(status_code=404, detail="关联项目不存在或不可用")
 
     row = WorkOrder(
         **payload.model_dump(),

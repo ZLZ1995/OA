@@ -47,7 +47,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listProjects, type ProjectItem } from '@/api/projects'
+import { listProjectOptions, type ProjectItem } from '@/api/projects'
 import { createWorkOrder, listWorkOrders, type WorkOrderItem } from '@/api/workorders'
 
 const loading = ref(false)
@@ -63,7 +63,7 @@ const form = reactive({
 async function loadData() {
   loading.value = true
   try {
-    const [woData, projectData] = await Promise.all([listWorkOrders(), listProjects()])
+    const [woData, projectData] = await Promise.all([listWorkOrders(), listProjectOptions()])
     rows.value = woData.items
     projectOptions.value = projectData.items
   } finally {

@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.security import get_password_hash
@@ -30,8 +31,21 @@ def init_db() -> None:
     """Create all tables and initialize fixed roles + admin account."""
     Base.metadata.create_all(bind=engine)
     with Session(engine) as db:
+        ensure_project_columns(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
+
+
+def ensure_project_columns(db: Session) -> None:
+    """Ensure newly introduced project lifecycle columns exist for existing deployments."""
+    statements = [
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ NULL",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL",
+    ]
+    for sql in statements:
+        db.execute(text(sql))
+    db.commit()
 
 
 def seed_fixed_roles(db: Session) -> None:

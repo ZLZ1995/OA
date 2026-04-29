@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -5,6 +7,7 @@ from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.project import Project
 from app.models.user import User
+from app.models.work_order import WorkOrder
 from app.schemas.project import (
     ProjectCreate,
     ProjectListResponse,
@@ -13,6 +16,58 @@ from app.schemas.project import (
 )
 
 router = APIRouter(prefix="/projects", tags=["项目"])
+UNIT_CODE_MAP = {"中勤": "ZQ", "中立国际": "ZLGJ", "中众": "ZZ", "其他": "QT"}
+STATUS_DISPLAY_MAP = {
+    "PROJECT_CREATED": "项目创建",
+    "WORK_ORDER_CREATED": "工单创建",
+    "CONTRACT_UPLOADED": "合同上传",
+    "FIRST_REVIEWING": "一审",
+    "SECOND_REVIEWING": "二审",
+    "THIRD_REVIEWING": "三审",
+    "PAPER_REPORT_ISSUED": "文印室出具",
+}
+
+
+def _build_status_display(project: Project, latest_work_order_status: str | None) -> str:
+    if project.archived_at:
+        return "已归档"
+    return STATUS_DISPLAY_MAP.get(latest_work_order_status or "", "项目创建")
+
+
+def _serialize_project(db: Session, project: Project) -> ProjectResponse:
+    latest_status = (
+        db.query(WorkOrder.current_status)
+        .filter(WorkOrder.project_id == project.id)
+        .order_by(WorkOrder.id.desc())
+        .limit(1)
+        .scalar()
+    )
+    return ProjectResponse(
+        **ProjectResponse.model_validate(project, from_attributes=True).model_dump(),
+        status_display=_build_status_display(project, latest_status),
+    )
+
+
+def _generate_project_code(db: Session, undertaking_unit: str) -> str:
+    unit_code = UNIT_CODE_MAP.get(undertaking_unit)
+    if not unit_code:
+        raise HTTPException(status_code=400, detail="不支持的项目承接单位")
+    now = datetime.now()
+    yyyymm = now.strftime("%Y%m")
+    prefix = f"{unit_code}-{yyyymm}-"
+    latest = (
+        db.query(Project.project_code)
+        .filter(Project.project_code.like(f"{prefix}%"))
+        .order_by(Project.project_code.desc())
+        .first()
+    )
+    next_seq = 1
+    if latest and latest[0]:
+        try:
+            next_seq = int(latest[0].split("-")[-1]) + 1
+        except ValueError:
+            next_seq = 1
+    return f"{prefix}{next_seq:03d}"
 
 
 @router.get("", response_model=ProjectListResponse)
@@ -20,8 +75,27 @@ def list_projects(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> ProjectListResponse:
-    rows = db.query(Project).order_by(Project.id.desc()).all()
-    return ProjectListResponse(items=[ProjectResponse.model_validate(row, from_attributes=True) for row in rows])
+    rows = (
+        db.query(Project)
+        .filter(Project.deleted_at.is_(None))
+        .order_by(Project.id.desc())
+        .all()
+    )
+    return ProjectListResponse(items=[_serialize_project(db, row) for row in rows])
+
+
+@router.get("/options", response_model=ProjectListResponse)
+def list_project_options(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> ProjectListResponse:
+    rows = (
+        db.query(Project)
+        .filter(Project.deleted_at.is_(None), Project.archived_at.is_(None))
+        .order_by(Project.id.desc())
+        .all()
+    )
+    return ProjectListResponse(items=[_serialize_project(db, row) for row in rows])
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -30,15 +104,17 @@ def create_project(
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
 ) -> ProjectResponse:
-    exists = db.query(Project).filter(Project.project_code == payload.project_code).first()
+    manual_code = (payload.project_code or "").strip()
+    project_code = manual_code or _generate_project_code(db, payload.undertaking_unit)
+    exists = db.query(Project).filter(Project.project_code == project_code).first()
     if exists:
         raise HTTPException(status_code=400, detail="项目编号已存在")
 
-    row = Project(**payload.model_dump())
+    row = Project(**payload.model_dump(exclude={"project_code"}), project_code=project_code)
     db.add(row)
     db.commit()
     db.refresh(row)
-    return ProjectResponse.model_validate(row, from_attributes=True)
+    return _serialize_project(db, row)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -47,10 +123,10 @@ def get_project(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> ProjectResponse:
-    row = db.query(Project).filter(Project.id == project_id).first()
+    row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
     if not row:
         raise HTTPException(status_code=404, detail="项目不存在")
-    return ProjectResponse.model_validate(row, from_attributes=True)
+    return _serialize_project(db, row)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -60,7 +136,7 @@ def update_project(
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
 ) -> ProjectResponse:
-    row = db.query(Project).filter(Project.id == project_id).first()
+    row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
     if not row:
         raise HTTPException(status_code=404, detail="项目不存在")
 
@@ -69,7 +145,7 @@ def update_project(
         setattr(row, key, value)
     db.commit()
     db.refresh(row)
-    return ProjectResponse.model_validate(row, from_attributes=True)
+    return _serialize_project(db, row)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -78,8 +154,24 @@ def delete_project(
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> None:
-    row = db.query(Project).filter(Project.id == project_id).first()
+    row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
     if not row:
         raise HTTPException(status_code=404, detail="项目不存在")
-    db.delete(row)
+    row.deleted_at = datetime.now()
     db.commit()
+
+
+@router.patch("/{project_id}/archive", response_model=ProjectResponse)
+def archive_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
+) -> ProjectResponse:
+    row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    if row.archived_at is None:
+        row.archived_at = datetime.now()
+    db.commit()
+    db.refresh(row)
+    return _serialize_project(db, row)
