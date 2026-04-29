@@ -44,3 +44,9 @@ export async function listProjectOptions() {
   const { data } = await http.get('/projects/options')
   return data as { items: ProjectItem[] }
 }
+
+
+export async function generateProjectCode(undertakingUnit: '中勤' | '中立国际' | '中众' | '其他') {
+  const { data } = await http.get('/projects/generate-code', { params: { undertaking_unit: undertakingUnit } })
+  return data as { project_code: string }
+}
