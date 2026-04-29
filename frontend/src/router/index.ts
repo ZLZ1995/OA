@@ -49,12 +49,12 @@ router.beforeEach(async (to) => {
     }
 
     if (!auth.isLoggedIn) {
-      return '/login'
+      return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
 
     const profile = await auth.ensureUserLoaded()
     if (!profile) {
-      return '/login'
+      return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
 
     return true
