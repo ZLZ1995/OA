@@ -28,6 +28,28 @@ const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({ username: 'zhongqin123', password: 'zhongqin123' })
 
+function getErrorMessage(err: unknown): string {
+  if (typeof err === 'object' && err !== null) {
+    const maybeError = err as {
+      message?: string
+      response?: {
+        status?: number
+        data?: {
+          detail?: string
+          message?: string
+        }
+      }
+    }
+    return (
+      maybeError.response?.data?.detail ||
+      maybeError.response?.data?.message ||
+      maybeError.message ||
+      '登录失败，请稍后重试'
+    )
+  }
+  return '登录失败，请稍后重试'
+}
+
 async function onLogin() {
   try {
     loading.value = true
@@ -48,14 +70,17 @@ async function onLogin() {
     }
 
     ElMessage.success('登录成功')
-  } catch {
+  } catch (err) {
     auth.clearAuth()
-    const status = error?.response?.status
+    const status =
+      typeof err === 'object' && err !== null
+        ? (err as { response?: { status?: number } }).response?.status
+        : undefined
     if (status === 401) {
-      ElMessage.error('登录失败，请检查账号密码')
+      ElMessage.error(getErrorMessage(err))
       return
     }
-    ElMessage.error('登录接口异常，请检查后端地址与返回格式')
+    ElMessage.error(getErrorMessage(err))
   } finally {
     loading.value = false
   }
