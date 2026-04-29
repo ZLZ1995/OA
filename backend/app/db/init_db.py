@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 
 from app.core.config import settings
 from app.core.security import get_password_hash
@@ -30,8 +31,43 @@ def init_db() -> None:
     """Create all tables and initialize fixed roles + admin account."""
     Base.metadata.create_all(bind=engine)
     with Session(engine) as db:
+        ensure_project_columns(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
+
+
+def ensure_project_columns(db: Session) -> None:
+    """Ensure newly introduced project lifecycle columns exist for existing deployments."""
+    bind = db.get_bind()
+    inspector = inspect(bind)
+    existing_columns = {column["name"] for column in inspector.get_columns("projects")}
+    dialect_name = bind.dialect.name
+
+    statements: list[str] = []
+    if "undertaking_unit" not in existing_columns:
+        if dialect_name == "sqlite":
+            statements.append(
+                "ALTER TABLE projects ADD COLUMN undertaking_unit VARCHAR(32) NOT NULL DEFAULT '中勤'"
+            )
+        else:
+            statements.append(
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL"
+            )
+    if "archived_at" not in existing_columns:
+        if dialect_name == "sqlite":
+            statements.append("ALTER TABLE projects ADD COLUMN archived_at DATETIME NULL")
+        else:
+            statements.append("ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ NULL")
+    if "deleted_at" not in existing_columns:
+        if dialect_name == "sqlite":
+            statements.append("ALTER TABLE projects ADD COLUMN deleted_at DATETIME NULL")
+        else:
+            statements.append("ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL")
+
+    for sql in statements:
+        db.execute(text(sql))
+    if statements:
+        db.commit()
 
 
 def seed_fixed_roles(db: Session) -> None:
