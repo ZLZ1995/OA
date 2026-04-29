@@ -18,18 +18,17 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { login, me } from '@/api/auth'
 import { useAuthStore } from '@/store/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({ username: 'zhongqin123', password: 'zhongqin123' })
 
 onMounted(() => {
-  // Entering login page means starting a fresh authentication flow.
-  // This avoids accidentally reusing an old valid token and being mistaken as "any credentials can log in".
   auth.clearAuth()
 })
 
@@ -37,15 +36,23 @@ async function onLogin() {
   try {
     loading.value = true
     auth.clearAuth()
+
     const token = await login(form)
     auth.setToken(token.access_token)
     auth.setUser(await me())
-    ElMessage.success('登录成功')
 
-    await router.replace('/dashboard')
-  } catch {
+    const redirectTo = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
+    await router.replace(redirectTo)
+
+    ElMessage.success('登录成功')
+  } catch (error: any) {
     auth.clearAuth()
-    ElMessage.error('登录失败，请检查账号密码')
+    const status = error?.response?.status
+    if (status === 401) {
+      ElMessage.error('登录失败，请检查账号密码')
+      return
+    }
+    ElMessage.error('登录接口异常，请检查后端地址与返回格式')
   } finally {
     loading.value = false
   }

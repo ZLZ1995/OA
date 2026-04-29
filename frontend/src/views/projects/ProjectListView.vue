@@ -51,10 +51,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { createProject, listProjects, type ProjectItem } from '@/api/projects'
 import { useAuthStore } from '@/store/auth'
 
 const auth = useAuthStore()
+const router = useRouter()
 const loading = ref(false)
 const rows = ref<ProjectItem[]>([])
 
@@ -77,23 +79,48 @@ async function loadProjects() {
 async function onCreate() {
   const currentUser = auth.user ?? (await auth.ensureUserLoaded())
   if (!currentUser?.id) {
-    ElMessage.error('当前用户信息未加载')
+    auth.clearAuth()
+    ElMessage.error('登录状态已失效，请重新登录')
+    await router.push('/login')
     return
   }
   if (!form.project_code || !form.project_name || !form.client_name) {
     ElMessage.warning('请填写完整项目信息')
     return
   }
-  await createProject({
-    ...form,
-    business_user_id: currentUser.id,
-    project_leader_id: currentUser.id
-  })
-  ElMessage.success('项目创建成功')
-  form.project_code = ''
-  form.project_name = ''
-  form.client_name = ''
-  await loadProjects()
+  try {
+    await createProject({
+      ...form,
+      business_user_id: currentUser.id,
+      project_leader_id: currentUser.id
+    })
+    ElMessage.success('项目创建成功')
+    form.project_code = ''
+    form.project_name = ''
+    form.client_name = ''
+    await loadProjects()
+  } catch (error: any) {
+    const status = error?.response?.status
+    if (status === 401) {
+      auth.clearAuth()
+      ElMessage.error('登录状态已失效，请重新登录')
+      await router.push('/login')
+      return
+    }
+    if (status === 403) {
+      ElMessage.error('无权限创建项目')
+      return
+    }
+    if (status === 422) {
+      ElMessage.error('项目参数错误，请检查必填项')
+      return
+    }
+    if (status >= 500) {
+      ElMessage.error('服务器异常，请稍后重试')
+      return
+    }
+    ElMessage.error(error?.response?.data?.detail || '创建项目失败')
+  }
 }
 
 onMounted(loadProjects)

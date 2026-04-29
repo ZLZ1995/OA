@@ -8,9 +8,25 @@ interface UserProfile {
   roles: string[]
 }
 
+function readTokenFromStorage() {
+  const accessToken = localStorage.getItem('access_token')
+  if (accessToken) {
+    return accessToken
+  }
+
+  const legacyToken = localStorage.getItem('token')
+  if (legacyToken) {
+    localStorage.setItem('access_token', legacyToken)
+    localStorage.removeItem('token')
+    return legacyToken
+  }
+
+  return ''
+}
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    token: localStorage.getItem('access_token') || localStorage.getItem('token') || '',
+    token: readTokenFromStorage(),
     user: null as UserProfile | null
   }),
   getters: {
@@ -19,8 +35,8 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     setToken(token: string) {
       this.token = token
-      localStorage.setItem('token', token)
       localStorage.setItem('access_token', token)
+      localStorage.removeItem('token')
     },
     clearAuth() {
       this.token = ''

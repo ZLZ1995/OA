@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api/v1'
+const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
+const apiBaseUrl = configuredApiBaseUrl
+  ? configuredApiBaseUrl.replace(/\/+$/, '')
+  : '/api/v1'
 
 const http = axios.create({
   baseURL: apiBaseUrl,
@@ -8,7 +11,7 @@ const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+  const token = localStorage.getItem('access_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }

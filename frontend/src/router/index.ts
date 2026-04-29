@@ -17,7 +17,7 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: AppLayout,
     children: [
-      { path: '', redirect: '/dashboard' },
+      { path: '', redirect: '/login' },
       { path: 'dashboard', component: () => import('@/views/dashboard/HomeView.vue') },
       { path: 'projects', component: () => import('@/views/projects/ProjectListView.vue') },
       { path: 'projects/:id', component: () => import('@/views/projects/ProjectDetailView.vue') },
@@ -49,12 +49,12 @@ router.beforeEach(async (to) => {
     }
 
     if (!auth.isLoggedIn) {
-      return '/login'
+      return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
 
     const profile = await auth.ensureUserLoaded()
     if (!profile) {
-      return '/login'
+      return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
 
     return true
