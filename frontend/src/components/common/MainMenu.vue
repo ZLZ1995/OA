@@ -1,7 +1,7 @@
 <template>
   <div class="menu-wrapper">
     <el-menu :default-active="active" class="menu" router>
-      <el-menu-item v-for="item in APP_MENUS" :key="item.key" :index="item.path">{{ item.title }}</el-menu-item>
+      <el-menu-item v-for="item in visibleMenus" :key="item.key" :index="item.path">{{ item.title }}</el-menu-item>
     </el-menu>
     <div class="logout-zone">
       <el-button type="danger" plain class="logout-btn" @click="onLogout">退出登录</el-button>
@@ -19,6 +19,8 @@ defineProps<{ compact?: boolean }>()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
+const visibleMenus = computed(() => APP_MENUS.filter((m) => (isAdmin.value ? m.adminOnly : !m.adminOnly)))
 const active = computed(() => route.path)
 
 function onLogout() {

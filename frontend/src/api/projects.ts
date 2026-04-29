@@ -14,6 +14,12 @@ export interface ProjectItem {
   deleted_at?: string | null
 }
 
+export interface ProjectUpdatePayload {
+  project_name?: string
+  client_name?: string
+  undertaking_unit?: '中勤' | '中立国际' | '中众' | '其他'
+}
+
 export async function listProjects() {
   const { data } = await http.get('/projects')
   return data as { items: ProjectItem[] }
@@ -37,6 +43,11 @@ export async function deleteProject(projectId: number) {
 
 export async function archiveProject(projectId: number) {
   const { data } = await http.patch(`/projects/${projectId}/archive`)
+  return data as ProjectItem
+}
+
+export async function updateProject(projectId: number | string, payload: ProjectUpdatePayload) {
+  const { data } = await http.patch(`/projects/${projectId}`, payload)
   return data as ProjectItem
 }
 

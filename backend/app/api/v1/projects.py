@@ -25,6 +25,7 @@ STATUS_DISPLAY_MAP = {
     "SECOND_REVIEWING": "二审",
     "THIRD_REVIEWING": "三审",
     "PAPER_REPORT_ISSUED": "文印室出具",
+    "ARCHIVED": "已归档",
 }
 
 

@@ -4,9 +4,9 @@ from pydantic import BaseModel, Field
 
 
 class WorkOrderBase(BaseModel):
-    work_order_no: str = Field(min_length=1, max_length=64)
     project_id: int
-    title: str = Field(min_length=1, max_length=255)
+    work_order_no: str | None = Field(default=None, min_length=1, max_length=64)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     priority: str = Field(default="MEDIUM", max_length=16)
     deadline_at: datetime | None = None
