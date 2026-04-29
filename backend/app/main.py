@@ -44,6 +44,12 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 
+@app.get("/", tags=["health"])
+async def root_health():
+    """Public root health endpoint for ingress/domain verification."""
+    return {"service": "zhongqin-oa-backend", "status": "ok"}
+
+
 @app.middleware("http")
 async def log_request_trace(request: Request, call_next):
     """Log request/response trace for cloud ingress troubleshooting."""
