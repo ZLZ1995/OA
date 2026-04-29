@@ -21,10 +21,22 @@ STATUS_LABEL_MAP = {
     WorkOrderStatus.PROJECT_CREATED.value: "项目创建",
     WorkOrderStatus.WORK_ORDER_CREATED.value: "工单创建",
     WorkOrderStatus.CONTRACT_UPLOADED.value: "合同上传",
+    WorkOrderStatus.WAIT_PRINTROOM_OFFICIAL_CONTRACT.value: "合同上传",
+    WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT.value: "一审",
     WorkOrderStatus.FIRST_REVIEWING.value: "一审",
+    WorkOrderStatus.FIRST_REVIEW_REJECTED.value: "一审",
+    WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND.value: "二审",
+    WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT.value: "二审",
     WorkOrderStatus.SECOND_REVIEWING.value: "二审",
+    WorkOrderStatus.SECOND_REVIEW_REJECTED.value: "二审",
+    WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD.value: "三审",
+    WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT.value: "三审",
     WorkOrderStatus.THIRD_REVIEWING.value: "三审",
+    WorkOrderStatus.THIRD_REVIEW_REJECTED.value: "三审",
+    WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "文印室出具",
+    WorkOrderStatus.PRINTROOM_PROCESSING.value: "文印室出具",
     WorkOrderStatus.PAPER_REPORT_ISSUED.value: "文印室出具",
+    "ARCHIVED": "已归档",
 }
 
 
@@ -79,7 +91,11 @@ def create_work_order(
 
     work_order_no = project.project_code
     title = project.project_name
-    exists = db.query(WorkOrder).filter(WorkOrder.work_order_no == work_order_no).first()
+    exists = (
+        db.query(WorkOrder)
+        .filter(WorkOrder.work_order_no == work_order_no, WorkOrder.project_id == payload.project_id)
+        .first()
+    )
     if exists:
         raise HTTPException(status_code=400, detail="工单号已存在")
 

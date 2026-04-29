@@ -66,7 +66,7 @@ async function onCreate() {
     ElMessage.warning('请先选择项目')
     return
   }
-  await createWorkOrder({ work_order_no: form.work_order_no, title: form.title, project_id: form.project_id })
+  await createWorkOrder({ project_id: form.project_id })
   ElMessage.success('工单创建成功')
   form.work_order_no = ''
   form.title = ''
