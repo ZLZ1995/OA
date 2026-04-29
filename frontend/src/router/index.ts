@@ -17,7 +17,7 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: AppLayout,
     children: [
-      { path: '', redirect: '/dashboard' },
+      { path: '', redirect: '/login' },
       { path: 'dashboard', component: () => import('@/views/dashboard/HomeView.vue') },
       { path: 'projects', component: () => import('@/views/projects/ProjectListView.vue') },
       { path: 'projects/:id', component: () => import('@/views/projects/ProjectDetailView.vue') },
