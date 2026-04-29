@@ -38,13 +38,16 @@ def init_db() -> None:
 
 def ensure_project_columns(db: Session) -> None:
     """Ensure newly introduced project lifecycle columns exist for existing deployments."""
-    statements = [
-        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL",
-        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ NULL",
-        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL",
-    ]
-    for sql in statements:
-        db.execute(text(sql))
+    existing_columns = {
+        row[1]
+        for row in db.execute(text("PRAGMA table_info('projects')")).fetchall()
+    }
+    if 'undertaking_unit' not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL"))
+    if 'archived_at' not in existing_columns:
+        db.execute(text('ALTER TABLE projects ADD COLUMN archived_at TIMESTAMPTZ NULL'))
+    if 'deleted_at' not in existing_columns:
+        db.execute(text('ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMPTZ NULL'))
     db.commit()
 
 
