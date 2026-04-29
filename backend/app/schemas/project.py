@@ -1,10 +1,11 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
 
 class ProjectBase(BaseModel):
     project_code: str = Field(min_length=1, max_length=64)
+    undertaking_unit: str = Field(min_length=1, max_length=32)
     project_name: str = Field(min_length=1, max_length=255)
     client_name: str = Field(min_length=1, max_length=255)
     business_user_id: int
@@ -17,7 +18,7 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    project_code: str | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -34,6 +35,9 @@ class ProjectUpdate(BaseModel):
 
 class ProjectResponse(ProjectBase):
     id: int
+    status_display: str = "项目创建"
+    archived_at: datetime | None = None
+    deleted_at: datetime | None = None
 
 
 class ProjectListResponse(BaseModel):
