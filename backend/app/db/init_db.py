@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import inspect, text
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.security import get_password_hash
@@ -38,36 +38,14 @@ def init_db() -> None:
 
 def ensure_project_columns(db: Session) -> None:
     """Ensure newly introduced project lifecycle columns exist for existing deployments."""
-    bind = db.get_bind()
-    inspector = inspect(bind)
-    existing_columns = {column["name"] for column in inspector.get_columns("projects")}
-    dialect_name = bind.dialect.name
-
-    statements: list[str] = []
-    if "undertaking_unit" not in existing_columns:
-        if dialect_name == "sqlite":
-            statements.append(
-                "ALTER TABLE projects ADD COLUMN undertaking_unit VARCHAR(32) NOT NULL DEFAULT '中勤'"
-            )
-        else:
-            statements.append(
-                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL"
-            )
-    if "archived_at" not in existing_columns:
-        if dialect_name == "sqlite":
-            statements.append("ALTER TABLE projects ADD COLUMN archived_at DATETIME NULL")
-        else:
-            statements.append("ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ NULL")
-    if "deleted_at" not in existing_columns:
-        if dialect_name == "sqlite":
-            statements.append("ALTER TABLE projects ADD COLUMN deleted_at DATETIME NULL")
-        else:
-            statements.append("ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL")
-
+    statements = [
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ NULL",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL",
+    ]
     for sql in statements:
         db.execute(text(sql))
-    if statements:
-        db.commit()
+    db.commit()
 
 
 def seed_fixed_roles(db: Session) -> None:
