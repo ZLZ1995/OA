@@ -106,8 +106,12 @@ async function onCreate() {
     return
   }
   try {
+    const projectCode = form.project_code.trim()
     await createProject({
-      ...form,
+      ...(projectCode ? { project_code: projectCode } : {}),
+      undertaking_unit: form.undertaking_unit,
+      project_name: form.project_name,
+      client_name: form.client_name,
       business_user_id: currentUser.id,
       project_leader_id: currentUser.id
     })
