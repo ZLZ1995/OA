@@ -104,8 +104,7 @@ def create_project(
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
 ) -> ProjectResponse:
-    manual_code = (payload.project_code or "").strip()
-    project_code = manual_code or _generate_project_code(db, payload.undertaking_unit)
+    project_code = payload.project_code or _generate_project_code(db, payload.undertaking_unit)
     exists = db.query(Project).filter(Project.project_code == project_code).first()
     if exists:
         raise HTTPException(status_code=400, detail="项目编号已存在")
