@@ -47,7 +47,7 @@ def assert_project_creator(project: Project, current_user: User) -> None:
     if project.deleted_at is not None:
         raise HTTPException(status_code=400, detail="项目已删除，不能重复操作")
     if project.business_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="只能操作自己创建的项目")
+        raise HTTPException(status_code=403, detail="只有项目创建人可以执行该操作")
     if project.archived_at is not None:
         raise HTTPException(status_code=400, detail="项目已归档，不能继续操作")
 
