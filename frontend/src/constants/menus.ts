@@ -1,5 +1,5 @@
 export const APP_MENUS = [
-  { key: 'dashboard', title: '项目工作台', path: '/workbench', adminOnly: false },
+  { key: 'dashboard', title: '项目工作台', path: '/dashboard', adminOnly: false },
   { key: 'projects', title: '项目管理', path: '/projects', adminOnly: false },
   { key: 'workorders', title: '工单管理', path: '/workorders', adminOnly: false },
   { key: 'project-members', title: '项目成员', path: '/project-members', adminOnly: false },

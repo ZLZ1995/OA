@@ -12,9 +12,6 @@
               <el-option label="其他" value="其他" />
             </el-select>
           </el-form-item>
-          <el-form-item label="项目编号">
-            <el-input :model-value="lastCreatedProjectCode" placeholder="系统自动生成" readonly disabled />
-          </el-form-item>
           <el-form-item label="项目名称"><el-input v-model="form.project_name" /></el-form-item>
           <el-form-item label="客户名称"><el-input v-model="form.client_name" /></el-form-item>
           <el-form-item><el-button type="primary" @click="onCreate">创建项目</el-button></el-form-item>
@@ -63,17 +60,15 @@ import { createProject, updateProject, deleteProject, archiveProject } from '@/a
 import { useAuthStore } from '@/store/auth'
 const router = useRouter(); const auth = useAuthStore()
 const myProjects = ref<WorkbenchProjectItem[]>([]); const todoProjects = ref<WorkbenchProjectItem[]>([])
-const lastCreatedProjectCode = ref('')
-const form = reactive({ undertaking_unit:'中勤' as '中勤' | '中立国际' | '中众' | '其他', project_name:'', client_name:'' })
+const form = reactive({ undertaking_unit:'中勤', project_name:'', client_name:'' })
 async function load(){ const d=await getWorkbench(); myProjects.value=d.my_projects; todoProjects.value=d.todo_projects }
 async function onCreate(){ const u=auth.user ?? await auth.ensureUserLoaded(); if(!u?.id) return
-  const created = await createProject({ undertaking_unit:form.undertaking_unit, project_name:form.project_name, client_name:form.client_name, business_user_id:u.id, project_leader_id:u.id })
-  lastCreatedProjectCode.value = created.project_code
+  await createProject({ undertaking_unit:form.undertaking_unit, project_name:form.project_name, client_name:form.client_name, business_user_id:u.id, project_leader_id:u.id })
   ElMessage.success('项目创建成功'); form.project_name=''; form.client_name=''; await load()
 }
 async function editProject(row:WorkbenchProjectItem){ await updateProject(row.id,{ project_name: row.project_name, client_name: row.client_name }); ElMessage.success('项目已更新'); await load() }
 async function archive(id:number){ await archiveProject(id); ElMessage.success('项目已归档'); await load() }
 async function remove(id:number){ await deleteProject(id); ElMessage.success('项目已删除'); await load() }
-function goProject(id:number){ router.push(`/projects/${id}/flow`) }
+function goProject(id:number){ router.push(`/projects/${id}`) }
 onMounted(load)
 </script>

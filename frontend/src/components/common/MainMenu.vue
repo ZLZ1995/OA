@@ -20,10 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
-const visibleMenus = computed(() => {
-  if (isAdmin.value) return APP_MENUS.filter((m) => m.adminOnly)
-  return APP_MENUS.filter((m) => m.key === 'dashboard')
-})
+const visibleMenus = computed(() => APP_MENUS.filter((m) => (isAdmin.value ? m.adminOnly : !m.adminOnly)))
 const active = computed(() => route.path)
 
 function onLogout() {
