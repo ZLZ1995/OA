@@ -13,25 +13,17 @@
       <el-card shadow="never">
         <template #header>当前环节办理区</template>
         <el-empty v-if="!flow" description="暂无项目数据" />
-        <template v-else>
-          <el-form v-if="projectWorkOrders.length > 1" inline style="margin-bottom: 10px">
-            <el-form-item label="工单选择">
-              <el-select v-model="workOrderId" placeholder="请选择工单" style="width: 320px">
-                <el-option v-for="w in projectWorkOrders" :key="w.id" :label="`${w.work_order_no || '工单'} - ${w.title || ''}`" :value="w.id" />
-              </el-select>
-            </el-form-item>
-          </el-form>
-          <component
-            :is="activePanel"
-            :project-id="projectId"
-            :flow-info="flow"
-            :work-order-id="workOrderId"
-            :can-edit="canProjectOperate"
-            :can-operate="canProjectOperate"
-            :user-roles="userRoles"
-            @changed="onPanelChanged"
-          />
-        </template>
+        <component
+          v-else
+          :is="activePanel"
+          :project-id="projectId"
+          :flow-info="flow"
+          :work-order-id="workOrderId"
+          :can-edit="canProjectOperate"
+          :can-operate="canProjectOperate"
+          :user-roles="userRoles"
+          @changed="onPanelChanged"
+        />
       </el-card>
     </el-col>
 
@@ -51,7 +43,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getProjectFlow, type ProjectFlowData } from '@/api/projectFlow'
-import { listWorkOrders, type WorkOrderItem } from '@/api/workorders'
+import { listWorkOrders } from '@/api/workorders'
 import { useAuthStore } from '@/store/auth'
 import ProjectBasicPanel from './panels/ProjectBasicPanel.vue'
 import ProjectMembersPanel from './panels/ProjectMembersPanel.vue'
@@ -70,16 +62,28 @@ const flowNodes = [
   { key: 'invoice', label: '发票开具' },
   { key: 'archive', label: '报告归档' }
 ]
-const panelMap: Record<string, any> = { basic: ProjectBasicPanel, members: ProjectMembersPanel, contract: ContractUploadPanel, review: ReviewSubmitPanel, issue: ReportIssuePanel, invoice: InvoicePanel, archive: ArchivePanel }
+const panelMap: Record<string, any> = {
+  basic: ProjectBasicPanel,
+  members: ProjectMembersPanel,
+  contract: ContractUploadPanel,
+  review: ReviewSubmitPanel,
+  issue: ReportIssuePanel,
+  invoice: InvoicePanel,
+  archive: ArchivePanel
+}
+
 const stepTimeline = ['项目创建', '项目组成员', '合同上传', '报告送审', '报告出具', '发票开具', '报告归档']
-const stepAliasMap: Record<string, string> = { 项目创建: '项目创建', 项目组成员管理: '项目组成员', 项目组成员: '项目组成员', 合同上传: '合同上传', 报告送审: '报告送审', 一审: '报告送审', 二审: '报告送审', 三审: '报告送审', 报告出具: '报告出具', 开具发票: '发票开具', 发票开具: '发票开具', 报告归档: '报告归档', 已归档: '报告归档' }
+const stepAliasMap: Record<string, string> = {
+  项目创建: '项目创建', 项目组成员管理: '项目组成员', 项目组成员: '项目组成员', 合同上传: '合同上传',
+  报告送审: '报告送审', 一审: '报告送审', 二审: '报告送审', 三审: '报告送审', 报告出具: '报告出具',
+  开具发票: '发票开具', 发票开具: '发票开具', 报告归档: '报告归档', 已归档: '报告归档'
+}
 
 const route = useRoute()
 const auth = useAuthStore()
 const projectId = Number(route.params.id)
 const flow = ref<ProjectFlowData | null>(null)
 const workOrderId = ref<number>()
-const projectWorkOrders = ref<WorkOrderItem[]>([])
 const activeNode = ref(flowNodes[0].key)
 const userRoles = computed(() => auth.user?.roles || [])
 const canProjectOperate = computed(() => Boolean(flow.value?.can_operate))
@@ -94,32 +98,24 @@ const activeFlowStep = computed(() => {
 
 function onSelectNode(key: string) { activeNode.value = key }
 
-async function loadWorkOrders() {
+async function loadWorkOrder() {
   const data = await listWorkOrders()
-  projectWorkOrders.value = data.items.filter(w => w.project_id === projectId)
-  if (flow.value?.current_work_order_id && projectWorkOrders.value.some(w => w.id === flow.value?.current_work_order_id)) {
-    workOrderId.value = flow.value.current_work_order_id
-    return
-  }
-  if (projectWorkOrders.value.length === 1) {
-    workOrderId.value = projectWorkOrders.value[0].id
-    return
-  }
-  if (!workOrderId.value && projectWorkOrders.value.length > 1) {
-    workOrderId.value = projectWorkOrders.value[0].id
-  }
+  const item = data.items.find(w => w.project_id === projectId)
+  workOrderId.value = item?.id
 }
 
 async function load() {
   try {
     flow.value = await getProjectFlow(projectId)
-    await loadWorkOrders()
+    await loadWorkOrder()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '无权查看该项目')
   }
 }
 
-async function onPanelChanged() { await load() }
+async function onPanelChanged() {
+  await load()
+}
 
 onMounted(load)
 </script>
