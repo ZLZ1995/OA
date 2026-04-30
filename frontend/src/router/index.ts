@@ -18,9 +18,11 @@ const routes: RouteRecordRaw[] = [
     component: AppLayout,
     children: [
       { path: '', redirect: '/login' },
-      { path: 'dashboard', component: () => import('@/views/dashboard/HomeView.vue') },
+      { path: 'dashboard', redirect: '/workbench' },
+      { path: 'workbench', component: () => import('@/views/dashboard/HomeView.vue') },
       { path: 'projects', component: () => import('@/views/projects/ProjectListView.vue') },
       { path: 'projects/:id', component: () => import('@/views/projects/ProjectDetailView.vue') },
+      { path: 'projects/:id/flow', component: () => import('@/views/projects/ProjectFlowView.vue') },
       { path: 'workorders', component: () => import('@/views/workorders/WorkOrderListView.vue') },
       { path: 'workorders/:id', component: () => import('@/views/workorders/WorkOrderDetailView.vue') },
       { path: 'reviews', component: () => import('@/views/reviews/ReviewHandleView.vue') },
@@ -56,7 +58,9 @@ router.beforeEach(async (to) => {
     if (!profile) {
       return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
-
+    const isAdmin = (profile.roles || []).includes('ADMIN')
+    if (to.path === '/accounts' && !isAdmin) return '/workbench'
+    if (to.path !== '/accounts' && isAdmin) return '/accounts'
     return true
   } catch {
     auth.clearAuth()

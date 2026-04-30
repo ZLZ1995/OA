@@ -12,8 +12,8 @@
 <script setup lang="ts">
 const props = defineProps<{ activeStep?: number }>()
 
-const steps = ['项目创建', '工单创建', '合同上传', '一审', '二审', '三审', '文印室出具']
-const descriptions = ['已发起', '处理中', '待处理', '返回负责人', '返回负责人', '转文印室', '纸质报告']
+const steps = ['项目创建', '工单创建', '合同上传', '一审', '二审', '三审', '文印室出具', '已归档']
+const descriptions = ['已发起', '处理中', '待处理', '返回负责人', '返回负责人', '转文印室', '纸质报告', '流程结束']
 const activeStep = props.activeStep ?? 1
 </script>
 

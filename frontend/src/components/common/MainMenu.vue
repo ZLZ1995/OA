@@ -1,7 +1,7 @@
 <template>
   <div class="menu-wrapper">
     <el-menu :default-active="active" class="menu" router>
-      <el-menu-item v-for="item in APP_MENUS" :key="item.key" :index="item.path">{{ item.title }}</el-menu-item>
+      <el-menu-item v-for="item in visibleMenus" :key="item.key" :index="item.path">{{ item.title }}</el-menu-item>
     </el-menu>
     <div class="logout-zone">
       <el-button type="danger" plain class="logout-btn" @click="onLogout">退出登录</el-button>
@@ -19,6 +19,11 @@ defineProps<{ compact?: boolean }>()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
+const visibleMenus = computed(() => {
+  if (isAdmin.value) return APP_MENUS.filter((m) => m.adminOnly)
+  return APP_MENUS.filter((m) => m.key === 'dashboard')
+})
 const active = computed(() => route.path)
 
 function onLogout() {
@@ -28,23 +33,8 @@ function onLogout() {
 </script>
 
 <style scoped>
-.menu-wrapper {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.menu {
-  flex: 1;
-  overflow: auto;
-}
-
-.logout-zone {
-  padding: 12px;
-  border-top: 1px solid var(--el-border-color-lighter);
-}
-
-.logout-btn {
-  width: 100%;
-}
+.menu-wrapper { height: 100%; display: flex; flex-direction: column; }
+.menu { flex: 1; overflow: auto; }
+.logout-zone { padding: 12px; border-top: 1px solid var(--el-border-color-lighter); }
+.logout-btn { width: 100%; }
 </style>
