@@ -12,6 +12,7 @@
               <el-option label="其他" value="其他" />
             </el-select>
           </el-form-item>
+          <el-form-item label="项目编号"><el-input model-value="系统自动生成" readonly disabled /></el-form-item>
           <el-form-item label="项目名称"><el-input v-model="form.project_name" /></el-form-item>
           <el-form-item label="客户名称"><el-input v-model="form.client_name" /></el-form-item>
           <el-form-item><el-button type="primary" @click="onCreate">创建项目</el-button></el-form-item>
@@ -69,6 +70,6 @@ async function onCreate(){ const u=auth.user ?? await auth.ensureUserLoaded(); i
 async function editProject(row:WorkbenchProjectItem){ await updateProject(row.id,{ project_name: row.project_name, client_name: row.client_name }); ElMessage.success('项目已更新'); await load() }
 async function archive(id:number){ await archiveProject(id); ElMessage.success('项目已归档'); await load() }
 async function remove(id:number){ await deleteProject(id); ElMessage.success('项目已删除'); await load() }
-function goProject(id:number){ router.push(`/projects/${id}`) }
+function goProject(id:number){ router.push(`/projects/${id}/flow`) }
 onMounted(load)
 </script>
