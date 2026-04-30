@@ -13,6 +13,7 @@ class ProjectFlowProject(BaseModel):
 
 class ProjectFlowResponse(BaseModel):
     project: ProjectFlowProject
+    current_work_order_id: int | None = None
     user_role_in_project: str
     available_action: str
     can_operate: bool

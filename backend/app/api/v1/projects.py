@@ -229,6 +229,7 @@ def get_project_flow(
             current_step=step,
             status_display=step,
         ),
+        current_work_order_id=work_order.id if work_order else None,
         user_role_in_project=role,
         available_action=action,
         can_operate=role != "无权限",

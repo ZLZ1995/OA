@@ -1,10 +1,15 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+
+from pathlib import Path
+
+from fastapi.responses import FileResponse
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
 from app.models.work_order import WorkOrder
@@ -104,3 +109,19 @@ def list_work_order_files(
         .all()
     )
     return WorkOrderFileListResponse(items=[_to_file_response(item) for item in rows])
+
+
+@router.get("/{file_id}/download")
+def download_work_order_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    path = Path(settings.local_storage_dir) / row.storage_key
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="文件物理存储不存在")
+    return FileResponse(path=path, filename=row.origin_file_name, media_type="application/octet-stream")

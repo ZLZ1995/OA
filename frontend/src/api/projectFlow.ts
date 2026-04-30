@@ -10,6 +10,7 @@ export interface ProjectFlowData {
     current_step: string
     status_display: string
   }
+  current_work_order_id?: number
   user_role_in_project: string
   available_action: string
   can_operate: boolean

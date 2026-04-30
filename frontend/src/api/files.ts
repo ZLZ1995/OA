@@ -36,3 +36,8 @@ export async function listWorkOrderFiles(workOrderId: number) {
   const { data } = await http.get(`/files/work-orders/${workOrderId}`)
   return data as { items: WorkOrderFileItem[] }
 }
+
+
+export function getWorkOrderFileDownloadUrl(fileId: number) {
+  return `/api/files/${fileId}/download`
+}
