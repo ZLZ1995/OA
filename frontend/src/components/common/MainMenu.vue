@@ -30,23 +30,8 @@ function onLogout() {
 </script>
 
 <style scoped>
-.menu-wrapper {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.menu {
-  flex: 1;
-  overflow: auto;
-}
-
-.logout-zone {
-  padding: 12px;
-  border-top: 1px solid var(--el-border-color-lighter);
-}
-
-.logout-btn {
-  width: 100%;
-}
+.menu-wrapper { height: 100%; display: flex; flex-direction: column; }
+.menu { flex: 1; overflow: auto; }
+.logout-zone { padding: 12px; border-top: 1px solid var(--el-border-color-lighter); }
+.logout-btn { width: 100%; }
 </style>

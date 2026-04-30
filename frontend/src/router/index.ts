@@ -18,7 +18,8 @@ const routes: RouteRecordRaw[] = [
     component: AppLayout,
     children: [
       { path: '', redirect: '/login' },
-      { path: 'dashboard', component: () => import('@/views/dashboard/HomeView.vue') },
+      { path: 'dashboard', redirect: '/workbench' },
+      { path: 'workbench', component: () => import('@/views/dashboard/HomeView.vue') },
       { path: 'projects', component: () => import('@/views/projects/ProjectListView.vue') },
       { path: 'projects/:id', component: () => import('@/views/projects/ProjectDetailView.vue') },
       { path: 'projects/:id/flow', component: () => import('@/views/projects/ProjectFlowView.vue') },
