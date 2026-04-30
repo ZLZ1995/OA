@@ -12,15 +12,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { APP_MENUS } from '@/constants/menus'
 import { useAuthStore } from '@/store/auth'
+
+const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/dashboard' }]
+const ADMIN_MENUS = [{ key: 'accounts', title: '账号管理', path: '/accounts' }]
 
 defineProps<{ compact?: boolean }>()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
-const visibleMenus = computed(() => APP_MENUS.filter((m) => (isAdmin.value ? m.adminOnly : !m.adminOnly)))
+const visibleMenus = computed(() => (isAdmin.value ? ADMIN_MENUS : BUSINESS_MENUS))
 const active = computed(() => route.path)
 
 function onLogout() {
