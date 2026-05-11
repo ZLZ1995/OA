@@ -16,12 +16,16 @@ export interface ProjectExportFilters {
 export interface ProjectExportItem {
   project_no: string
   project_name: string
+  project_created_date: string
   project_progress: '进行中' | '已归档' | '已作废'
   report_no: string
   project_leader_name: string
   undertaking_unit: string
   amount: number | string
   signer_names: string
+  first_reviewer_name: string
+  second_reviewer_name: string
+  third_reviewer_name: string
   archive_date: string
 }
 
