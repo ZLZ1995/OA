@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.config import settings
-from app.core.security import create_access_token
+from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import CurrentUserResponse, LoginRequest, TokenResponse
+from app.schemas.auth import CurrentUserResponse, LoginRequest, PasswordResetRequest, TokenResponse
 from app.services.auth_service import authenticate_user
 
 router = APIRouter(prefix="/auth", tags=["认证"])
@@ -34,6 +34,29 @@ def login(
         samesite="lax",
     )
     return TokenResponse(access_token=token)
+
+
+@router.post("/password/reset")
+def reset_password(
+    payload: PasswordResetRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    user = (
+        db.query(User)
+        .filter(User.username == payload.username, User.is_active.is_(True))
+        .first()
+    )
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="账号不存在或已停用")
+    if not verify_password(payload.old_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="原密码验证失败")
+    if verify_password(payload.new_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="新密码不能与原密码相同")
+
+    user.password_hash = get_password_hash(payload.new_password)
+    db.add(user)
+    db.commit()
+    return {"message": "密码更改成功"}
 
 
 @router.post("/logout")

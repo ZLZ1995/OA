@@ -17,6 +17,12 @@ export interface CurrentUserResponse {
   roles: string[]
 }
 
+export interface PasswordResetPayload {
+  username: string
+  old_password: string
+  new_password: string
+}
+
 function ensureTokenResponse(data: unknown): TokenResponse {
   if (!data || typeof data !== 'object') {
     throw new Error('登录接口返回格式错误')
@@ -59,4 +65,9 @@ export async function login(payload: LoginPayload) {
 export async function me() {
   const { data } = await http.get('/auth/me')
   return ensureCurrentUserResponse(data)
+}
+
+export async function resetPassword(payload: PasswordResetPayload) {
+  const { data } = await http.post('/auth/password/reset', payload)
+  return data as { message: string }
 }
