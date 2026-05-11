@@ -1,0 +1,219 @@
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+
+from pathlib import Path
+
+from fastapi.responses import FileResponse
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user, require_roles
+from app.core.config import settings
+from app.db.session import get_db
+from app.models.user import User
+from app.models.work_order import WorkOrder
+from app.models.work_order_file import WorkOrderFile
+from app.schemas.file import WorkOrderFileListResponse, WorkOrderFileResponse
+from app.services.workflow_log_service import create_workflow_log
+from app.storage.local_storage import save_upload_file
+from app.workflows.states import WorkOrderStatus
+
+router = APIRouter(prefix="/files", tags=["文件"])
+
+
+def _to_file_response(row: WorkOrderFile) -> WorkOrderFileResponse:
+    return WorkOrderFileResponse(
+        id=row.id,
+        work_order_id=row.work_order_id,
+        file_category=row.file_category,
+        business_stage=row.business_stage,
+        version_no=row.version_no,
+        is_current=row.is_current,
+        origin_file_name=row.origin_file_name,
+        storage_key=row.storage_key,
+        file_size=row.file_size,
+        uploaded_by=row.uploaded_by,
+        uploaded_at=row.uploaded_at,
+    )
+
+
+@router.post("/upload", response_model=WorkOrderFileResponse, status_code=status.HTTP_201_CREATED)
+def upload_file(
+    work_order_id: int = Form(...),
+    file_category: str = Form(...),
+    business_stage: str = Form(...),
+    upload: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER", "PRINT_ROOM", "FINANCE", "FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER", "ARCHIVE_MANAGER")),
+) -> WorkOrderFileResponse:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    if file_category == "FORMAL_REPORT":
+        if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
+            raise HTTPException(status_code=400, detail="三审通过后才可上传正式报告文件")
+        if current_user.id != work_order.third_reviewer_id:
+            raise HTTPException(status_code=403, detail="仅三审老师可上传正式报告文件")
+
+    latest = (
+        db.query(WorkOrderFile)
+        .filter(
+            and_(
+                WorkOrderFile.work_order_id == work_order_id,
+                WorkOrderFile.file_category == file_category,
+                WorkOrderFile.business_stage == business_stage,
+            )
+        )
+        .order_by(WorkOrderFile.version_no.desc())
+        .first()
+    )
+    next_version = 1 if not latest else latest.version_no + 1
+
+    db.query(WorkOrderFile).filter(
+        and_(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.file_category == file_category,
+            WorkOrderFile.business_stage == business_stage,
+            WorkOrderFile.is_current.is_(True),
+        )
+    ).update({"is_current": False})
+
+    storage_key, file_size = save_upload_file(upload)
+    row = WorkOrderFile(
+        work_order_id=work_order_id,
+        file_category=file_category,
+        business_stage=business_stage,
+        version_no=next_version,
+        is_current=True,
+        origin_file_name=upload.filename or "unknown",
+        storage_key=storage_key,
+        file_size=file_size,
+        uploaded_by=current_user.id,
+        uploaded_at=datetime.now(timezone.utc),
+    )
+    db.add(row)
+
+    if work_order.current_status in {
+        WorkOrderStatus.WORK_ORDER_CREATED.value,
+        WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value,
+    } and file_category == "CONTRACT":
+        work_order.current_status = WorkOrderStatus.CONTRACT_UPLOADED.value
+        work_order.current_handler_user_id = work_order.project_leader_id
+
+    db.commit()
+    db.refresh(row)
+    return _to_file_response(row)
+
+
+@router.get("/work-orders/{work_order_id}", response_model=WorkOrderFileListResponse)
+def list_work_order_files(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> WorkOrderFileListResponse:
+    rows = (
+        db.query(WorkOrderFile)
+        .filter(WorkOrderFile.work_order_id == work_order_id)
+        .order_by(WorkOrderFile.file_category.asc(), WorkOrderFile.business_stage.asc(), WorkOrderFile.version_no.desc())
+        .all()
+    )
+    return WorkOrderFileListResponse(items=[_to_file_response(item) for item in rows])
+
+
+@router.post("/{file_id}/replace", response_model=WorkOrderFileResponse)
+def replace_work_order_file(
+    file_id: int,
+    upload: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER", "PRINT_ROOM", "FINANCE", "FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER", "ARCHIVE_MANAGER")),
+) -> WorkOrderFileResponse:
+    row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    old_path = Path(settings.local_storage_dir) / row.storage_key
+    storage_key, file_size = save_upload_file(upload)
+    row.origin_file_name = upload.filename or "unknown"
+    row.storage_key = storage_key
+    row.file_size = file_size
+    row.uploaded_at = datetime.now(timezone.utc)
+    if old_path.exists():
+        old_path.unlink()
+
+    db.commit()
+    db.refresh(row)
+    return _to_file_response(row)
+
+
+@router.post("/work-orders/{work_order_id}/complete-contract")
+def complete_contract_upload(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER")),
+):
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    has_contract = (
+        db.query(WorkOrderFile.id)
+        .filter(
+            and_(
+                WorkOrderFile.work_order_id == work_order_id,
+                or_(
+                    WorkOrderFile.file_category == "CONTRACT",
+                    WorkOrderFile.business_stage == "CONTRACT",
+                ),
+            )
+        )
+        .first()
+    )
+    if not has_contract:
+        raise HTTPException(status_code=400, detail="请先上传合同扫描件")
+
+    from_status = WorkOrderStatus(work_order.current_status)
+    to_status = WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT
+    if from_status == to_status:
+        return {"status": "ok"}
+
+    allowed_statuses = {
+        WorkOrderStatus.WORK_ORDER_CREATED,
+        WorkOrderStatus.WAIT_CONTRACT_UPLOAD,
+        WorkOrderStatus.CONTRACT_UPLOADED,
+    }
+    if from_status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail="当前工单状态无法提交合同上传")
+
+    work_order.current_status = to_status.value
+    work_order.current_handler_user_id = work_order.project_leader_id
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=from_status.value,
+        to_status=to_status.value,
+        action_type="COMPLETE_CONTRACT_UPLOAD",
+        operator_user_id=current_user.id,
+        remark="合同上传完成，进入报告送审",
+    )
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/{file_id}/download")
+def download_work_order_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    path = Path(settings.local_storage_dir) / row.storage_key
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="文件物理存储不存在")
+    return FileResponse(path=path, filename=row.origin_file_name, media_type="application/octet-stream")

@@ -1,0 +1,41 @@
+# 前端基础工程（阶段3-4）
+
+## 技术栈
+- Vue 3
+- Vite
+- Element Plus
+- Pinia
+- Vue Router
+
+## 运行
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Windows PowerShell 如果提示 `npm.ps1` 被执行策略拦截，可以改用：
+
+```powershell
+cd frontend
+npm.cmd install
+npm.cmd run dev
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+## 已完成页面与基础交互
+- 登录页
+- 首页工作台
+- 项目列表页
+- 项目详情页
+- 工单列表页
+- 工单详情页（配合布局显示流程导览）
+- 审核处理页
+- 文印室处理页
+- 账号管理页
+
+## 响应式布局
+- 桌面端：左侧导航 + 中间工作区 + 右侧流程导览
+- 平板端：导航折叠 + 右侧流程抽屉
+- 手机端：单栏 + 顶部菜单 + 流程抽屉
