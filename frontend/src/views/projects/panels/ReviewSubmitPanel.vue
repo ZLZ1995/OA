@@ -46,6 +46,15 @@
     <template v-if="canReview">
       <el-divider>审核处理</el-divider>
       <el-form label-width="120px">
+        <el-form-item label="合同扫描件">
+          <div v-if="contractFiles.length" class="contract-file-list">
+            <div v-for="file in contractFiles" :key="file.id" class="contract-file-item">
+              <span>{{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）</span>
+              <el-button type="primary" plain @click="download(file)">下载合同扫描件</el-button>
+            </div>
+          </div>
+          <span v-else>-</span>
+        </el-form-item>
         <el-form-item label="审核意见">
           <el-input v-model="reviewComment" type="textarea" :rows="3" placeholder="请输入审核意见" />
         </el-form-item>
@@ -209,6 +218,7 @@ const replyFiles = computed(() => files.value.filter(file => file.file_category 
 const submitFiles = computed(() => isReplyFlow.value ? replyFiles.value : reviewPackageFiles.value)
 const opinionFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
 const formalReportFiles = computed(() => files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.business_stage === 'FORMAL_REPORT'))
+const contractFiles = computed(() => files.value.filter(file => file.file_category === 'CONTRACT' && file.business_stage === 'CONTRACT' && file.is_current))
 
 const reviewStatusText = computed(() => {
   if (isReplyFlow.value) return `${roundLabel(reviewRound.value)}意见已返回等待回复`
@@ -505,6 +515,25 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 }
 
 .attachment-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contract-file-list {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.contract-file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.contract-file-item span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
