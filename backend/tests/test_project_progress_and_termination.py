@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.models.project import Project
+from app.models.invoice import Invoice
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
@@ -103,3 +104,88 @@ def test_admin_sees_pending_termination_todo() -> None:
 
     assert [item.id for item in result.todo_projects] == [pending_project.id]
     assert result.todo_projects[0].can_approve_termination is True
+
+
+def test_invoice_submission_does_not_change_main_workflow_status() -> None:
+    from app.api.v1.finance import create_invoice
+    from app.schemas.invoice import InvoiceCreate
+
+    db = _build_session()
+    leader = _seed_user(db)
+    project, work_order = _seed_project(db, leader, project_code="P-INVOICE")
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = 999
+    db.commit()
+
+    create_invoice(
+        payload=InvoiceCreate(
+            work_order_id=work_order.id,
+            invoice_info="开票单位：中勤\n测试开票信息",
+            invoice_type="专票",
+            amount=100,
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    invoice = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).first()
+    assert invoice is not None
+    assert invoice.status == "SUBMITTED"
+    assert work_order.current_status == "FIRST_REVIEWING"
+    assert work_order.current_handler_user_id == 999
+
+
+def test_finance_todo_comes_from_submitted_invoice() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db)
+    finance = _seed_user(db, "finance")
+    finance_role = Role(code="FINANCE", name="财务", description="", is_system_fixed=True)
+    db.add(finance_role)
+    db.flush()
+    db.add(UserRole(user_id=finance.id, role_id=finance_role.id))
+    project, work_order = _seed_project(db, leader, project_code="P-FINANCE-TODO")
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = leader.id
+    db.add(Invoice(
+        work_order_id=work_order.id,
+        invoice_no="PENDING",
+        invoice_info="info",
+        invoice_type="专票",
+        amount=100,
+        status="SUBMITTED",
+    ))
+    db.commit()
+
+    result = get_workbench(db=db, current_user=finance)
+
+    assert [item.id for item in result.todo_projects] == [project.id]
+    assert result.todo_projects[0].current_step == "财务开票"
+
+
+def test_rejected_invoice_prompts_project_party_without_changing_main_status() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db)
+    project, work_order = _seed_project(db, leader, project_code="P-INVOICE-REJECTED")
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = 999
+    db.add(Invoice(
+        work_order_id=work_order.id,
+        invoice_no="PENDING",
+        invoice_info="info",
+        invoice_type="专票",
+        amount=100,
+        status="REJECTED",
+    ))
+    db.commit()
+
+    result = get_workbench(db=db, current_user=leader)
+
+    assert [item.id for item in result.todo_projects] == [project.id]
+    assert result.todo_projects[0].current_step == "发票开具"
+    assert result.todo_projects[0].todo_action == "开票信息被退回，请修改后重新提交"

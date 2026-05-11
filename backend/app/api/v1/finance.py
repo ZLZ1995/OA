@@ -11,8 +11,6 @@ from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.schemas.invoice import InvoiceCreate, InvoiceListResponse, InvoiceResponse, InvoiceUpdate
 from app.services.workflow_log_service import create_workflow_log
-from app.workflows.states import WorkOrderStatus
-from app.workflows.transitions import can_transit
 
 router = APIRouter(prefix="/finance", tags=["财务"])
 
@@ -44,13 +42,6 @@ def create_invoice(
     if "ADMIN" not in role_codes and current_user.id != work_order.project_leader_id and not is_member:
         raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可提交开票信息")
 
-    from_status = WorkOrderStatus(work_order.current_status)
-    if from_status not in {WorkOrderStatus.WAIT_INVOICE_INFO, WorkOrderStatus.INVOICE_INFO_REJECTED}:
-        raise HTTPException(status_code=400, detail="当前流程不可提交开票信息")
-    to_status = WorkOrderStatus.INVOICE_PROCESSING
-    if not can_transit(from_status, to_status):
-        raise HTTPException(status_code=400, detail="非法状态迁移")
-
     if not payload.invoice_info or not payload.invoice_type:
         raise HTTPException(status_code=400, detail="请填写开票信息和发票类型")
 
@@ -65,13 +56,11 @@ def create_invoice(
         db.add(row)
     row.status = "SUBMITTED"
     row.handled_by = None
-    work_order.current_status = to_status.value
-    work_order.current_handler_user_id = None
     create_workflow_log(
         db,
         work_order_id=work_order.id,
-        from_status=from_status.value,
-        to_status=to_status.value,
+        from_status=work_order.current_status,
+        to_status=work_order.current_status,
         action_type="SUBMIT_INVOICE_INFO",
         operator_user_id=current_user.id,
         remark=payload.invoice_info,
@@ -116,19 +105,15 @@ def reject_invoice_info(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == row.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    from_status = WorkOrderStatus(work_order.current_status)
-    to_status = WorkOrderStatus.INVOICE_INFO_REJECTED
-    if from_status != WorkOrderStatus.INVOICE_PROCESSING or not can_transit(from_status, to_status):
+    if row.status != "SUBMITTED":
         raise HTTPException(status_code=400, detail="当前流程不可退回开票信息")
     row.status = "REJECTED"
     row.handled_by = current_user.id
-    work_order.current_status = to_status.value
-    work_order.current_handler_user_id = work_order.project_leader_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,
-        from_status=from_status.value,
-        to_status=to_status.value,
+        from_status=work_order.current_status,
+        to_status=work_order.current_status,
         action_type="REJECT_INVOICE_INFO",
         operator_user_id=current_user.id,
         remark=payload.status,
@@ -151,20 +136,16 @@ def complete_invoice(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == row.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    from_status = WorkOrderStatus(work_order.current_status)
-    to_status = WorkOrderStatus.WAIT_ARCHIVE_SUBMIT
-    if from_status != WorkOrderStatus.INVOICE_PROCESSING or not can_transit(from_status, to_status):
+    if row.status != "SUBMITTED":
         raise HTTPException(status_code=400, detail="当前流程不可完成开票")
     row.status = "ISSUED"
     row.handled_by = current_user.id
     row.issued_at = datetime.now(timezone.utc)
-    work_order.current_status = to_status.value
-    work_order.current_handler_user_id = work_order.project_leader_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,
-        from_status=from_status.value,
-        to_status=to_status.value,
+        from_status=work_order.current_status,
+        to_status=work_order.current_status,
         action_type="COMPLETE_INVOICE",
         operator_user_id=current_user.id,
     )
