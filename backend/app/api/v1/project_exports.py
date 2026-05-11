@@ -45,6 +45,13 @@ def _user_name(db: Session, user_id: int | None) -> str:
     return db.query(User.real_name).filter(User.id == user_id).scalar() or ""
 
 
+def _project_created_date(project: Project) -> date:
+    value = project.start_date or project.created_at
+    if isinstance(value, datetime):
+        return value.date()
+    return value
+
+
 def _col_name(index: int) -> str:
     name = ""
     index += 1
@@ -121,8 +128,8 @@ def _collect_rows(
     signer_name: str | None,
     amount_min: float | None,
     amount_max: float | None,
-    archive_date_from: date | None,
-    archive_date_to: date | None,
+    project_date_from: date | None,
+    project_date_to: date | None,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     projects = db.query(Project).filter(Project.deleted_at.is_(None)).order_by(Project.id.desc()).all()
@@ -138,6 +145,7 @@ def _collect_rows(
         first_reviewer_name = _user_name(db, work_order.first_reviewer_id) if work_order else ""
         second_reviewer_name = _user_name(db, work_order.second_reviewer_id) if work_order else ""
         third_reviewer_name = _user_name(db, work_order.third_reviewer_id) if work_order else ""
+        project_created_date = _project_created_date(project)
 
         if not _contains(project.project_code, project_no):
             continue
@@ -155,15 +163,15 @@ def _collect_rows(
             continue
         if amount_max is not None and (amount is None or amount > amount_max):
             continue
-        if archive_date_from and (not archived_at or archived_at.date() < archive_date_from):
+        if project_date_from and project_created_date < project_date_from:
             continue
-        if archive_date_to and (not archived_at or archived_at.date() > archive_date_to):
+        if project_date_to and project_created_date > project_date_to:
             continue
 
         rows.append({
             "project_no": project.project_code,
             "project_name": project.project_name,
-            "project_created_date": _format_date(project.start_date or project.created_at),
+            "project_created_date": _format_date(project_created_date),
             "project_progress": _project_progress(project, work_order),
             "report_no": record.paper_report_no if record else "",
             "project_leader_name": leader.real_name if leader else "",
@@ -188,12 +196,12 @@ def list_project_export_rows(
     signer_name: str | None = None,
     amount_min: float | None = Query(default=None, ge=0),
     amount_max: float | None = Query(default=None, ge=0),
-    archive_date_from: date | None = None,
-    archive_date_to: date | None = None,
+    project_date_from: date | None = None,
+    project_date_to: date | None = None,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> dict[str, list[dict[str, object]]]:
-    return {"items": _collect_rows(db, project_no, project_name, report_no, project_leader_name, undertaking_unit, signer_name, amount_min, amount_max, archive_date_from, archive_date_to)}
+    return {"items": _collect_rows(db, project_no, project_name, report_no, project_leader_name, undertaking_unit, signer_name, amount_min, amount_max, project_date_from, project_date_to)}
 
 
 @router.get("/excel")
@@ -206,12 +214,12 @@ def export_project_rows_excel(
     signer_name: str | None = None,
     amount_min: float | None = Query(default=None, ge=0),
     amount_max: float | None = Query(default=None, ge=0),
-    archive_date_from: date | None = None,
-    archive_date_to: date | None = None,
+    project_date_from: date | None = None,
+    project_date_to: date | None = None,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> Response:
-    rows = _collect_rows(db, project_no, project_name, report_no, project_leader_name, undertaking_unit, signer_name, amount_min, amount_max, archive_date_from, archive_date_to)
+    rows = _collect_rows(db, project_no, project_name, report_no, project_leader_name, undertaking_unit, signer_name, amount_min, amount_max, project_date_from, project_date_to)
     data = [["项目编号", "项目名称", "项目立项日期", "项目进度", "报告编号", "项目负责人姓名", "承接单位", "收费金额", "签字评估师姓名", "一审人员姓名", "二审人员姓名", "三审人员姓名", "归档日期"]]
     data.extend([
         [
