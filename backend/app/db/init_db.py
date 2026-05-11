@@ -26,6 +26,82 @@ SUPER_ADMIN_USERNAME = settings.initial_admin_username
 SUPER_ADMIN_PASSWORD = settings.initial_admin_password
 SUPER_ADMIN_REAL_NAME = settings.initial_admin_real_name
 
+LOCAL_BOOTSTRAP_USERS: list[dict[str, object]] = [
+    {
+        "username": "zhongqin123",
+        "real_name": "系统管理员",
+        "password_hash": "$2b$12$UJmlRxhp7L7WJy3GprgWOeRaAVF/B3ExkUhH3G3RfkhBV4owhXkm.",
+        "role_codes": [
+            "ADMIN",
+            "SALES",
+            "PROJECT_LEADER",
+            "PROJECT_MEMBER",
+            "FIRST_REVIEWER",
+            "SECOND_REVIEWER",
+            "THIRD_REVIEWER",
+            "PRINT_ROOM",
+            "FINANCE",
+            "ARCHIVE_MANAGER",
+        ],
+    },
+    {
+        "username": "张立志",
+        "real_name": "张立志",
+        "password_hash": "$2b$12$B3VjartK4zN0mprmk2otkuzFUtlPAFo/dW8L4g/IhGkjnJD/5vIn.",
+        "role_codes": ["SALES", "PROJECT_LEADER", "PROJECT_MEMBER"],
+    },
+    {
+        "username": "孙自现",
+        "real_name": "孙自现",
+        "password_hash": "$2b$12$kRAHe6hQ40ohGjTvMpFZgO7Hm/wdP/tU1olQt9vbte7uxeNHY2HVS",
+        "role_codes": [
+            "SALES",
+            "PROJECT_LEADER",
+            "PROJECT_MEMBER",
+            "FIRST_REVIEWER",
+            "SECOND_REVIEWER",
+            "THIRD_REVIEWER",
+        ],
+    },
+    {
+        "username": "付胜",
+        "real_name": "付胜",
+        "password_hash": "$2b$12$Te1rGmb0RbYumgah..LSw.GpB.NIKYaPZiYCqsuszeHM/Cc82.kRu",
+        "role_codes": [
+            "SALES",
+            "PROJECT_LEADER",
+            "PROJECT_MEMBER",
+            "FIRST_REVIEWER",
+            "SECOND_REVIEWER",
+            "THIRD_REVIEWER",
+        ],
+    },
+    {
+        "username": "李利英",
+        "real_name": "李利英",
+        "password_hash": "$2b$12$Z6ecaghOLig1VbePF28jW.aEyt6pOuyrMzIz8sYTKNcMD1E80JLKC",
+        "role_codes": ["FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER"],
+    },
+    {
+        "username": "李晓",
+        "real_name": "李晓",
+        "password_hash": "$2b$12$EDcZ7uZqXC0KkQYiCJkIj.DHAXg5VagKr9nEQHzehpN/liqmFJv1y",
+        "role_codes": ["FINANCE"],
+    },
+    {
+        "username": "王宇",
+        "real_name": "王宇",
+        "password_hash": "$2b$12$TbIZMEsC27ZNotunL7iCJeQZivzW.1itHP8.yxjCrGOfL1hy07M4e",
+        "role_codes": ["PRINT_ROOM"],
+    },
+    {
+        "username": "李彪",
+        "real_name": "李彪",
+        "password_hash": "$2b$12$0FBZrb1JrGy98PS5EnPbnezbgVHEIWJv3ohfmd6yJP.MH2K9BVQNW",
+        "role_codes": ["ARCHIVE_MANAGER"],
+    },
+]
+
 
 def init_db() -> None:
     """Create all tables and initialize fixed roles + admin account."""
@@ -36,6 +112,7 @@ def init_db() -> None:
         ensure_work_order_file_columns(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
+        sync_local_bootstrap_users(db)
 
 
 def ensure_project_columns(db: Session) -> None:
@@ -150,5 +227,35 @@ def seed_initial_admin(db: Session) -> None:
     for role_id in all_role_ids:
         if role_id not in bound_role_ids:
             db.add(UserRole(user_id=admin.id, role_id=role_id))
+
+    db.commit()
+
+
+def sync_local_bootstrap_users(db: Session) -> None:
+    """Keep deployment user credentials and roles aligned with the local baseline."""
+    roles_by_code = {role.code: role for role in db.query(Role).all()}
+    for item in LOCAL_BOOTSTRAP_USERS:
+        username = str(item["username"])
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            user = User(
+                username=username,
+                real_name=str(item["real_name"]),
+                password_hash=str(item["password_hash"]),
+                is_active=True,
+            )
+            db.add(user)
+            db.flush()
+
+        user.real_name = str(item["real_name"])
+        user.password_hash = str(item["password_hash"])
+        user.is_active = True
+
+        role_codes = item["role_codes"]
+        db.query(UserRole).filter(UserRole.user_id == user.id).delete()
+        for code in role_codes if isinstance(role_codes, list) else []:
+            role = roles_by_code.get(str(code))
+            if role:
+                db.add(UserRole(user_id=user.id, role_id=role.id))
 
     db.commit()
