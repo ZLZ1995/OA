@@ -60,9 +60,8 @@ router.beforeEach(async (to) => {
       return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
     const isAdmin = (profile.roles || []).includes('ADMIN')
-    const adminPaths = ['/accounts', '/project-exports', '/workbench']
-    if (adminPaths.includes(to.path) && !isAdmin) return '/dashboard'
-    if (!adminPaths.includes(to.path) && isAdmin) return '/accounts'
+    const adminOnlyPaths = ['/accounts', '/project-exports']
+    if (adminOnlyPaths.includes(to.path) && !isAdmin) return '/workbench'
     return true
   } catch {
     auth.clearAuth()

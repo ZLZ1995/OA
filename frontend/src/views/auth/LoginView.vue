@@ -61,7 +61,7 @@ async function onLogin() {
 
     const profile = await auth.ensureUserLoaded()
     const isAdmin = (profile?.roles || []).includes('ADMIN')
-    const redirectTo = typeof route.query.redirect === 'string' ? route.query.redirect : (isAdmin ? '/accounts' : '/dashboard')
+    const redirectTo = typeof route.query.redirect === 'string' ? route.query.redirect : (isAdmin ? '/accounts' : '/workbench')
     await router.replace(redirectTo)
 
     // Some production environments may keep the page on /login when route guards run concurrently.

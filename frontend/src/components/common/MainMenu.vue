@@ -14,7 +14,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 
-const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/dashboard' }]
+const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/workbench' }]
 const ADMIN_MENUS = [{ key: 'accounts', title: '账号管理', path: '/accounts' }]
 
 defineProps<{ compact?: boolean }>()
