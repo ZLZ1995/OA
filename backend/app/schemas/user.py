@@ -21,6 +21,10 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class UserPasswordResetRequest(BaseModel):
+    password: str = Field(min_length=6, max_length=128)
+
+
 class UserRoleBindRequest(BaseModel):
     role_codes: list[str] = Field(default_factory=list)
 
