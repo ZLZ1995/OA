@@ -9,8 +9,8 @@ export interface ProjectExportFilters {
   signer_name?: string
   amount_min?: number
   amount_max?: number
-  archive_date_from?: string
-  archive_date_to?: string
+  project_date_from?: string
+  project_date_to?: string
 }
 
 export interface ProjectExportItem {

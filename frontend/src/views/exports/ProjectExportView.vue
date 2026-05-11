@@ -21,8 +21,8 @@
         <el-col :span="6"><el-form-item label="签字评估师"><el-input v-model="filters.signer_name" clearable /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="收费金额下限"><el-input-number v-model="filters.amount_min" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="收费金额上限"><el-input-number v-model="filters.amount_max" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="归档开始日期"><el-date-picker v-model="filters.archive_date_from" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="归档结束日期"><el-date-picker v-model="filters.archive_date_to" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
+        <el-col :span="6"><el-form-item label="立项开始日期"><el-date-picker v-model="filters.project_date_from" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
+        <el-col :span="6"><el-form-item label="立项结束日期"><el-date-picker v-model="filters.project_date_to" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
         <el-col :span="12">
           <el-form-item>
             <el-button type="primary" @click="load">筛选</el-button>
