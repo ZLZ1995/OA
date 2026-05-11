@@ -1,5 +1,5 @@
 <template>
-  <div class="desktop-layout">
+  <div class="desktop-layout" :class="{ 'has-workflow': showWorkflow }">
     <aside class="nav"><MainMenu /></aside>
     <main class="main"><router-view /></main>
     <aside class="workflow" v-if="showWorkflow"><WorkflowGuide :active-step="2" /></aside>
