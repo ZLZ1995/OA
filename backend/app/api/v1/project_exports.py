@@ -26,6 +26,8 @@ def _contains(value: str | None, keyword: str | None) -> bool:
 def _format_date(value: datetime | date | None) -> str:
     if not value:
         return ""
+    if isinstance(value, str):
+        return value[:10]
     return value.strftime("%Y-%m-%d")
 
 
@@ -35,6 +37,12 @@ def _project_progress(project: Project, work_order: WorkOrder | None) -> str:
     if project.archived_at is not None or (work_order and work_order.current_status == "ARCHIVED"):
         return "已归档"
     return "进行中"
+
+
+def _user_name(db: Session, user_id: int | None) -> str:
+    if not user_id:
+        return ""
+    return db.query(User.real_name).filter(User.id == user_id).scalar() or ""
 
 
 def _col_name(index: int) -> str:
@@ -127,6 +135,9 @@ def _collect_rows(
         archived_at = project.archived_at or (archive.archive_at if archive else None)
         amount = float(invoice.amount) if invoice else None
         signers = "、".join(item for item in [work_order.signer_one if work_order else None, work_order.signer_two if work_order else None] if item)
+        first_reviewer_name = _user_name(db, work_order.first_reviewer_id) if work_order else ""
+        second_reviewer_name = _user_name(db, work_order.second_reviewer_id) if work_order else ""
+        third_reviewer_name = _user_name(db, work_order.third_reviewer_id) if work_order else ""
 
         if not _contains(project.project_code, project_no):
             continue
@@ -152,12 +163,16 @@ def _collect_rows(
         rows.append({
             "project_no": project.project_code,
             "project_name": project.project_name,
+            "project_created_date": _format_date(project.start_date or project.created_at),
             "project_progress": _project_progress(project, work_order),
             "report_no": record.paper_report_no if record else "",
             "project_leader_name": leader.real_name if leader else "",
             "undertaking_unit": project.undertaking_unit,
             "amount": amount if amount is not None else "",
             "signer_names": signers,
+            "first_reviewer_name": first_reviewer_name,
+            "second_reviewer_name": second_reviewer_name,
+            "third_reviewer_name": third_reviewer_name,
             "archive_date": _format_date(archived_at),
         })
     return rows
@@ -197,9 +212,23 @@ def export_project_rows_excel(
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> Response:
     rows = _collect_rows(db, project_no, project_name, report_no, project_leader_name, undertaking_unit, signer_name, amount_min, amount_max, archive_date_from, archive_date_to)
-    data = [["项目编号", "项目名称", "项目进度", "报告编号", "项目负责人姓名", "承接单位", "收费金额", "签字评估师姓名", "归档日期"]]
+    data = [["项目编号", "项目名称", "项目立项日期", "项目进度", "报告编号", "项目负责人姓名", "承接单位", "收费金额", "签字评估师姓名", "一审人员姓名", "二审人员姓名", "三审人员姓名", "归档日期"]]
     data.extend([
-        [row["project_no"], row["project_name"], row["project_progress"], row["report_no"], row["project_leader_name"], row["undertaking_unit"], row["amount"], row["signer_names"], row["archive_date"]]
+        [
+            row["project_no"],
+            row["project_name"],
+            row["project_created_date"],
+            row["project_progress"],
+            row["report_no"],
+            row["project_leader_name"],
+            row["undertaking_unit"],
+            row["amount"],
+            row["signer_names"],
+            row["first_reviewer_name"],
+            row["second_reviewer_name"],
+            row["third_reviewer_name"],
+            row["archive_date"],
+        ]
         for row in rows
     ])
     content = _xlsx(data)
