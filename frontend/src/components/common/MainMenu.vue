@@ -17,6 +17,7 @@ import { useAuthStore } from '@/store/auth'
 const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/workbench' }]
 const ADMIN_MENUS = [
   { key: 'accounts', title: '账号管理', path: '/accounts' },
+  { key: 'termination-approvals', title: '终止/废止审核', path: '/termination-approvals' },
   { key: 'project-exports', title: '项目清单导出', path: '/project-exports' }
 ]
 

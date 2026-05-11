@@ -101,6 +101,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         .filter(
             Project.deleted_at.is_(None),
             Project.archived_at.is_(None),
+            or_(Project.termination_status.is_(None), Project.termination_status != "APPROVED"),
             or_(
                 WorkOrder.current_handler_user_id == current_user.id,
                 WorkOrder.project_leader_id == current_user.id,

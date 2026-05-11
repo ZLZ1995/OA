@@ -16,6 +16,7 @@ export interface ProjectExportFilters {
 export interface ProjectExportItem {
   project_no: string
   project_name: string
+  project_progress: '进行中' | '已归档' | '已作废'
   report_no: string
   project_leader_name: string
   undertaking_unit: string

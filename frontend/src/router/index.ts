@@ -32,6 +32,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance', component: () => import('@/views/finance/FinanceView.vue') },
       { path: 'archives', component: () => import('@/views/archives/ArchiveView.vue') },
       { path: 'project-exports', component: () => import('@/views/exports/ProjectExportView.vue') },
+      { path: 'termination-approvals', component: () => import('@/views/admin/TerminationApprovalView.vue') },
       { path: 'accounts', component: () => import('@/views/accounts/AccountManageView.vue') }
     ]
   },
@@ -60,7 +61,7 @@ router.beforeEach(async (to) => {
       return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
     const isAdmin = (profile.roles || []).includes('ADMIN')
-    const adminOnlyPaths = ['/accounts', '/project-exports']
+    const adminOnlyPaths = ['/accounts', '/project-exports', '/termination-approvals']
     if (adminOnlyPaths.includes(to.path) && !isAdmin) return '/workbench'
     return true
   } catch {

@@ -29,6 +29,14 @@ def _format_date(value: datetime | date | None) -> str:
     return value.strftime("%Y-%m-%d")
 
 
+def _project_progress(project: Project, work_order: WorkOrder | None) -> str:
+    if project.termination_status == "APPROVED":
+        return "已作废"
+    if project.archived_at is not None or (work_order and work_order.current_status == "ARCHIVED"):
+        return "已归档"
+    return "进行中"
+
+
 def _col_name(index: int) -> str:
     name = ""
     index += 1
@@ -144,6 +152,7 @@ def _collect_rows(
         rows.append({
             "project_no": project.project_code,
             "project_name": project.project_name,
+            "project_progress": _project_progress(project, work_order),
             "report_no": record.paper_report_no if record else "",
             "project_leader_name": leader.real_name if leader else "",
             "undertaking_unit": project.undertaking_unit,
@@ -188,9 +197,9 @@ def export_project_rows_excel(
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> Response:
     rows = _collect_rows(db, project_no, project_name, report_no, project_leader_name, undertaking_unit, signer_name, amount_min, amount_max, archive_date_from, archive_date_to)
-    data = [["项目编号", "项目名称", "报告编号", "项目负责人姓名", "承接单位", "收费金额", "签字评估师姓名", "归档日期"]]
+    data = [["项目编号", "项目名称", "项目进度", "报告编号", "项目负责人姓名", "承接单位", "收费金额", "签字评估师姓名", "归档日期"]]
     data.extend([
-        [row["project_no"], row["project_name"], row["report_no"], row["project_leader_name"], row["undertaking_unit"], row["amount"], row["signer_names"], row["archive_date"]]
+        [row["project_no"], row["project_name"], row["project_progress"], row["report_no"], row["project_leader_name"], row["undertaking_unit"], row["amount"], row["signer_names"], row["archive_date"]]
         for row in rows
     ])
     content = _xlsx(data)
