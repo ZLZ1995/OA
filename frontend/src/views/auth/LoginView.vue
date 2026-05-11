@@ -26,7 +26,7 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const loading = ref(false)
-const form = reactive({ username: 'zhongqin123', password: 'zhongqin123' })
+const form = reactive({ username: '', password: '' })
 
 function getErrorMessage(err: unknown): string {
   if (typeof err === 'object' && err !== null) {

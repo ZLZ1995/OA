@@ -1,5 +1,3 @@
-import sys
-
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -11,10 +9,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
-from app.schemas.review import ReviewSubmitRequest
-
-pytestmark = pytest.mark.skipif(sys.version_info < (3, 11), reason="requires Python 3.11+ for StrEnum imports")
-
+from app.schemas.review import ReviewDecisionRequest, ReviewSubmitRequest
 
 def _build_session() -> Session:
     engine = create_engine("sqlite:///:memory:")
@@ -102,3 +97,126 @@ def test_submit_review_accepts_reviewer_with_round_role() -> None:
     result = submit_review(payload=payload, db=db, current_user=leader, _={"PROJECT_LEADER"})
     assert result.reviewer_user_id == reviewer.id
     assert result.review_round == "FIRST"
+
+
+def test_rejected_review_can_be_resubmitted_to_same_round() -> None:
+    from app.api.v1.reviews import submit_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+
+    first_role = db.query(Role).filter(Role.code == "FIRST_REVIEWER").first()
+    assert first_role is not None
+    db.add(UserRole(user_id=reviewer.id, role_id=first_role.id))
+    work_order.current_status = "FIRST_REVIEW_REJECTED"
+    work_order.current_handler_user_id = leader.id
+    work_order.first_reviewer_id = reviewer.id
+    db.commit()
+
+    result = submit_review(
+        payload=ReviewSubmitRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            reviewer_user_id=reviewer.id,
+            comment="已回复意见",
+        ),
+        db=db,
+        current_user=leader,
+        _={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert result.action == "SUBMIT"
+    assert work_order.current_status == "FIRST_REVIEWING"
+    assert work_order.current_handler_user_id == reviewer.id
+
+
+def test_first_review_approve_moves_to_second_submit() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    _, reviewer, _, work_order = _seed_basic(db)
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    db.commit()
+
+    result = decide_review(
+        payload=ReviewDecisionRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            action="APPROVE",
+        ),
+        db=db,
+        current_user=reviewer,
+        _={"FIRST_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    assert result.comment == "审核通过"
+    assert work_order.current_status == "WAIT_SECOND_REVIEW_SUBMIT"
+    assert work_order.current_handler_user_id == work_order.project_leader_id
+
+
+def test_third_review_approve_keeps_third_reviewer_as_handler() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    _, reviewer, _, work_order = _seed_basic(db)
+    work_order.current_status = "THIRD_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.third_reviewer_id = reviewer.id
+    db.commit()
+
+    decide_review(
+        payload=ReviewDecisionRequest(
+            work_order_id=work_order.id,
+            review_round="THIRD",
+            action="APPROVE",
+        ),
+        db=db,
+        current_user=reviewer,
+        _={"THIRD_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == "THIRD_APPROVED_WAIT_PRINTROOM"
+    assert work_order.current_handler_user_id == reviewer.id
+
+
+def test_workbench_shows_current_reviewer_todo_even_when_user_created_project() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = User(username="leader", password_hash="x", real_name="Leader", is_active=True)
+    reviewer = User(username="reviewer", password_hash="x", real_name="Reviewer", is_active=True)
+    db.add_all([leader, reviewer])
+    db.flush()
+
+    project = Project(
+        project_code="P-REVIEW-TODO",
+        project_name="Review Todo",
+        client_name="Client",
+        business_user_id=reviewer.id,
+        project_leader_id=leader.id,
+    )
+    db.add(project)
+    db.flush()
+
+    work_order = WorkOrder(
+        work_order_no="WO-REVIEW-TODO",
+        project_id=project.id,
+        title="WO",
+        current_status="FIRST_REVIEWING",
+        current_handler_user_id=reviewer.id,
+        initiator_user_id=leader.id,
+        project_leader_id=leader.id,
+        first_reviewer_id=reviewer.id,
+        priority="MEDIUM",
+    )
+    db.add(work_order)
+    db.commit()
+
+    result = get_workbench(db=db, current_user=reviewer)
+
+    assert [item.id for item in result.todo_projects] == [project.id]

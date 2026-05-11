@@ -32,12 +32,17 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     with Session(engine) as db:
         ensure_project_columns(db)
+        ensure_work_order_columns(db)
+        ensure_work_order_file_columns(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
 
 
 def ensure_project_columns(db: Session) -> None:
     """Ensure newly introduced project lifecycle columns exist for existing deployments."""
+    if engine.dialect.name != "sqlite":
+        return
+
     existing_columns = {
         row[1]
         for row in db.execute(text("PRAGMA table_info('projects')")).fetchall()
@@ -48,6 +53,66 @@ def ensure_project_columns(db: Session) -> None:
         db.execute(text('ALTER TABLE projects ADD COLUMN archived_at TIMESTAMPTZ NULL'))
     if 'deleted_at' not in existing_columns:
         db.execute(text('ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMPTZ NULL'))
+    if 'termination_status' not in existing_columns:
+        db.execute(text('ALTER TABLE projects ADD COLUMN termination_status VARCHAR(32) NULL'))
+    if 'termination_reason' not in existing_columns:
+        db.execute(text('ALTER TABLE projects ADD COLUMN termination_reason TEXT NULL'))
+    if 'termination_requested_by' not in existing_columns:
+        db.execute(text('ALTER TABLE projects ADD COLUMN termination_requested_by INTEGER NULL'))
+    if 'termination_requested_at' not in existing_columns:
+        db.execute(text('ALTER TABLE projects ADD COLUMN termination_requested_at TIMESTAMPTZ NULL'))
+    if 'termination_approved_by' not in existing_columns:
+        db.execute(text('ALTER TABLE projects ADD COLUMN termination_approved_by INTEGER NULL'))
+    if 'termination_approved_at' not in existing_columns:
+        db.execute(text('ALTER TABLE projects ADD COLUMN termination_approved_at TIMESTAMPTZ NULL'))
+    db.commit()
+
+
+def ensure_work_order_file_columns(db: Session) -> None:
+    """Ensure file metadata columns exist for existing SQLite deployments."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    existing_columns = {
+        row[1]
+        for row in db.execute(text("PRAGMA table_info('work_order_files')")).fetchall()
+    }
+    if "file_size" not in existing_columns:
+        db.execute(text("ALTER TABLE work_order_files ADD COLUMN file_size INTEGER NULL"))
+    db.commit()
+
+
+def ensure_work_order_columns(db: Session) -> None:
+    """Ensure newly introduced work order metadata columns exist for SQLite."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    existing_columns = {
+        row[1]
+        for row in db.execute(text("PRAGMA table_info('work_orders')")).fetchall()
+    }
+    if "signer_one" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN signer_one VARCHAR(64) NULL"))
+    if "signer_two" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN signer_two VARCHAR(64) NULL"))
+    if "formal_report_count" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN formal_report_count INTEGER NULL"))
+    if "print_room_handler_id" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN print_room_handler_id INTEGER NULL"))
+    if "archive_reviewer_id" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_reviewer_id INTEGER NULL"))
+    if "archive_submitter_id" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_submitter_id INTEGER NULL"))
+    if "archive_submission_type" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_submission_type VARCHAR(16) NULL"))
+    invoice_columns = {
+        row[1]
+        for row in db.execute(text("PRAGMA table_info('invoices')")).fetchall()
+    }
+    if "invoice_info" not in invoice_columns:
+        db.execute(text("ALTER TABLE invoices ADD COLUMN invoice_info TEXT NULL"))
+    if "invoice_type" not in invoice_columns:
+        db.execute(text("ALTER TABLE invoices ADD COLUMN invoice_type VARCHAR(16) NULL"))
     db.commit()
 
 

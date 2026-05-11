@@ -6,6 +6,9 @@ export interface WorkOrderItem {
   project_id: number
   title?: string
   current_status: string
+  signer_one?: string | null
+  signer_two?: string | null
+  formal_report_count?: number | null
 }
 
 export async function listWorkOrders() {
@@ -20,5 +23,10 @@ export async function createWorkOrder(payload: {
   description?: string
 }) {
   const { data } = await http.post('/work-orders', payload)
+  return data as WorkOrderItem
+}
+
+export async function updateWorkOrder(workOrderId: number, payload: Partial<WorkOrderItem>) {
+  const { data } = await http.patch(`/work-orders/${workOrderId}`, payload)
   return data as WorkOrderItem
 }

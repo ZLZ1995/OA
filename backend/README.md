@@ -10,6 +10,10 @@
 - SQLite（默认） / PostgreSQL（可选）
 - JWT
 
+## 运行环境要求
+- Python 3.10+（本地与 Docker 均可运行）
+- 生产环境建议设置强随机 `JWT_SECRET_KEY`
+
 ## 目录说明
 - `app/main.py`: FastAPI 入口
 - `app/core/`: 配置与安全组件
@@ -53,6 +57,21 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## 数据库迁移
+轻量部署仍保留启动时自动建表初始化；正式环境建议使用 Alembic 管理结构变更：
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+新增模型字段后可生成迁移草稿并人工复核：
+
+```bash
+cd backend
+alembic revision --autogenerate -m "describe change"
 ```
 
 ## 从仓库根目录运行（程序名 `start`）

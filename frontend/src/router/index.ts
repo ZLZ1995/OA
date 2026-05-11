@@ -31,6 +31,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'print-room', component: () => import('@/views/printroom/PrintRoomHandleView.vue') },
       { path: 'finance', component: () => import('@/views/finance/FinanceView.vue') },
       { path: 'archives', component: () => import('@/views/archives/ArchiveView.vue') },
+      { path: 'project-exports', component: () => import('@/views/exports/ProjectExportView.vue') },
       { path: 'accounts', component: () => import('@/views/accounts/AccountManageView.vue') }
     ]
   },
@@ -59,8 +60,9 @@ router.beforeEach(async (to) => {
       return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
     const isAdmin = (profile.roles || []).includes('ADMIN')
-    if (to.path === '/accounts' && !isAdmin) return '/dashboard'
-    if (to.path !== '/accounts' && isAdmin) return '/accounts'
+    const adminPaths = ['/accounts', '/project-exports', '/workbench']
+    if (adminPaths.includes(to.path) && !isAdmin) return '/dashboard'
+    if (!adminPaths.includes(to.path) && isAdmin) return '/accounts'
     return true
   } catch {
     auth.clearAuth()

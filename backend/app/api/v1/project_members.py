@@ -6,7 +6,15 @@ from app.db.session import get_db
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.user import User
-from app.schemas.project_member import ProjectMemberBatchCreate, ProjectMemberListResponse, ProjectMemberResponse
+from app.models.work_order import WorkOrder
+from app.schemas.project_member import (
+    ProjectMemberBatchCreate,
+    ProjectMemberCompleteRequest,
+    ProjectMemberListResponse,
+    ProjectMemberResponse,
+    ProjectMemberUpdate,
+)
+from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/project-members", tags=["项目成员"])
 ROLE_MAP = {"项目负责人": "LEADER", "项目组成员": "MEMBER"}
@@ -23,6 +31,13 @@ def _to_response(item: ProjectMember, user: User) -> ProjectMemberResponse:
         member_role=ROLE_LABEL_MAP.get(item.member_role, item.member_role),
         created_at=item.created_at,
     )
+
+
+def _parse_member_role(member_role: str) -> str:
+    db_role = ROLE_MAP.get(member_role)
+    if not db_role:
+        raise HTTPException(status_code=400, detail="成员角色仅支持：项目负责人、项目组成员")
+    return db_role
 
 
 @router.get("", response_model=ProjectMemberListResponse)
@@ -51,9 +66,7 @@ def batch_create_project_member(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    db_role = ROLE_MAP.get(payload.member_role)
-    if not db_role:
-        raise HTTPException(status_code=400, detail="成员角色仅支持：项目负责人、项目组成员")
+    db_role = _parse_member_role(payload.member_role)
 
     if db_role == "LEADER" and len(payload.user_ids) != 1:
         raise HTTPException(status_code=400, detail="项目负责人一次只能设置1人")
@@ -89,6 +102,75 @@ def batch_create_project_member(
         db.refresh(row)
 
     return ProjectMemberListResponse(items=[_to_response(item, user) for item, user in created])
+
+
+@router.patch("/{member_id}", response_model=ProjectMemberResponse)
+def update_project_member(
+    member_id: int,
+    payload: ProjectMemberUpdate,
+    db: Session = Depends(get_db),
+    _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
+) -> ProjectMemberResponse:
+    row = db.query(ProjectMember).filter(ProjectMember.id == member_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="成员不存在")
+
+    row.member_role = _parse_member_role(payload.member_role)
+    db.commit()
+    db.refresh(row)
+
+    user = db.query(User).filter(User.id == row.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="成员账号不存在")
+    return _to_response(row, user)
+
+
+@router.post("/complete")
+def complete_project_members(
+    payload: ProjectMemberCompleteRequest,
+    db: Session = Depends(get_db),
+    _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
+) -> dict[str, str]:
+    project = db.query(Project).filter(Project.id == payload.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    leader = (
+        db.query(ProjectMember)
+        .filter(ProjectMember.project_id == payload.project_id, ProjectMember.member_role == "LEADER")
+        .order_by(ProjectMember.id.asc())
+        .first()
+    )
+    if not leader:
+        raise HTTPException(status_code=400, detail="每个项目至少需要一名项目负责人")
+
+    project.project_leader_id = leader.user_id
+    work_order = (
+        db.query(WorkOrder)
+        .filter(WorkOrder.project_id == payload.project_id)
+        .order_by(WorkOrder.id.desc())
+        .first()
+    )
+    if not work_order:
+        work_order = WorkOrder(
+            work_order_no=project.project_code,
+            project_id=project.id,
+            title=project.project_name,
+            current_status=WorkOrderStatus.WORK_ORDER_CREATED.value,
+            current_handler_user_id=leader.user_id,
+            initiator_user_id=project.business_user_id,
+            project_leader_id=leader.user_id,
+        )
+        db.add(work_order)
+        db.flush()
+
+    work_order.project_leader_id = leader.user_id
+    work_order.current_handler_user_id = leader.user_id
+    if work_order.current_status == WorkOrderStatus.WORK_ORDER_CREATED.value:
+        work_order.current_status = WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value
+
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.delete("/{member_id}", status_code=status.HTTP_204_NO_CONTENT)

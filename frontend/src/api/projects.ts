@@ -10,9 +10,13 @@ export interface ProjectItem {
   project_leader_id: number
   status: string
   status_display: string
+  termination_status?: string | null
+  termination_reason?: string | null
   archived_at?: string | null
   deleted_at?: string | null
 }
+
+export type ProjectUndertakingUnit = ProjectItem['undertaking_unit']
 
 export interface ProjectUpdatePayload {
   project_name?: string
@@ -23,6 +27,11 @@ export interface ProjectUpdatePayload {
 export async function listProjects() {
   const { data } = await http.get('/projects')
   return data as { items: ProjectItem[] }
+}
+
+export async function getProject(projectId: number | string) {
+  const { data } = await http.get(`/projects/${projectId}`)
+  return data as ProjectItem
 }
 
 export async function createProject(payload: {
@@ -43,6 +52,16 @@ export async function deleteProject(projectId: number) {
 
 export async function archiveProject(projectId: number) {
   const { data } = await http.patch(`/projects/${projectId}/archive`)
+  return data as ProjectItem
+}
+
+export async function requestProjectTermination(projectId: number, reason: string) {
+  const { data } = await http.post(`/projects/${projectId}/termination-request`, { reason })
+  return data as ProjectItem
+}
+
+export async function approveProjectTermination(projectId: number) {
+  const { data } = await http.post(`/projects/${projectId}/termination-approve`)
   return data as ProjectItem
 }
 

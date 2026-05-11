@@ -20,6 +20,15 @@ export async function batchCreateProjectMembers(payload: { project_id: number; u
   return data as { items: ProjectMemberItem[] }
 }
 
+export async function updateProjectMember(memberId: number, payload: { member_role: string }) {
+  const { data } = await http.patch(`/project-members/${memberId}`, payload)
+  return data as ProjectMemberItem
+}
+
+export async function completeProjectMembers(projectId: number) {
+  await http.post('/project-members/complete', { project_id: projectId })
+}
+
 export async function deleteProjectMember(memberId: number) {
   await http.delete(`/project-members/${memberId}`)
 }

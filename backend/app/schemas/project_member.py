@@ -9,6 +9,14 @@ class ProjectMemberBatchCreate(BaseModel):
     member_role: str
 
 
+class ProjectMemberUpdate(BaseModel):
+    member_role: str
+
+
+class ProjectMemberCompleteRequest(BaseModel):
+    project_id: int
+
+
 class ProjectMemberResponse(BaseModel):
     id: int
     project_id: int

@@ -8,5 +8,6 @@ export const APP_MENUS = [
   { key: 'printroom', title: '文印室管理', path: '/print-room', adminOnly: false },
   { key: 'finance', title: '财务管理', path: '/finance', adminOnly: false },
   { key: 'archives', title: '归档管理', path: '/archives', adminOnly: false },
+  { key: 'project-exports', title: '项目清单导出', path: '/project-exports', adminOnly: true },
   { key: 'accounts', title: '账号管理', path: '/accounts', adminOnly: true }
 ]

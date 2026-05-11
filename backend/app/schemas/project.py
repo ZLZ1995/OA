@@ -36,6 +36,12 @@ class ProjectUpdate(BaseModel):
 class ProjectResponse(ProjectBase):
     id: int
     status_display: str = "项目创建"
+    termination_status: str | None = None
+    termination_reason: str | None = None
+    termination_requested_by: int | None = None
+    termination_requested_at: datetime | None = None
+    termination_approved_by: int | None = None
+    termination_approved_at: datetime | None = None
     archived_at: datetime | None = None
     deleted_at: datetime | None = None
 

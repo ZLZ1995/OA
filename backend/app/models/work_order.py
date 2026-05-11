@@ -1,4 +1,4 @@
-from sqlalchemy import String, ForeignKey, Text, DateTime
+from sqlalchemy import String, ForeignKey, Text, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -19,5 +19,12 @@ class WorkOrder(Base, TimestampMixin):
     first_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     second_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     third_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    signer_one: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signer_two: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    formal_report_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    print_room_handler_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    archive_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    archive_submitter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    archive_submission_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     priority: Mapped[str] = mapped_column(String(16), default="MEDIUM", nullable=False)
     deadline_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)

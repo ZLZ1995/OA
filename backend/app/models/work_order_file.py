@@ -15,5 +15,6 @@ class WorkOrderFile(Base):
     is_current: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     origin_file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     uploaded_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False)

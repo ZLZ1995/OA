@@ -14,6 +14,16 @@ npm install
 npm run dev
 ```
 
+Windows PowerShell 如果提示 `npm.ps1` 被执行策略拦截，可以改用：
+
+```powershell
+cd frontend
+npm.cmd install
+npm.cmd run dev
+npm.cmd run typecheck
+npm.cmd run build
+```
+
 ## 已完成页面与基础交互
 - 登录页
 - 首页工作台

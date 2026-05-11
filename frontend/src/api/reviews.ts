@@ -30,6 +30,11 @@ export async function decideReview(payload: {
   return data as ReviewRecordItem
 }
 
+export async function withdrawLatestReview(workOrderId: number) {
+  const { data } = await http.post(`/reviews/work-orders/${workOrderId}/withdraw-latest`)
+  return data as { status: string }
+}
+
 export async function listReviews(workOrderId: number) {
   const { data } = await http.get(`/reviews/work-orders/${workOrderId}`)
   return data as { items: ReviewRecordItem[] }

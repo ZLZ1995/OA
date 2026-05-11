@@ -16,6 +16,25 @@ class IssuePaperReportRequest(BaseModel):
     remark: str | None = None
 
 
+class PrintRoomInfoResponse(BaseModel):
+    work_order_id: int
+    contract_no: str | None = None
+    paper_report_no: str | None = None
+    copy_count: int | None = None
+    remark: str | None = None
+
+
+class PrintRoomRollbackRequest(BaseModel):
+    work_order_id: int
+    remark: str | None = None
+
+
+class TransferPrintRoomRequest(BaseModel):
+    work_order_id: int
+    handler_user_id: int
+    remark: str | None = None
+
+
 class PrintRoomRecordResponse(BaseModel):
     id: int
     work_order_id: int

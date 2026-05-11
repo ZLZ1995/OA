@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.project import Project
 from app.models.review_record import ReviewRecord
@@ -11,6 +13,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
+from app.models.work_order_file import WorkOrderFile
 from app.schemas.review import (
     ReviewCandidateListResponse,
     ReviewCandidateResponse,
@@ -27,9 +30,18 @@ from app.workflows.transitions import can_transit
 router = APIRouter(prefix="/reviews", tags=["审核"])
 
 ROUND_SUBMIT_STATUS = {
-    "FIRST": WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
-    "SECOND": WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
-    "THIRD": WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
+    "FIRST": {
+        WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
+        WorkOrderStatus.FIRST_REVIEW_REJECTED,
+    },
+    "SECOND": {
+        WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
+        WorkOrderStatus.SECOND_REVIEW_REJECTED,
+    },
+    "THIRD": {
+        WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
+        WorkOrderStatus.THIRD_REVIEW_REJECTED,
+    },
 }
 
 ROUND_REVIEWING_STATUS = {
@@ -39,8 +51,8 @@ ROUND_REVIEWING_STATUS = {
 }
 
 ROUND_APPROVED_STATUS = {
-    "FIRST": WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND,
-    "SECOND": WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD,
+    "FIRST": WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
+    "SECOND": WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
     "THIRD": WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM,
 }
 
@@ -55,6 +67,32 @@ ROUND_ROLE_CODE = {
     "SECOND": "SECOND_REVIEWER",
     "THIRD": "THIRD_REVIEWER",
 }
+
+ROUND_WAIT_STATUS = {
+    "FIRST": WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
+    "SECOND": WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
+    "THIRD": WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
+}
+
+
+def _ensure_reviewer_has_round_role(db: Session, reviewer_user_id: int, review_round: str) -> None:
+    required_role = ROUND_ROLE_CODE[review_round]
+    exists = (
+        db.query(UserRole.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .join(User, User.id == UserRole.user_id)
+        .filter(
+            User.id == reviewer_user_id,
+            User.is_active.is_(True),
+            Role.code == required_role,
+        )
+        .first()
+    )
+    if not exists:
+        raise HTTPException(
+            status_code=400,
+            detail=f"所选审核人不具备{review_round}轮审核角色",
+        )
 
 
 @router.get("/candidates", response_model=ReviewCandidateListResponse)
@@ -129,6 +167,8 @@ def submit_review(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
+    _ensure_reviewer_has_round_role(db, payload.reviewer_user_id, payload.review_round)
+
     first_reviewer_id = payload.reviewer_user_id if payload.review_round == "FIRST" else work_order.first_reviewer_id
     second_reviewer_id = payload.reviewer_user_id if payload.review_round == "SECOND" else work_order.second_reviewer_id
     third_reviewer_id = payload.reviewer_user_id if payload.review_round == "THIRD" else work_order.third_reviewer_id
@@ -144,8 +184,8 @@ def submit_review(
 
     from_status = WorkOrderStatus(work_order.current_status)
     to_status = ROUND_REVIEWING_STATUS[payload.review_round]
-    required_submit_status = ROUND_SUBMIT_STATUS[payload.review_round]
-    if from_status != required_submit_status:
+    allowed_submit_statuses = ROUND_SUBMIT_STATUS[payload.review_round]
+    if from_status not in allowed_submit_statuses:
         raise HTTPException(status_code=400, detail=f"当前状态不可发起{payload.review_round}审")
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
@@ -209,7 +249,7 @@ def decide_review(
 
     if payload.action == "APPROVE":
         to_status = ROUND_APPROVED_STATUS[payload.review_round]
-        next_handler = work_order.project_leader_id if payload.review_round != "THIRD" else None
+        next_handler = work_order.project_leader_id if payload.review_round != "THIRD" else current_user.id
     else:
         to_status = ROUND_REJECTED_STATUS[payload.review_round]
         next_handler = work_order.project_leader_id
@@ -225,7 +265,7 @@ def decide_review(
         review_round=payload.review_round,
         reviewer_user_id=current_user.id,
         action=payload.action,
-        comment=payload.comment,
+        comment=payload.comment or ("审核通过" if payload.action == "APPROVE" else None),
         acted_at=datetime.now(timezone.utc),
     )
     db.add(record)
@@ -259,3 +299,100 @@ def list_reviews(
     return ReviewRecordListResponse(
         items=[ReviewRecordResponse.model_validate(item, from_attributes=True) for item in rows]
     )
+
+
+@router.post("/work-orders/{work_order_id}/withdraw-latest")
+def withdraw_latest_review_step(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER", "ADMIN")),
+) -> dict[str, str]:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    latest = (
+        db.query(ReviewRecord)
+        .filter(ReviewRecord.work_order_id == work_order_id)
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+    if not latest:
+        raise HTTPException(status_code=400, detail="暂无可撤回的审核记录")
+
+    if "ADMIN" not in role_codes:
+        if latest.action in {"APPROVE", "REJECT_RETURN"} and latest.reviewer_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="只能撤回本人最新审核操作")
+        if latest.action == "SUBMIT" and work_order.project_leader_id != current_user.id:
+            raise HTTPException(status_code=403, detail="只能由送审人员撤回最新送审操作")
+
+    current_status = WorkOrderStatus(work_order.current_status)
+    review_round = latest.review_round
+    reviewing_status = ROUND_REVIEWING_STATUS[review_round]
+    rejected_status = ROUND_REJECTED_STATUS[review_round]
+    approved_status = ROUND_APPROVED_STATUS[review_round]
+    wait_status = ROUND_WAIT_STATUS[review_round]
+
+    if latest.action == "REJECT_RETURN":
+        if current_status != rejected_status:
+            raise HTTPException(status_code=400, detail="只能撤回当前最新退回操作")
+        rollback_status = reviewing_status
+        rollback_handler = latest.reviewer_user_id
+        file_categories = {"REVIEW_OPINION"}
+    elif latest.action == "APPROVE":
+        if current_status != approved_status:
+            raise HTTPException(status_code=400, detail="只能撤回当前最新通过操作")
+        rollback_status = reviewing_status
+        rollback_handler = latest.reviewer_user_id
+        file_categories = {"REVIEW_OPINION"}
+    elif latest.action == "SUBMIT":
+        if current_status != reviewing_status:
+            raise HTTPException(status_code=400, detail="只能撤回当前最新送审操作")
+        previous_rejection = (
+            db.query(ReviewRecord)
+            .filter(
+                ReviewRecord.work_order_id == work_order_id,
+                ReviewRecord.review_round == review_round,
+                ReviewRecord.action == "REJECT_RETURN",
+                ReviewRecord.acted_at < latest.acted_at,
+            )
+            .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+            .first()
+        )
+        rollback_status = rejected_status if previous_rejection else wait_status
+        rollback_handler = work_order.project_leader_id
+        file_categories = {"REPORT_ZIP", "REVIEW_REPLY"}
+    else:
+        raise HTTPException(status_code=400, detail="该审核记录不可撤回")
+
+    previous_record = (
+        db.query(ReviewRecord)
+        .filter(
+            ReviewRecord.work_order_id == work_order_id,
+            ReviewRecord.acted_at < latest.acted_at,
+        )
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+    stage = f"REVIEW_{review_round}"
+    file_query = db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order_id,
+        WorkOrderFile.business_stage == stage,
+        WorkOrderFile.file_category.in_(file_categories),
+        WorkOrderFile.uploaded_at <= latest.acted_at,
+    )
+    if previous_record:
+        file_query = file_query.filter(WorkOrderFile.uploaded_at > previous_record.acted_at)
+    files_to_delete = file_query.all()
+    for file_row in files_to_delete:
+        path = Path(settings.local_storage_dir) / file_row.storage_key
+        if path.exists():
+            path.unlink()
+        db.delete(file_row)
+
+    work_order.current_status = rollback_status.value
+    work_order.current_handler_user_id = rollback_handler
+    db.delete(latest)
+    db.commit()
+    return {"status": "ok"}

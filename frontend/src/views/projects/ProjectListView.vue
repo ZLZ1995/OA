@@ -69,6 +69,7 @@ import {
   deleteProject,
   generateProjectCode,
   listProjects,
+  updateProject,
   type ProjectItem
 } from '@/api/projects'
 import { useAuthStore } from '@/store/auth'
@@ -78,6 +79,12 @@ const router = useRouter()
 const loading = ref(false)
 const rows = ref<ProjectItem[]>([])
 const generatingCode = ref(false)
+const editDialogVisible = ref(false)
+const editing = reactive({
+  id: 0,
+  project_name: '',
+  client_name: ''
+})
 
 const form = reactive({
   project_code: '',
@@ -178,6 +185,17 @@ async function onArchive(row: ProjectItem) {
   )
   await archiveProject(row.id)
   ElMessage.success('项目已归档')
+  await loadProjects()
+}
+
+async function saveProject() {
+  if (!editing.id) return
+  await updateProject(editing.id, {
+    project_name: editing.project_name,
+    client_name: editing.client_name
+  })
+  editDialogVisible.value = false
+  ElMessage.success('项目已更新')
   await loadProjects()
 }
 

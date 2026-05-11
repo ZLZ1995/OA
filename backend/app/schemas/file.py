@@ -12,6 +12,7 @@ class WorkOrderFileResponse(BaseModel):
     is_current: bool
     origin_file_name: str
     storage_key: str
+    file_size: int | None = None
     uploaded_by: int
     uploaded_at: datetime
 

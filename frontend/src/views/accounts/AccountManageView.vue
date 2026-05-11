@@ -51,7 +51,7 @@
             :loading="rolesLoading"
             :disabled="rolesLoading || roleOptions.length === 0"
             style="min-width: 260px"
-            @update:model-value="(value) => onRoleDraftChange(scope.row.id, value)"
+            @update:model-value="(value: string[]) => onRoleDraftChange(scope.row.id, value)"
           >
             <el-option v-for="role in roleOptions" :key="role.code" :label="`${role.name}(${role.code})`" :value="role.code" />
           </el-select>

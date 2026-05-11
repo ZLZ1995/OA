@@ -15,6 +15,11 @@ export async function listUsers() {
   return data as { items: UserItem[] }
 }
 
+export async function listUserCandidates(roleCode: string) {
+  const { data } = await http.get('/users/candidates', { params: { role_code: roleCode } })
+  return data as { items: UserItem[] }
+}
+
 export async function createUser(payload: {
   username: string
   real_name: string

@@ -9,6 +9,7 @@ export interface WorkOrderFileItem {
   is_current: boolean
   origin_file_name: string
   storage_key: string
+  file_size?: number | null
   uploaded_by: number
   uploaded_at: string
 }
@@ -32,12 +33,31 @@ export async function uploadWorkOrderFile(payload: {
   return data as WorkOrderFileItem
 }
 
+export async function replaceWorkOrderFile(fileId: number, file: File) {
+  const formData = new FormData()
+  formData.append('upload', file)
+  const { data } = await http.post(`/files/${fileId}/replace`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+  return data as WorkOrderFileItem
+}
+
 export async function listWorkOrderFiles(workOrderId: number) {
   const { data } = await http.get(`/files/work-orders/${workOrderId}`)
   return data as { items: WorkOrderFileItem[] }
 }
 
+export async function completeContractUpload(workOrderId: number) {
+  const { data } = await http.post(`/files/work-orders/${workOrderId}/complete-contract`)
+  return data as { status: string }
+}
 
 export function getWorkOrderFileDownloadUrl(fileId: number) {
-  return `/api/files/${fileId}/download`
+  const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
+  const apiBaseUrl = configuredApiBaseUrl
+    ? configuredApiBaseUrl.replace(/\/+$/, '')
+    : '/api/v1'
+  return `${apiBaseUrl}/files/${fileId}/download`
 }

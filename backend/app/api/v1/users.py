@@ -49,6 +49,23 @@ def list_users(
     return UserListResponse(items=[_to_user_response(item) for item in users])
 
 
+@router.get("/candidates", response_model=UserListResponse)
+def list_user_candidates(
+    role_code: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> UserListResponse:
+    rows = (
+        db.query(User)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(Role.code == role_code, User.is_active.is_(True))
+        .order_by(User.id.asc())
+        .all()
+    )
+    return UserListResponse(items=[_to_user_response(item) for item in rows])
+
+
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,

@@ -5,12 +5,18 @@ export interface WorkbenchProjectItem {
   project_no: string
   project_name: string
   client_name: string
+  project_leader_name?: string | null
+  transfer_user_name?: string | null
   current_step: string
   status_display: string
   todo_action?: string | null
+  termination_status?: string | null
+  termination_reason?: string | null
   can_edit: boolean
   can_delete: boolean
   can_archive: boolean
+  can_request_termination: boolean
+  can_approve_termination: boolean
   can_enter: boolean
 }
 

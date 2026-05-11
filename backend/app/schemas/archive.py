@@ -18,6 +18,18 @@ class ArchiveUpdate(BaseModel):
     remark: str | None = None
 
 
+class ArchiveSubmitRequest(BaseModel):
+    work_order_id: int
+    reviewer_user_id: int
+    submission_type: str
+    remark: str | None = None
+
+
+class ArchiveDecisionRequest(BaseModel):
+    work_order_id: int
+    remark: str | None = None
+
+
 class ArchiveResponse(BaseModel):
     id: int
     work_order_id: int

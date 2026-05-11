@@ -7,6 +7,7 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.files import router as files_router
 from app.api.v1.health import router as health_router
 from app.api.v1.print_room import router as print_room_router
+from app.api.v1.project_exports import router as project_exports_router
 from app.api.v1.project_members import router as project_members_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.reviews import router as reviews_router
@@ -23,6 +24,7 @@ api_router.include_router(auth_router)
 api_router.include_router(users_router)
 api_router.include_router(roles_router)
 api_router.include_router(projects_router)
+api_router.include_router(project_exports_router)
 api_router.include_router(project_members_router)
 api_router.include_router(work_orders_router)
 api_router.include_router(report_versions_router)

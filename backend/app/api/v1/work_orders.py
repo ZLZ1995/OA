@@ -20,6 +20,7 @@ router = APIRouter(prefix="/work-orders", tags=["工单"])
 STATUS_LABEL_MAP = {
     WorkOrderStatus.PROJECT_CREATED.value: "项目创建",
     WorkOrderStatus.WORK_ORDER_CREATED.value: "工单创建",
+    WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value: "合同上传",
     WorkOrderStatus.CONTRACT_UPLOADED.value: "合同上传",
     WorkOrderStatus.WAIT_PRINTROOM_OFFICIAL_CONTRACT.value: "合同上传",
     WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT.value: "一审",
@@ -33,9 +34,17 @@ STATUS_LABEL_MAP = {
     WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT.value: "三审",
     WorkOrderStatus.THIRD_REVIEWING.value: "三审",
     WorkOrderStatus.THIRD_REVIEW_REJECTED.value: "三审",
-    WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "文印室出具",
+    WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "正式报告文件",
     WorkOrderStatus.PRINTROOM_PROCESSING.value: "文印室出具",
     WorkOrderStatus.PAPER_REPORT_ISSUED.value: "文印室出具",
+    WorkOrderStatus.WAIT_INVOICE_INFO.value: "开票信息",
+    WorkOrderStatus.INVOICE_INFO_REJECTED.value: "开票信息",
+    WorkOrderStatus.INVOICE_PROCESSING.value: "财务开票",
+    WorkOrderStatus.INVOICE_ISSUED.value: "发票已开具",
+    WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value: "报告归档",
+    WorkOrderStatus.ARCHIVE_REVIEWING.value: "底稿审核",
+    WorkOrderStatus.ARCHIVE_REJECTED.value: "报告归档",
+    WorkOrderStatus.ARCHIVED.value: "已归档",
     "ARCHIVED": "已归档",
 }
 
@@ -131,13 +140,28 @@ def update_work_order(
     work_order_id: int,
     payload: WorkOrderUpdate,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER")),
+    current_user: User = Depends(get_current_user),
+    role_codes: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "THIRD_REVIEWER")),
 ) -> WorkOrderResponse:
     row = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="工单不存在")
 
     data = payload.model_dump(exclude_unset=True)
+    signer_keys = {"signer_one", "signer_two", "formal_report_count"}
+    if signer_keys & set(data) and "ADMIN" not in role_codes:
+        if set(data) - signer_keys:
+            raise HTTPException(status_code=403, detail="正式报告信息只能由三审老师在正式报告环节填写")
+        if "THIRD_REVIEWER" not in role_codes:
+            raise HTTPException(status_code=403, detail="仅三审老师可填写签字评估师")
+        if row.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
+            raise HTTPException(status_code=400, detail="三审通过后才可填写正式报告信息")
+        if current_user.id != row.third_reviewer_id:
+            raise HTTPException(status_code=403, detail="仅三审老师可填写签字评估师")
+    elif "ADMIN" not in role_codes and not ({"SALES", "PROJECT_LEADER"} & role_codes):
+        if not data or set(data) - signer_keys:
+            raise HTTPException(status_code=403, detail="无权修改该工单")
+
     for key, value in data.items():
         setattr(row, key, value)
 
