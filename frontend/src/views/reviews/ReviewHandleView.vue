@@ -38,7 +38,7 @@
     <el-table :data="records" v-loading="loading">
       <el-table-column prop="review_round" label="轮次" width="80" />
       <el-table-column prop="action" label="动作" width="140" />
-      <el-table-column prop="reviewer_user_id" label="审核人ID" width="110" />
+      <el-table-column prop="reviewer_name" label="本轮审核人" width="120" show-overflow-tooltip />
       <el-table-column prop="comment" label="意见" />
       <el-table-column prop="acted_at" label="时间" width="200" />
     </el-table>

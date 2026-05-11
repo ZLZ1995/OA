@@ -5,6 +5,7 @@ export interface ReviewRecordItem {
   work_order_id: number
   review_round: 'FIRST' | 'SECOND' | 'THIRD'
   reviewer_user_id: number
+  reviewer_name?: string
   action: 'SUBMIT' | 'APPROVE' | 'REJECT_RETURN'
   comment?: string
   acted_at: string

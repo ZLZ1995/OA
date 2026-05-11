@@ -75,6 +75,13 @@ ROUND_WAIT_STATUS = {
 }
 
 
+def _to_review_record_response(db: Session, record: ReviewRecord) -> ReviewRecordResponse:
+    reviewer_name = db.query(User.real_name).filter(User.id == record.reviewer_user_id).scalar()
+    data = ReviewRecordResponse.model_validate(record, from_attributes=True)
+    data.reviewer_name = reviewer_name
+    return data
+
+
 def _ensure_reviewer_has_round_role(db: Session, reviewer_user_id: int, review_round: str) -> None:
     required_role = ROUND_ROLE_CODE[review_round]
     exists = (
@@ -220,7 +227,7 @@ def submit_review(
     )
     db.commit()
     db.refresh(record)
-    return ReviewRecordResponse.model_validate(record, from_attributes=True)
+    return _to_review_record_response(db, record)
 
 
 @router.post("/decision", response_model=ReviewRecordResponse)
@@ -281,7 +288,7 @@ def decide_review(
 
     db.commit()
     db.refresh(record)
-    return ReviewRecordResponse.model_validate(record, from_attributes=True)
+    return _to_review_record_response(db, record)
 
 
 @router.get("/work-orders/{work_order_id}", response_model=ReviewRecordListResponse)
@@ -297,7 +304,7 @@ def list_reviews(
         .all()
     )
     return ReviewRecordListResponse(
-        items=[ReviewRecordResponse.model_validate(item, from_attributes=True) for item in rows]
+        items=[_to_review_record_response(db, item) for item in rows]
     )
 
 

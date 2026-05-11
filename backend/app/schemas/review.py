@@ -22,6 +22,7 @@ class ReviewRecordResponse(BaseModel):
     work_order_id: int
     review_round: str
     reviewer_user_id: int
+    reviewer_name: str | None = None
     action: str
     comment: str | None
     acted_at: datetime

@@ -102,9 +102,10 @@
     </template>
 
     <el-divider>审核记录</el-divider>
-    <el-table :data="reviewRows" v-loading="loading">
-      <el-table-column prop="roundLabel" label="轮次" width="180" />
-      <el-table-column prop="comment" label="意见" min-width="160" show-overflow-tooltip />
+      <el-table :data="reviewRows" v-loading="loading">
+        <el-table-column prop="roundLabel" label="轮次" width="180" />
+        <el-table-column prop="reviewerName" label="本轮审核人" width="120" show-overflow-tooltip />
+        <el-table-column prop="comment" label="意见" min-width="160" show-overflow-tooltip />
       <el-table-column label="附件" min-width="280">
         <template #default="{ row }">
           <div v-if="row.files.length" class="attachment-list">
@@ -147,6 +148,7 @@ interface ReviewRow {
   action?: ReviewRecordItem['action']
   reviewRound?: ReviewRound
   reviewerUserId?: number
+  reviewerName: string
   roundLabel: string
   comment: string
   acted_at: string
@@ -229,6 +231,7 @@ const reviewRows = computed<ReviewRow[]>(() => {
     action: record.action,
     reviewRound: record.review_round,
     reviewerUserId: record.reviewer_user_id,
+    reviewerName: record.reviewer_name || '-',
     roundLabel: recordRoundLabel(record),
     comment: recordCommentText(record),
     acted_at: record.acted_at,
@@ -240,6 +243,7 @@ const reviewRows = computed<ReviewRow[]>(() => {
     if (round && !recordedReplyRounds.has(round)) {
       rows.push({
         id: `reply-file-${file.id}`,
+        reviewerName: '-',
         roundLabel: `${roundLabel(round)}意见回复`,
         comment: '-',
         acted_at: file.uploaded_at,
