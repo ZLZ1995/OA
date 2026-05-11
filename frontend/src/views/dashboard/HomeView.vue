@@ -28,15 +28,15 @@
 
     <el-card class="todo-card" shadow="never">
       <template #header>待办项目</template>
-      <el-table class="wide-table" :data="todoProjects" size="small">
-        <el-table-column prop="project_no" label="项目编号" min-width="120" />
-        <el-table-column prop="project_name" label="项目名称" min-width="130" show-overflow-tooltip />
+      <el-table class="wide-table" :data="todoProjects" size="small" table-layout="fixed">
+        <el-table-column prop="project_no" label="项目编号" width="118" show-overflow-tooltip />
+        <el-table-column prop="project_name" label="项目名称" min-width="96" show-overflow-tooltip />
         <el-table-column prop="client_name" label="客户名称" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="project_leader_name" label="项目负责人" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="transfer_user_name" label="转交人" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="current_step" label="当前步骤" min-width="100" />
-        <el-table-column prop="todo_action" label="待办事项" min-width="140" show-overflow-tooltip />
-        <el-table-column label="操作" width="108" fixed="right">
+        <el-table-column prop="project_leader_name" label="项目负责人" width="92" show-overflow-tooltip />
+        <el-table-column prop="transfer_user_name" label="转交人" width="82" show-overflow-tooltip />
+        <el-table-column prop="current_step" label="当前步骤" width="96" show-overflow-tooltip />
+        <el-table-column prop="todo_action" label="待办事项" min-width="116" show-overflow-tooltip />
+        <el-table-column label="操作" width="132">
           <template #default="{ row }">
             <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
             <el-button v-if="row.can_approve_termination" link type="danger" @click="approveTermination(row)">允许终止/废止</el-button>
@@ -47,13 +47,13 @@
 
     <el-card class="my-card" shadow="never">
       <template #header>我的项目</template>
-      <el-table class="wide-table" :data="myProjects" size="small">
-        <el-table-column prop="project_no" label="项目编号" min-width="140" />
-        <el-table-column prop="project_name" label="项目名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="client_name" label="客户名称" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="current_step" label="当前步骤" min-width="110" />
-        <el-table-column prop="status_display" label="状态" min-width="100" />
-        <el-table-column label="操作" width="340" fixed="right">
+      <el-table class="wide-table" :data="myProjects" size="small" table-layout="fixed">
+        <el-table-column prop="project_no" label="项目编号" width="132" show-overflow-tooltip />
+        <el-table-column prop="project_name" label="项目名称" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="client_name" label="客户名称" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="current_step" label="当前步骤" width="108" show-overflow-tooltip />
+        <el-table-column prop="status_display" label="状态" width="96" show-overflow-tooltip />
+        <el-table-column label="操作" width="318">
           <template #default="{ row }">
             <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
             <el-button link type="primary" :disabled="!row.can_edit" @click="editProject(row)">编辑</el-button>
@@ -173,7 +173,7 @@ onMounted(load)
 <style scoped>
 .workbench-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  grid-template-columns: 340px minmax(0, 1fr);
   grid-template-areas:
     "create todo"
     "mine mine";
@@ -197,12 +197,20 @@ onMounted(load)
   width: 100%;
 }
 
+.wide-table :deep(.el-table__inner-wrapper),
+.wide-table :deep(.el-scrollbar__view),
+.wide-table :deep(table) {
+  width: 100% !important;
+}
+
 .wide-table :deep(.cell) {
   white-space: nowrap;
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 .wide-table :deep(.el-button + .el-button) {
-  margin-left: 10px;
+  margin-left: 8px;
 }
 
 @media (max-width: 960px) {
