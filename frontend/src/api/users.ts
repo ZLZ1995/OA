@@ -34,3 +34,13 @@ export async function bindUserRoles(userId: number, roleCodes: string[]) {
   const { data } = await http.put(`/users/${userId}/roles`, { role_codes: roleCodes })
   return data as UserItem
 }
+
+export async function resetUserPassword(userId: number, password: string) {
+  const { data } = await http.put(`/users/${userId}/password`, { password })
+  return data as UserItem
+}
+
+export async function deleteUser(userId: number) {
+  const { data } = await http.delete(`/users/${userId}`)
+  return data as { message: string }
+}

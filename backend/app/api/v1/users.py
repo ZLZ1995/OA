@@ -11,6 +11,7 @@ from app.models.user_role import UserRole
 from app.schemas.user import (
     UserCreate,
     UserListResponse,
+    UserPasswordResetRequest,
     UserResponse,
     UserRoleBindRequest,
     UserUpdate,
@@ -36,13 +37,24 @@ def _to_user_response(row: User) -> UserResponse:
     )
 
 
+def _get_visible_active_user_or_404(
+    db: Session, user_id: int, current_user: User
+) -> User:
+    row = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if row.username == SUPER_ADMIN_USERNAME and not _is_super_admin(current_user):
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return row
+
+
 @router.get("", response_model=UserListResponse)
 def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
 ) -> UserListResponse:
-    query = db.query(User)
+    query = db.query(User).filter(User.is_active.is_(True))
     if not _is_super_admin(current_user):
         query = query.filter(User.username != SUPER_ADMIN_USERNAME)
     users = query.order_by(User.id.asc()).all()
@@ -105,16 +117,26 @@ def update_user(
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> UserResponse:
-    row = db.query(User).filter(User.id == user_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="用户不存在")
-    if row.username == SUPER_ADMIN_USERNAME and not _is_super_admin(current_user):
-        raise HTTPException(status_code=404, detail="用户不存在")
-
+    row = _get_visible_active_user_or_404(db, user_id, current_user)
     data = payload.model_dump(exclude_unset=True)
     for key, value in data.items():
         setattr(row, key, value)
 
+    db.commit()
+    db.refresh(row)
+    return _to_user_response(row)
+
+
+@router.put("/{user_id}/password", response_model=UserResponse)
+def reset_user_password(
+    user_id: int,
+    payload: UserPasswordResetRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(require_roles("ADMIN")),
+) -> UserResponse:
+    row = _get_visible_active_user_or_404(db, user_id, current_user)
+    row.password_hash = get_password_hash(payload.password)
     db.commit()
     db.refresh(row)
     return _to_user_response(row)
@@ -128,11 +150,7 @@ def bind_user_roles(
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> UserResponse:
-    row = db.query(User).filter(User.id == user_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="用户不存在")
-    if row.username == SUPER_ADMIN_USERNAME and not _is_super_admin(current_user):
-        raise HTTPException(status_code=404, detail="用户不存在")
+    row = _get_visible_active_user_or_404(db, user_id, current_user)
 
     db.query(UserRole).filter(UserRole.user_id == user_id).delete()
     if payload.role_codes:
@@ -143,3 +161,22 @@ def bind_user_roles(
     db.commit()
     db.refresh(row)
     return _to_user_response(row)
+
+
+@router.delete("/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(require_roles("ADMIN")),
+) -> dict[str, str]:
+    row = _get_visible_active_user_or_404(db, user_id, current_user)
+    if row.id == current_user.id:
+        raise HTTPException(status_code=400, detail="不能删除当前登录账号")
+    if row.username == SUPER_ADMIN_USERNAME:
+        raise HTTPException(status_code=400, detail="不能删除超级管理员账号")
+
+    db.query(UserRole).filter(UserRole.user_id == row.id).delete()
+    row.is_active = False
+    db.commit()
+    return {"message": "账号已删除"}
