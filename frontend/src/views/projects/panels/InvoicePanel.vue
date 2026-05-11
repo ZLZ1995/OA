@@ -98,8 +98,11 @@ const amount = ref(0)
 
 const statusCode = computed(() => props.flowInfo?.current_work_order_status || '')
 const canFinance = computed(() => props.userRoles.some(role => ['FINANCE', 'ADMIN'].includes(role)))
-const canSubmitInfo = computed(() => props.canOperate && !canFinance.value && ['WAIT_INVOICE_INFO', 'INVOICE_INFO_REJECTED'].includes(statusCode.value))
 const currentInvoice = computed(() => invoices.value[0])
+const canSubmitInfo = computed(() => {
+  if (!props.canOperate || canFinance.value) return false
+  return !currentInvoice.value || currentInvoice.value.status === 'REJECTED'
+})
 const replaceInputs = new Map<number, HTMLInputElement>()
 
 async function load() {

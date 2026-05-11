@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.invoice import Invoice
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.user import User
@@ -85,7 +86,8 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
 
     role_pool_filters = []
     if "FINANCE" in role_codes or "ADMIN" in role_codes:
-        role_pool_filters.append(WorkOrder.current_status == "INVOICE_PROCESSING")
+        pending_invoice_work_orders = db.query(Invoice.work_order_id).filter(Invoice.status == "SUBMITTED")
+        role_pool_filters.append(WorkOrder.id.in_(pending_invoice_work_orders))
     if "ARCHIVE_MANAGER" in role_codes or "ADMIN" in role_codes:
         role_pool_filters.append(
             and_(
@@ -118,13 +120,24 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
     for p, w in todo_rows:
         if p.id in seen:
             continue
-        if p.business_user_id == current_user.id and w.current_handler_user_id != current_user.id:
+        rejected_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == w.id, Invoice.status == "REJECTED").first()
+        is_project_party = (
+            w.project_leader_id == current_user.id
+            or w.project_id in member_project_id_set
+            or p.business_user_id == current_user.id
+        )
+        if p.business_user_id == current_user.id and w.current_handler_user_id != current_user.id and not rejected_invoice:
             continue
-        if w.current_status == "INVOICE_PROCESSING" and "FINANCE" not in role_codes and "ADMIN" not in role_codes:
+        pending_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == w.id, Invoice.status == "SUBMITTED").first()
+        if pending_invoice and "FINANCE" not in role_codes and "ADMIN" not in role_codes:
             continue
         can_approve_termination = "ADMIN" in role_codes and p.termination_status == "PENDING"
         if can_approve_termination:
             step = "项目终止/废止审核"
+        elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
+            step = "财务开票"
+        elif rejected_invoice and is_project_party:
+            step = "发票开具"
         elif w.archive_reviewer_id == current_user.id and w.archive_submission_type in {"ONLINE", "OFFLINE"}:
             step = "底稿审核"
         elif w.archive_submitter_id == current_user.id and w.archive_submission_type == "APPROVED":
@@ -147,7 +160,13 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             project_leader_name=leader.real_name if leader else None,
             transfer_user_name=latest_log[1].real_name if latest_log else None,
             current_step=step, status_display=step,
-            todo_action=f"待审核：{p.termination_reason}" if can_approve_termination else f"待处理：{step}",
+            todo_action=(
+                f"待审核：{p.termination_reason}"
+                if can_approve_termination
+                else "开票信息被退回，请修改后重新提交"
+                if rejected_invoice and is_project_party
+                else f"待处理：{step}"
+            ),
             termination_status=p.termination_status,
             termination_reason=p.termination_reason,
             can_edit=False, can_delete=False,
