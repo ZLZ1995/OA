@@ -36,6 +36,7 @@
     <el-table :data="rows" size="small" v-loading="loading" class="wide-table">
       <el-table-column prop="project_no" label="项目编号" min-width="140" />
       <el-table-column prop="project_name" label="项目名称" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="project_progress" label="项目进度" min-width="100" />
       <el-table-column prop="report_no" label="报告编号" min-width="140" />
       <el-table-column prop="project_leader_name" label="项目负责人姓名" min-width="130" />
       <el-table-column prop="undertaking_unit" label="承接单位" min-width="100" />
