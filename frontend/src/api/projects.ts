@@ -1,27 +1,57 @@
 import http from './http'
 
+export type ProjectUndertakingUnit = '中勤' | '中联国际' | '中证' | '其他'
+export type ReportType = '评估报告' | '估值报告' | '咨询报告'
+export type ProjectSource = 'INTERNAL' | 'EXTERNAL'
+
 export interface ProjectItem {
   id: number
   project_code: string
-  undertaking_unit: '中勤' | '中立国际' | '中众' | '其他'
+  undertaking_unit: ProjectUndertakingUnit
   project_name: string
   client_name: string
+  report_type: ReportType
+  valuation_base_date?: string | null
+  business_salesman: string
+  project_source: ProjectSource
+  project_source_display: string
+  external_project_leader_name?: string | null
   business_user_id: number
   project_leader_id: number
+  project_leader_display_name?: string | null
   status: string
   status_display: string
+  contract_review_status?: string | null
+  contract_review_status_display?: string | null
   termination_status?: string | null
   termination_reason?: string | null
   archived_at?: string | null
   deleted_at?: string | null
 }
 
-export type ProjectUndertakingUnit = ProjectItem['undertaking_unit']
-
 export interface ProjectUpdatePayload {
   project_name?: string
   client_name?: string
-  undertaking_unit?: '中勤' | '中立国际' | '中众' | '其他'
+  undertaking_unit?: ProjectUndertakingUnit
+  report_type?: ReportType
+  valuation_base_date?: string | null
+  business_salesman?: string
+  project_source?: ProjectSource
+  external_project_leader_name?: string | null
+}
+
+export interface ProjectCreatePayload {
+  project_code?: string
+  undertaking_unit: ProjectUndertakingUnit
+  project_name: string
+  client_name: string
+  report_type: ReportType
+  valuation_base_date?: string | null
+  business_salesman: string
+  project_source: ProjectSource
+  external_project_leader_name?: string | null
+  business_user_id: number
+  project_leader_id: number
 }
 
 export async function listProjects() {
@@ -34,14 +64,7 @@ export async function getProject(projectId: number | string) {
   return data as ProjectItem
 }
 
-export async function createProject(payload: {
-  project_code?: string
-  undertaking_unit: '中勤' | '中立国际' | '中众' | '其他'
-  project_name: string
-  client_name: string
-  business_user_id: number
-  project_leader_id: number
-}) {
+export async function createProject(payload: ProjectCreatePayload) {
   const { data } = await http.post('/projects', payload)
   return data as ProjectItem
 }
@@ -75,8 +98,7 @@ export async function listProjectOptions() {
   return data as { items: ProjectItem[] }
 }
 
-
-export async function generateProjectCode(undertakingUnit: '中勤' | '中立国际' | '中众' | '其他') {
+export async function generateProjectCode(undertakingUnit: ProjectUndertakingUnit) {
   const { data } = await http.get('/projects/generate-code', { params: { undertaking_unit: undertakingUnit } })
   return data as { project_code: string }
 }

@@ -11,44 +11,9 @@ from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.workflow_log import WorkflowLog
 from app.schemas.workbench import WorkbenchProjectItem, WorkbenchResponse
+from app.services.project_flow import get_project_leader_display_name, normalize_project_step
 
 router = APIRouter(prefix="/workbench", tags=["项目工作台"])
-
-STATUS_MAP = {
-    "PROJECT_CREATED": "项目创建",
-    "WORK_ORDER_CREATED": "工单创建",
-    "WAIT_CONTRACT_UPLOAD": "合同上传",
-    "CONTRACT_UPLOADED": "合同上传",
-    "WAIT_PRINTROOM_OFFICIAL_CONTRACT": "合同上传",
-    "WAIT_FIRST_REVIEW_SUBMIT": "一审",
-    "FIRST_REVIEWING": "一审",
-    "FIRST_REVIEW_REJECTED": "一审",
-    "FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND": "二审",
-    "WAIT_SECOND_REVIEW_SUBMIT": "二审",
-    "SECOND_REVIEWING": "二审",
-    "SECOND_REVIEW_REJECTED": "二审",
-    "SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD": "三审",
-    "WAIT_THIRD_REVIEW_SUBMIT": "三审",
-    "THIRD_REVIEWING": "三审",
-    "THIRD_REVIEW_REJECTED": "三审",
-    "THIRD_APPROVED_WAIT_PRINTROOM": "正式报告文件",
-    "PRINTROOM_PROCESSING": "文印室出具",
-    "PAPER_REPORT_ISSUED": "文印室出具",
-    "WAIT_INVOICE_INFO": "发票开具",
-    "INVOICE_INFO_REJECTED": "发票开具",
-    "INVOICE_PROCESSING": "财务开票",
-    "INVOICE_ISSUED": "发票已开具",
-    "WAIT_ARCHIVE_SUBMIT": "报告归档",
-    "ARCHIVE_REVIEWING": "底稿审核",
-    "ARCHIVE_REJECTED": "报告归档",
-    "ARCHIVED": "已归档",
-}
-
-
-def _step(status: str | None, archived: bool) -> str:
-    if archived:
-        return "已归档"
-    return STATUS_MAP.get(status or "", "项目创建")
 
 
 @router.get("", response_model=WorkbenchResponse)
@@ -63,26 +28,39 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         Project.project_leader_id == current_user.id,
         Project.id.in_(member_project_id_set),
     )
-    for p in base_query.filter(my_project_filter).order_by(Project.id.desc()).all():
-        latest_work_order = db.query(WorkOrder).filter(WorkOrder.project_id == p.id).order_by(WorkOrder.id.desc()).first()
-        step = _step(latest_work_order.current_status if latest_work_order else None, p.archived_at is not None)
-        if p.termination_status == "PENDING":
+
+    for project in base_query.filter(my_project_filter).order_by(Project.id.desc()).all():
+        latest_work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project.id).order_by(WorkOrder.id.desc()).first()
+        step = normalize_project_step(
+            latest_work_order.current_status if latest_work_order else None,
+            project.archived_at is not None,
+            project.project_source,
+        )
+        if project.termination_status == "PENDING":
             step = "项目终止/废止审核中"
-        elif p.termination_status == "APPROVED" and p.archived_at is None:
+        elif project.termination_status == "APPROVED" and project.archived_at is None:
             step = "项目终止/废止已通过"
-        leader = db.query(User).filter(User.id == p.project_leader_id).first()
-        my_projects.append(WorkbenchProjectItem(
-            id=p.id, project_no=p.project_code, project_name=p.project_name, client_name=p.client_name,
-            project_leader_name=leader.real_name if leader else None,
-            current_step=step, status_display=step, todo_action=None,
-            termination_status=p.termination_status,
-            termination_reason=p.termination_reason,
-            can_edit=p.archived_at is None and p.termination_status != "PENDING",
-            can_delete=p.archived_at is None and p.termination_status != "PENDING",
-            can_archive=p.archived_at is None and latest_work_order is not None and (latest_work_order.archive_submission_type == "APPROVED" or p.termination_status == "APPROVED"),
-            can_request_termination=p.archived_at is None and p.termination_status not in {"PENDING", "APPROVED"},
-            can_enter=True,
-        ))
+
+        leader = db.query(User).filter(User.id == project.project_leader_id).first()
+        my_projects.append(
+            WorkbenchProjectItem(
+                id=project.id,
+                project_no=project.project_code,
+                project_name=project.project_name,
+                client_name=project.client_name,
+                project_leader_name=get_project_leader_display_name(project, leader.real_name if leader else None),
+                current_step=step,
+                status_display=step,
+                todo_action=None,
+                termination_status=project.termination_status,
+                termination_reason=project.termination_reason,
+                can_edit=project.archived_at is None and project.termination_status != "PENDING",
+                can_delete=project.archived_at is None and project.termination_status != "PENDING",
+                can_archive=project.archived_at is None and latest_work_order is not None and (latest_work_order.archive_submission_type == "APPROVED" or project.termination_status == "APPROVED"),
+                can_request_termination=project.archived_at is None and project.termination_status not in {"PENDING", "APPROVED"},
+                can_enter=True,
+            )
+        )
 
     role_pool_filters = []
     if "FINANCE" in role_codes or "ADMIN" in role_codes:
@@ -95,8 +73,11 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
                 WorkOrder.archive_submission_type.in_(["ONLINE", "OFFLINE"]),
             )
         )
+    if "CONTRACT_REVIEWER" in role_codes or "ADMIN" in role_codes:
+        role_pool_filters.append(WorkOrder.contract_reviewer_id == current_user.id)
     if "ADMIN" in role_codes:
         role_pool_filters.append(Project.termination_status == "PENDING")
+
     todo_rows = (
         db.query(Project, WorkOrder)
         .join(WorkOrder, WorkOrder.project_id == Project.id)
@@ -109,69 +90,87 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
                 WorkOrder.project_leader_id == current_user.id,
                 WorkOrder.project_id.in_(member_project_id_set),
                 WorkOrder.archive_submitter_id == current_user.id,
+                WorkOrder.initiator_user_id == current_user.id,
                 *role_pool_filters,
             ),
         )
         .order_by(WorkOrder.id.desc())
         .all()
     )
+
     todo_projects: list[WorkbenchProjectItem] = []
     seen = set()
-    for p, w in todo_rows:
-        if p.id in seen:
+    for project, work_order in todo_rows:
+        if project.id in seen:
             continue
-        rejected_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == w.id, Invoice.status == "REJECTED").first()
+        rejected_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "REJECTED").first()
         is_project_party = (
-            w.project_leader_id == current_user.id
-            or w.project_id in member_project_id_set
-            or p.business_user_id == current_user.id
+            work_order.project_leader_id == current_user.id
+            or work_order.project_id in member_project_id_set
+            or project.business_user_id == current_user.id
+            or work_order.initiator_user_id == current_user.id
         )
-        if p.business_user_id == current_user.id and w.current_handler_user_id != current_user.id and not rejected_invoice:
-            continue
-        pending_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == w.id, Invoice.status == "SUBMITTED").first()
+        if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id and not rejected_invoice:
+            if work_order.current_status not in {"WAIT_CONTRACT_REVIEW_SUBMIT", "CONTRACT_REJECTED"}:
+                continue
+
+        pending_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "SUBMITTED").first()
         if pending_invoice and "FINANCE" not in role_codes and "ADMIN" not in role_codes:
             continue
-        can_approve_termination = "ADMIN" in role_codes and p.termination_status == "PENDING"
+
+        can_approve_termination = "ADMIN" in role_codes and project.termination_status == "PENDING"
         if can_approve_termination:
             step = "项目终止/废止审核"
+        elif work_order.current_status == "CONTRACT_REVIEWING" and work_order.contract_reviewer_id == current_user.id:
+            step = "合同审核"
         elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
             step = "财务开票"
         elif rejected_invoice and is_project_party:
             step = "发票开具"
-        elif w.archive_reviewer_id == current_user.id and w.archive_submission_type in {"ONLINE", "OFFLINE"}:
+        elif work_order.archive_reviewer_id == current_user.id and work_order.archive_submission_type in {"ONLINE", "OFFLINE"}:
             step = "底稿审核"
-        elif w.archive_submitter_id == current_user.id and w.archive_submission_type == "APPROVED":
-            step = "报告归档"
-        elif w.archive_submitter_id == current_user.id and w.archive_submission_type == "REJECTED":
+        elif work_order.archive_submitter_id == current_user.id and work_order.archive_submission_type in {"APPROVED", "REJECTED"}:
             step = "报告归档"
         else:
-            step = _step(w.current_status, False)
-        seen.add(p.id)
-        leader = db.query(User).filter(User.id == p.project_leader_id).first()
+            step = normalize_project_step(work_order.current_status, False, project.project_source)
+
+        seen.add(project.id)
+        leader = db.query(User).filter(User.id == project.project_leader_id).first()
         latest_log = (
             db.query(WorkflowLog, User)
             .join(User, User.id == WorkflowLog.operator_user_id)
-            .filter(WorkflowLog.work_order_id == w.id)
+            .filter(WorkflowLog.work_order_id == work_order.id)
             .order_by(WorkflowLog.id.desc())
             .first()
         )
-        todo_projects.append(WorkbenchProjectItem(
-            id=p.id, project_no=p.project_code, project_name=p.project_name, client_name=p.client_name,
-            project_leader_name=leader.real_name if leader else None,
-            transfer_user_name=latest_log[1].real_name if latest_log else None,
-            current_step=step, status_display=step,
-            todo_action=(
-                f"待审核：{p.termination_reason}"
-                if can_approve_termination
-                else "开票信息被退回，请修改后重新提交"
-                if rejected_invoice and is_project_party
-                else f"待处理：{step}"
-            ),
-            termination_status=p.termination_status,
-            termination_reason=p.termination_reason,
-            can_edit=False, can_delete=False,
-            can_archive=False, can_enter=True,
-            can_approve_termination=can_approve_termination,
-        ))
+        todo_action = (
+            f"待审核：{project.termination_reason}"
+            if can_approve_termination
+            else "开票信息被退回，请修改后重新提交"
+            if rejected_invoice and is_project_party
+            else "请处理合同审核"
+            if step == "合同审核" and work_order.contract_reviewer_id == current_user.id
+            else f"待处理：{step}"
+        )
+        todo_projects.append(
+            WorkbenchProjectItem(
+                id=project.id,
+                project_no=project.project_code,
+                project_name=project.project_name,
+                client_name=project.client_name,
+                project_leader_name=get_project_leader_display_name(project, leader.real_name if leader else None),
+                transfer_user_name=latest_log[1].real_name if latest_log else None,
+                current_step=step,
+                status_display=step,
+                todo_action=todo_action,
+                termination_status=project.termination_status,
+                termination_reason=project.termination_reason,
+                can_edit=False,
+                can_delete=False,
+                can_archive=False,
+                can_enter=True,
+                can_approve_termination=can_approve_termination,
+            )
+        )
 
     return WorkbenchResponse(my_projects=my_projects, todo_projects=todo_projects)

@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.contract import Contract
-from app.models.project_member import ProjectMember
 from app.models.print_room_record import PrintRoomRecord
+from app.models.project import Project
+from app.models.project_member import ProjectMember
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.schemas.print_room import (
@@ -26,12 +27,17 @@ router = APIRouter(prefix="/print-room", tags=["文印室"])
 
 
 def _ensure_project_operator(db: Session, work_order: WorkOrder, user_id: int) -> None:
+    if work_order.project_leader_id == user_id or work_order.initiator_user_id == user_id:
+        return
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project and project.project_source == "EXTERNAL":
+        raise HTTPException(status_code=403, detail="外部项目仅创建人或负责人可处理该流程")
     is_member = db.query(ProjectMember.id).filter(
         ProjectMember.project_id == work_order.project_id,
         ProjectMember.user_id == user_id,
     ).first()
-    if work_order.project_leader_id != user_id and not is_member:
-        raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可处理该流程")
+    if not is_member:
+        raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可处理该流程")
 
 
 @router.get("/work-orders/{work_order_id}", response_model=PrintRoomInfoResponse)
@@ -61,7 +67,7 @@ def transfer_to_print_room(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    if work_order.third_reviewer_id != current_user.id:
+    if work_order.third_reviewer_id != current_user.id and not any(item.role.code == "ADMIN" for item in current_user.roles):
         raise HTTPException(status_code=403, detail="仅该项目三审老师可转发文印室")
     if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM:
         raise HTTPException(status_code=400, detail="当前状态不可转发文印室")
@@ -134,8 +140,8 @@ def mark_contract_error(
         raise HTTPException(status_code=404, detail="工单不存在")
     from_status = WorkOrderStatus(work_order.current_status)
     if from_status not in {WorkOrderStatus.PRINTROOM_PROCESSING, WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM}:
-        raise HTTPException(status_code=400, detail="当前状态不可退回合同上传")
-    to_status = WorkOrderStatus.WAIT_CONTRACT_UPLOAD
+        raise HTTPException(status_code=400, detail="当前状态不可退回合同")
+    to_status = WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
     work_order.current_status = to_status.value
@@ -150,7 +156,7 @@ def mark_contract_error(
         remark=payload.remark,
     )
     db.commit()
-    return {"message": "已退回合同上传"}
+    return {"message": "已退回合同重新审核"}
 
 
 @router.post("/report-error")
@@ -206,21 +212,14 @@ def issue_official_contract(
     contract.issued_at = datetime.now(timezone.utc)
 
     from_status = WorkOrderStatus(work_order.current_status)
-    to_status = from_status
-    if from_status == WorkOrderStatus.WAIT_PRINTROOM_OFFICIAL_CONTRACT:
-        to_status = WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT
-        if not can_transit(from_status, to_status):
-            raise HTTPException(status_code=400, detail="非法状态迁移")
-        work_order.current_status = to_status.value
-        work_order.current_handler_user_id = work_order.project_leader_id
-    elif from_status not in {WorkOrderStatus.PRINTROOM_PROCESSING, WorkOrderStatus.PAPER_REPORT_ISSUED, WorkOrderStatus.WAIT_INVOICE_INFO}:
+    if from_status not in {WorkOrderStatus.PRINTROOM_PROCESSING, WorkOrderStatus.PAPER_REPORT_ISSUED, WorkOrderStatus.WAIT_INVOICE_INFO}:
         raise HTTPException(status_code=400, detail="当前状态不可填写正式合同编号")
 
     create_workflow_log(
         db,
         work_order_id=work_order.id,
         from_status=from_status.value,
-        to_status=to_status.value,
+        to_status=from_status.value,
         action_type="ISSUE_OFFICIAL_CONTRACT",
         operator_user_id=current_user.id,
         remark=payload.remark,

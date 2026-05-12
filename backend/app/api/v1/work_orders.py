@@ -17,35 +17,39 @@ from app.schemas.work_order import (
 from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/work-orders", tags=["工单"])
+
 STATUS_LABEL_MAP = {
     WorkOrderStatus.PROJECT_CREATED.value: "项目创建",
     WorkOrderStatus.WORK_ORDER_CREATED.value: "工单创建",
     WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value: "合同上传",
     WorkOrderStatus.CONTRACT_UPLOADED.value: "合同上传",
     WorkOrderStatus.WAIT_PRINTROOM_OFFICIAL_CONTRACT.value: "合同上传",
-    WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT.value: "一审",
+    WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value: "合同审核",
+    WorkOrderStatus.CONTRACT_REVIEWING.value: "合同审核中",
+    WorkOrderStatus.CONTRACT_REJECTED.value: "合同审核退回",
+    WorkOrderStatus.CONTRACT_APPROVED.value: "合同审核通过",
+    WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT.value: "报告送审",
     WorkOrderStatus.FIRST_REVIEWING.value: "一审",
-    WorkOrderStatus.FIRST_REVIEW_REJECTED.value: "一审",
+    WorkOrderStatus.FIRST_REVIEW_REJECTED.value: "一审退回",
     WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND.value: "二审",
     WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT.value: "二审",
     WorkOrderStatus.SECOND_REVIEWING.value: "二审",
-    WorkOrderStatus.SECOND_REVIEW_REJECTED.value: "二审",
+    WorkOrderStatus.SECOND_REVIEW_REJECTED.value: "二审退回",
     WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD.value: "三审",
     WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT.value: "三审",
     WorkOrderStatus.THIRD_REVIEWING.value: "三审",
-    WorkOrderStatus.THIRD_REVIEW_REJECTED.value: "三审",
+    WorkOrderStatus.THIRD_REVIEW_REJECTED.value: "三审退回",
     WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "正式报告文件",
     WorkOrderStatus.PRINTROOM_PROCESSING.value: "文印室出具",
     WorkOrderStatus.PAPER_REPORT_ISSUED.value: "文印室出具",
     WorkOrderStatus.WAIT_INVOICE_INFO.value: "开票信息",
-    WorkOrderStatus.INVOICE_INFO_REJECTED.value: "开票信息",
+    WorkOrderStatus.INVOICE_INFO_REJECTED.value: "开票信息退回",
     WorkOrderStatus.INVOICE_PROCESSING.value: "财务开票",
     WorkOrderStatus.INVOICE_ISSUED.value: "发票已开具",
     WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value: "报告归档",
     WorkOrderStatus.ARCHIVE_REVIEWING.value: "底稿审核",
-    WorkOrderStatus.ARCHIVE_REJECTED.value: "报告归档",
+    WorkOrderStatus.ARCHIVE_REJECTED.value: "报告归档退回",
     WorkOrderStatus.ARCHIVED.value: "已归档",
-    "ARCHIVED": "已归档",
 }
 
 
@@ -70,6 +74,7 @@ def list_work_orders(
             or_(
                 WorkOrder.initiator_user_id == current_user.id,
                 WorkOrder.project_leader_id == current_user.id,
+                WorkOrder.contract_reviewer_id == current_user.id,
                 WorkOrder.project_id.in_(member_project_subquery),
             ),
         )
@@ -99,7 +104,6 @@ def create_work_order(
         raise HTTPException(status_code=404, detail="关联项目不存在或不可用")
 
     work_order_no = project.project_code
-    title = project.project_name
     exists = (
         db.query(WorkOrder)
         .filter(WorkOrder.work_order_no == work_order_no, WorkOrder.project_id == payload.project_id)
@@ -111,7 +115,7 @@ def create_work_order(
     row = WorkOrder(
         **payload.model_dump(exclude={"work_order_no", "title"}),
         work_order_no=work_order_no,
-        title=title,
+        title=project.project_name,
         current_status=WorkOrderStatus.WORK_ORDER_CREATED.value,
         current_handler_user_id=project.project_leader_id,
         initiator_user_id=current_user.id,
@@ -141,7 +145,7 @@ def update_work_order(
     payload: WorkOrderUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    role_codes: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "THIRD_REVIEWER")),
+    role_codes: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "THIRD_REVIEWER", "CONTRACT_REVIEWER")),
 ) -> WorkOrderResponse:
     row = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not row:
@@ -149,6 +153,8 @@ def update_work_order(
 
     data = payload.model_dump(exclude_unset=True)
     signer_keys = {"signer_one", "signer_two", "formal_report_count"}
+    contract_keys = {"contract_reviewer_id"}
+
     if signer_keys & set(data) and "ADMIN" not in role_codes:
         if set(data) - signer_keys:
             raise HTTPException(status_code=403, detail="正式报告信息只能由三审老师在正式报告环节填写")
@@ -157,9 +163,14 @@ def update_work_order(
         if row.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
             raise HTTPException(status_code=400, detail="三审通过后才可填写正式报告信息")
         if current_user.id != row.third_reviewer_id:
-            raise HTTPException(status_code=403, detail="仅三审老师可填写签字评估师")
+            raise HTTPException(status_code=403, detail="仅该项目三审老师可填写签字评估师")
+    elif contract_keys & set(data) and "ADMIN" not in role_codes:
+        if set(data) - contract_keys:
+            raise HTTPException(status_code=403, detail="合同审核人只能单独更新合同审核人字段")
+        if "PROJECT_LEADER" not in role_codes and "SALES" not in role_codes:
+            raise HTTPException(status_code=403, detail="仅项目方可指定合同审核人")
     elif "ADMIN" not in role_codes and not ({"SALES", "PROJECT_LEADER"} & role_codes):
-        if not data or set(data) - signer_keys:
+        if not data or set(data) - signer_keys - contract_keys:
             raise HTTPException(status_code=403, detail="无权修改该工单")
 
     for key, value in data.items():

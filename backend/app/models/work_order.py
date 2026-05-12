@@ -1,4 +1,4 @@
-from sqlalchemy import String, ForeignKey, Text, DateTime, Integer
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -16,6 +16,7 @@ class WorkOrder(Base, TimestampMixin):
     current_handler_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     initiator_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     project_leader_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    contract_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     first_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     second_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     third_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

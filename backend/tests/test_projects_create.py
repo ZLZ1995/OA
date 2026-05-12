@@ -106,6 +106,7 @@ def test_complete_contract_upload_advances_to_review_submit() -> None:
     )
     work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project.id).one()
     work_order.current_status = "CONTRACT_UPLOADED"
+    work_order.contract_reviewer_id = user.id
     db.add(
         WorkOrderFile(
             work_order_id=work_order.id,
@@ -129,5 +130,5 @@ def test_complete_contract_upload_advances_to_review_submit() -> None:
     )
 
     db.refresh(work_order)
-    assert work_order.current_status == "WAIT_FIRST_REVIEW_SUBMIT"
+    assert work_order.current_status == "WAIT_CONTRACT_REVIEW_SUBMIT"
     assert work_order.current_handler_user_id == user.id

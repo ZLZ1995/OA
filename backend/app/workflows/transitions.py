@@ -6,13 +6,31 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
     WorkOrderStatus.WORK_ORDER_CREATED: {
         WorkOrderStatus.WAIT_CONTRACT_UPLOAD,
         WorkOrderStatus.CONTRACT_UPLOADED,
+        WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT,
     },
-    WorkOrderStatus.WAIT_CONTRACT_UPLOAD: {WorkOrderStatus.CONTRACT_UPLOADED},
+    WorkOrderStatus.WAIT_CONTRACT_UPLOAD: {
+        WorkOrderStatus.CONTRACT_UPLOADED,
+        WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT,
+    },
     WorkOrderStatus.CONTRACT_UPLOADED: {
         WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
         WorkOrderStatus.WAIT_PRINTROOM_OFFICIAL_CONTRACT,
+        WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT,
     },
     WorkOrderStatus.WAIT_PRINTROOM_OFFICIAL_CONTRACT: {WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT},
+    WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT: {WorkOrderStatus.CONTRACT_REVIEWING},
+    WorkOrderStatus.CONTRACT_REVIEWING: {
+        WorkOrderStatus.CONTRACT_REJECTED,
+        WorkOrderStatus.CONTRACT_APPROVED,
+    },
+    WorkOrderStatus.CONTRACT_REJECTED: {
+        WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT,
+        WorkOrderStatus.CONTRACT_REVIEWING,
+    },
+    WorkOrderStatus.CONTRACT_APPROVED: {
+        WorkOrderStatus.FIRST_REVIEWING,
+        WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
+    },
     WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT: {WorkOrderStatus.FIRST_REVIEWING},
     WorkOrderStatus.FIRST_REVIEWING: {
         WorkOrderStatus.FIRST_REVIEW_REJECTED,
@@ -47,11 +65,13 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
     WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM: {
         WorkOrderStatus.THIRD_REVIEWING,
         WorkOrderStatus.WAIT_CONTRACT_UPLOAD,
+        WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT,
         WorkOrderStatus.PRINTROOM_PROCESSING,
     },
     WorkOrderStatus.PRINTROOM_PROCESSING: {
         WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM,
         WorkOrderStatus.WAIT_CONTRACT_UPLOAD,
+        WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT,
         WorkOrderStatus.PAPER_REPORT_ISSUED,
     },
     WorkOrderStatus.PAPER_REPORT_ISSUED: {

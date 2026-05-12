@@ -11,6 +11,12 @@ export interface ProjectExportFilters {
   amount_max?: number
   project_date_from?: string
   project_date_to?: string
+  report_type?: string
+  valuation_base_date_from?: string
+  valuation_base_date_to?: string
+  business_salesman?: string
+  project_source?: 'INTERNAL' | 'EXTERNAL'
+  external_project_leader_name?: string
 }
 
 export interface ProjectExportItem {
@@ -21,6 +27,12 @@ export interface ProjectExportItem {
   report_no: string
   project_leader_name: string
   undertaking_unit: string
+  report_type: string
+  valuation_base_date: string
+  business_salesman: string
+  project_source: 'INTERNAL' | 'EXTERNAL'
+  project_source_display: string
+  external_project_leader_name: string
   amount: number | string
   signer_names: string
   first_reviewer_name: string

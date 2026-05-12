@@ -5,62 +5,93 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.api.v1.contract_reviews import get_contract_review_status_display
 from app.db.session import get_db
 from app.models.archive import Archive
+from app.models.contract_review_record import ContractReviewRecord
 from app.models.project import Project
+from app.models.project_member import ProjectMember
 from app.models.user import User
 from app.models.work_order import WorkOrder
-from app.models.project_member import ProjectMember
-from app.workflows.states import WorkOrderStatus
+from app.schemas.contract_review import ContractReviewRecordResponse
+from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectResponse, ProjectUpdate
 from app.schemas.project_flow import ProjectFlowProject, ProjectFlowResponse
-from app.services.workflow_log_service import create_workflow_log
-from app.services.project_flow import FLOW_STEPS, assert_project_creator, build_todo_action, get_project_status_display, get_user_role_in_project, normalize_project_step
-from app.schemas.project import (
-    ProjectCreate,
-    ProjectListResponse,
-    ProjectResponse,
-    ProjectUpdate,
+from app.services.project_flow import (
+    assert_project_creator,
+    build_todo_action,
+    get_flow_steps,
+    get_project_leader_display_name,
+    get_project_source_display,
+    get_project_status_display,
+    get_user_role_in_project,
+    normalize_project_step,
 )
+from app.services.workflow_log_service import create_workflow_log
+from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/projects", tags=["项目"])
-UNIT_CODE_MAP = {"中勤": "ZQ", "中立国际": "ZLGJ", "中众": "ZZ", "其他": "QT"}
+
+UNIT_CODE_MAP = {
+    "中勤": "ZQ",
+    "中联国际": "ZLGJ",
+    "中证": "ZZ",
+    "其他": "QT",
+}
+
+
 class ProjectTerminationRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
-STATUS_DISPLAY_MAP = {
-    "PROJECT_CREATED": "项目创建",
-    "WORK_ORDER_CREATED": "工单创建",
-    "CONTRACT_UPLOADED": "合同上传",
-    "FIRST_REVIEWING": "一审",
-    "SECOND_REVIEWING": "二审",
-    "THIRD_REVIEWING": "三审",
-    "PAPER_REPORT_ISSUED": "文印室出具",
-    "ARCHIVED": "已归档",
-}
-
-
 def _build_status_display(project: Project, latest_work_order_status: str | None) -> str:
-    return get_project_status_display(latest_work_order_status, project.archived_at is not None)
+    return get_project_status_display(latest_work_order_status, project.archived_at is not None, project.project_source)
+
+
+def _get_latest_work_order(db: Session, project_id: int) -> WorkOrder | None:
+    return db.query(WorkOrder).filter(WorkOrder.project_id == project_id).order_by(WorkOrder.id.desc()).first()
+
+
+def _serialize_contract_review_records(db: Session, work_order_id: int | None) -> list[ContractReviewRecordResponse]:
+    if not work_order_id:
+        return []
+    rows = (
+        db.query(ContractReviewRecord)
+        .filter(ContractReviewRecord.work_order_id == work_order_id)
+        .order_by(ContractReviewRecord.created_at.desc(), ContractReviewRecord.id.desc())
+        .all()
+    )
+    from app.api.v1.contract_reviews import _serialize_record  # local import to avoid cycles
+
+    return [_serialize_record(db, row) for row in rows]
 
 
 def _serialize_project(db: Session, project: Project) -> ProjectResponse:
-    latest_status = (
-        db.query(WorkOrder.current_status)
-        .filter(WorkOrder.project_id == project.id)
-        .order_by(WorkOrder.id.desc())
-        .limit(1)
-        .scalar()
-    )
+    work_order = _get_latest_work_order(db, project.id)
+    leader_name = db.query(User.real_name).filter(User.id == project.project_leader_id).scalar()
+    latest_status = work_order.current_status if work_order else None
+    status_cn = _build_status_display(project, latest_status)
     data = ProjectResponse.model_validate(project, from_attributes=True).model_dump()
     data.pop("status", None)
     data.pop("status_display", None)
-    data.pop("current_status", None)
-    status_cn = _build_status_display(project, latest_status)
+    data.pop("project_source_display", None)
+    data.pop("project_leader_display_name", None)
+    data.pop("contract_review_status", None)
+    data.pop("contract_review_status_display", None)
     return ProjectResponse(
         **data,
         status=status_cn,
         status_display=status_cn,
+        project_source_display=get_project_source_display(project.project_source),
+        project_leader_display_name=get_project_leader_display_name(project, leader_name),
+        contract_review_status=latest_status if latest_status in {
+            WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value,
+            WorkOrderStatus.CONTRACT_UPLOADED.value,
+            WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value,
+            WorkOrderStatus.CONTRACT_REVIEWING.value,
+            WorkOrderStatus.CONTRACT_REJECTED.value,
+            WorkOrderStatus.CONTRACT_APPROVED.value,
+        } else None,
+        contract_review_status_display=get_contract_review_status_display(latest_status),
     )
 
 
@@ -69,8 +100,7 @@ def _generate_project_code(db: Session, undertaking_unit: str) -> str:
     if not unit_code:
         raise HTTPException(status_code=400, detail="不支持的项目承接单位")
     now = datetime.now()
-    yyyymm = now.strftime("%Y%m")
-    prefix = f"{unit_code}-{yyyymm}-"
+    prefix = f"{unit_code}-{now.strftime('%Y%m')}-"
     latest = (
         db.query(Project.project_code)
         .filter(Project.project_code.like(f"{prefix}%"))
@@ -91,12 +121,7 @@ def list_projects(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> ProjectListResponse:
-    rows = (
-        db.query(Project)
-        .filter(Project.deleted_at.is_(None))
-        .order_by(Project.id.desc())
-        .all()
-    )
+    rows = db.query(Project).filter(Project.deleted_at.is_(None)).order_by(Project.id.desc()).all()
     return ProjectListResponse(items=[_serialize_project(db, row) for row in rows])
 
 
@@ -114,13 +139,11 @@ def list_project_options(
     return ProjectListResponse(items=[_serialize_project(db, row) for row in rows])
 
 
-
-
 @router.get("/generate-code")
 def generate_project_code(
     undertaking_unit: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> dict[str, str]:
     return {"project_code": _generate_project_code(db, undertaking_unit)}
 
@@ -140,11 +163,12 @@ def create_project(
     db.add(row)
     db.flush()
 
+    initial_status = WorkOrderStatus.WORK_ORDER_CREATED.value if row.project_source == "INTERNAL" else WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value
     work_order = WorkOrder(
         work_order_no=row.project_code,
         project_id=row.id,
         title=row.project_name,
-        current_status=WorkOrderStatus.WORK_ORDER_CREATED.value,
+        current_status=initial_status,
         current_handler_user_id=row.project_leader_id,
         initiator_user_id=current_user.id,
         project_leader_id=row.project_leader_id,
@@ -182,8 +206,16 @@ def update_project(
     assert_project_creator(row, current_user)
 
     data = payload.model_dump(exclude_unset=True)
+    project_source = data.get("project_source", row.project_source)
+    external_leader = data.get("external_project_leader_name", row.external_project_leader_name)
+    if project_source == "EXTERNAL" and not external_leader:
+        raise HTTPException(status_code=400, detail="外部项目必须填写外部项目负责人姓名")
+    if project_source != "EXTERNAL":
+        data["external_project_leader_name"] = None
+
     for key, value in data.items():
         setattr(row, key, value)
+
     db.commit()
     db.refresh(row)
     return _serialize_project(db, row)
@@ -216,10 +248,10 @@ def archive_project(
     row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
     if not row:
         raise HTTPException(status_code=404, detail="项目不存在")
-    work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project_id).order_by(WorkOrder.id.desc()).first()
+    work_order = _get_latest_work_order(db, project_id)
     is_member = db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
     if row.business_user_id != current_user.id and row.project_leader_id != current_user.id and not is_member:
-        raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可归档")
+        raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可归档")
     termination_approved = row.termination_status == "APPROVED"
     if not work_order or (work_order.archive_submission_type != "APPROVED" and not termination_approved):
         raise HTTPException(status_code=400, detail="底稿审核通过或终止/废止审核通过后才可归档")
@@ -227,17 +259,18 @@ def archive_project(
         row.archived_at = datetime.now()
     archived = db.query(Archive).filter(Archive.work_order_id == work_order.id).first()
     if not archived:
-        db.add(Archive(
-            work_order_id=work_order.id,
-            archived_by=current_user.id,
-            archive_no=work_order.work_order_no,
-            archive_location=None,
-            archive_at=datetime.now(),
-            remark="项目人员确认归档",
-        ))
-    if work_order:
-        work_order.current_status = WorkOrderStatus.ARCHIVED.value
-        work_order.current_handler_user_id = None
+        db.add(
+            Archive(
+                work_order_id=work_order.id,
+                archived_by=current_user.id,
+                archive_no=work_order.work_order_no,
+                archive_location=None,
+                archive_at=datetime.now(),
+                remark="项目人员确认归档",
+            )
+        )
+    work_order.current_status = WorkOrderStatus.ARCHIVED.value
+    work_order.current_handler_user_id = None
     db.commit()
     db.refresh(row)
     return _serialize_project(db, row)
@@ -255,10 +288,10 @@ def request_project_termination(
         raise HTTPException(status_code=404, detail="项目不存在")
     if row.archived_at is not None:
         raise HTTPException(status_code=400, detail="项目已归档，不可终止/废止")
-    work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project_id).order_by(WorkOrder.id.desc()).first()
+    work_order = _get_latest_work_order(db, project_id)
     is_member = db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
     if row.business_user_id != current_user.id and row.project_leader_id != current_user.id and not is_member:
-        raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可申请终止/废止")
+        raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可申请终止/废止")
     if row.termination_status == "PENDING":
         raise HTTPException(status_code=400, detail="终止/废止申请已在审核中")
 
@@ -295,7 +328,7 @@ def approve_project_termination(
     if row.termination_status != "PENDING":
         raise HTTPException(status_code=400, detail="当前无待审核的终止/废止申请")
 
-    work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project_id).order_by(WorkOrder.id.desc()).first()
+    work_order = _get_latest_work_order(db, project_id)
     row.termination_status = "APPROVED"
     row.termination_approved_by = current_user.id
     row.termination_approved_at = datetime.now()
@@ -325,16 +358,19 @@ def get_project_flow(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project_id).order_by(WorkOrder.id.desc()).first()
+    work_order = _get_latest_work_order(db, project_id)
     is_member = db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
 
     role = get_user_role_in_project(project, work_order, current_user, is_member)
     if role == "无权限":
         raise HTTPException(status_code=403, detail="无权查看该项目")
 
-    step = normalize_project_step(work_order.current_status if work_order else None, project.archived_at is not None)
+    step = normalize_project_step(work_order.current_status if work_order else None, project.archived_at is not None, project.project_source)
     is_termination_locked = project.termination_status in {"PENDING", "APPROVED"}
     action = "项目终止/废止流程处理中，当前业务已锁定" if is_termination_locked else build_todo_action(step, role) or "当前暂无待办操作"
+    leader_name = db.query(User.real_name).filter(User.id == project.project_leader_id).scalar()
+    contract_reviewer_name = db.query(User.real_name).filter(User.id == work_order.contract_reviewer_id).scalar() if work_order and work_order.contract_reviewer_id else None
+
     return ProjectFlowResponse(
         project=ProjectFlowProject(
             id=project.id,
@@ -342,12 +378,23 @@ def get_project_flow(
             project_name=project.project_name,
             client_name=project.client_name,
             undertaking_unit=project.undertaking_unit,
+            report_type=project.report_type,
+            valuation_base_date=project.valuation_base_date.strftime("%Y-%m-%d") if project.valuation_base_date else None,
+            business_salesman=project.business_salesman,
+            project_source=project.project_source,
+            project_source_display=get_project_source_display(project.project_source),
+            external_project_leader_name=project.external_project_leader_name,
+            project_leader_display_name=get_project_leader_display_name(project, leader_name),
             current_step=step,
             status_display=step,
         ),
         current_work_order_id=work_order.id if work_order else None,
         current_work_order_status=work_order.current_status if work_order else None,
         current_handler_user_id=work_order.current_handler_user_id if work_order else None,
+        contract_reviewer_id=work_order.contract_reviewer_id if work_order else None,
+        contract_reviewer_name=contract_reviewer_name,
+        contract_review_status=work_order.current_status if work_order else None,
+        contract_review_status_display=get_contract_review_status_display(work_order.current_status if work_order else None),
         first_reviewer_id=work_order.first_reviewer_id if work_order else None,
         second_reviewer_id=work_order.second_reviewer_id if work_order else None,
         third_reviewer_id=work_order.third_reviewer_id if work_order else None,
@@ -361,5 +408,6 @@ def get_project_flow(
         user_role_in_project=role,
         available_action=action,
         can_operate=role != "无权限" and not is_termination_locked,
-        flow_steps=FLOW_STEPS,
+        flow_steps=get_flow_steps(project),
+        contract_review_records=_serialize_contract_review_records(db, work_order.id if work_order else None),
     )

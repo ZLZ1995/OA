@@ -6,6 +6,7 @@ export interface WorkOrderItem {
   project_id: number
   title?: string
   current_status: string
+  contract_reviewer_id?: number | null
   signer_one?: string | null
   signer_two?: string | null
   formal_report_count?: number | null
