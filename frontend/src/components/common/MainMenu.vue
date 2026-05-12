@@ -1,5 +1,12 @@
 <template>
   <div class="menu-wrapper">
+    <div class="menu-brand">
+      <div class="brand-badge">中勤</div>
+      <div>
+        <strong>项目工作台</strong>
+        <span>流程管理系统</span>
+      </div>
+    </div>
     <el-menu :default-active="active" class="menu" router>
       <el-menu-item v-for="item in visibleMenus" :key="item.key" :index="item.path">{{ item.title }}</el-menu-item>
     </el-menu>
@@ -36,8 +43,80 @@ function onLogout() {
 </script>
 
 <style scoped>
-.menu-wrapper { height: 100%; display: flex; flex-direction: column; }
-.menu { flex: 1; overflow: auto; }
-.logout-zone { padding: 12px; border-top: 1px solid var(--el-border-color-lighter); }
+.menu-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.menu-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 76px;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--zq-border-soft);
+}
+
+.brand-badge {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--zq-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.menu-brand strong,
+.menu-brand span {
+  display: block;
+  line-height: 1.4;
+}
+
+.menu-brand strong {
+  font-size: 14px;
+  color: var(--zq-text);
+}
+
+.menu-brand span {
+  font-size: 12px;
+  color: var(--zq-muted);
+}
+
+.menu {
+  flex: 1;
+  overflow: auto;
+  border-right: 0;
+}
+
+.menu :deep(.el-menu-item) {
+  height: 44px;
+  margin: 6px 10px;
+  border-radius: 6px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.menu :deep(.el-menu-item.is-active) {
+  color: var(--zq-primary);
+  background: var(--zq-primary-soft);
+}
+
+.menu :deep(.el-menu-item.is-active::before) {
+  content: "";
+  width: 3px;
+  height: 20px;
+  position: absolute;
+  left: 0;
+  border-radius: 999px;
+  background: var(--zq-primary);
+}
+
+.logout-zone { padding: 12px; border-top: 1px solid var(--zq-border-soft); }
 .logout-btn { width: 100%; }
 </style>

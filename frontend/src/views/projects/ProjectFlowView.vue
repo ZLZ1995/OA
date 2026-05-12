@@ -1,7 +1,7 @@
 <template>
-  <el-row :gutter="12">
-    <el-col :span="5">
-      <el-card shadow="never">
+  <el-row class="project-flow-layout" :gutter="12">
+    <el-col :span="4">
+      <el-card class="flow-nav-card" shadow="never">
         <template #header>项目流程导航</template>
         <el-menu :default-active="activeNode" @select="onSelectNode">
           <el-menu-item v-for="node in visibleFlowNodes" :key="node.key" :index="node.key">{{ node.label }}</el-menu-item>
@@ -9,8 +9,8 @@
       </el-card>
     </el-col>
 
-    <el-col :span="15">
-      <el-card shadow="never">
+    <el-col :span="17">
+      <el-card class="flow-main-card" shadow="never">
         <template #header>
           <div class="panel-header">
             <span>当前环节办理区</span>
@@ -32,8 +32,8 @@
       </el-card>
     </el-col>
 
-    <el-col :span="4">
-      <el-card shadow="never">
+    <el-col :span="3">
+      <el-card class="flow-step-card" shadow="never">
         <template #header>办理流程图</template>
         <el-steps direction="vertical" :active="activeFlowStep" finish-status="success">
           <el-step v-for="step in stepTimeline" :key="step" :title="step" />
@@ -200,9 +200,45 @@ onMounted(load)
 </script>
 
 <style scoped>
+.project-flow-layout {
+  align-items: flex-start;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.flow-nav-card,
+.flow-main-card,
+.flow-step-card {
+  min-height: 280px;
+}
+
+.flow-nav-card :deep(.el-menu) {
+  border-right: 0;
+}
+
+.flow-nav-card :deep(.el-menu-item) {
+  height: 44px;
+  margin: 6px 0;
+  border-radius: 6px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.flow-nav-card :deep(.el-menu-item.is-active) {
+  color: var(--zq-primary);
+  background: var(--zq-primary-soft);
+}
+
+.flow-step-card :deep(.el-card__body) {
+  padding: 18px 14px;
+}
+
+.flow-step-card :deep(.el-step__title) {
+  font-size: 14px;
+  line-height: 1.35;
 }
 </style>
