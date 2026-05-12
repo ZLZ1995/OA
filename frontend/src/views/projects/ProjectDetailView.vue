@@ -9,9 +9,14 @@
         <el-descriptions-item label="承接单位">{{ project.undertaking_unit }}</el-descriptions-item>
         <el-descriptions-item label="项目名称">{{ project.project_name }}</el-descriptions-item>
         <el-descriptions-item label="客户名称">{{ project.client_name }}</el-descriptions-item>
-        <el-descriptions-item label="业务负责人ID">{{ project.business_user_id }}</el-descriptions-item>
-        <el-descriptions-item label="项目负责人ID">{{ project.project_leader_id }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ project.status_display }}</el-descriptions-item>
+        <el-descriptions-item label="报告类型">{{ project.report_type }}</el-descriptions-item>
+        <el-descriptions-item label="评估基准日">{{ project.valuation_base_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="项目承接业务员">{{ project.business_salesman || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="项目来源">{{ project.project_source_display }}</el-descriptions-item>
+        <el-descriptions-item label="项目负责人">{{ project.project_leader_display_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="外部项目负责人">{{ project.external_project_leader_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="合同审核状态">{{ project.contract_review_status_display || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="项目状态">{{ project.status_display }}</el-descriptions-item>
         <el-descriptions-item label="归档时间">{{ project.archived_at || '-' }}</el-descriptions-item>
       </el-descriptions>
 

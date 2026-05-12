@@ -40,6 +40,11 @@ def _parse_member_role(member_role: str) -> str:
     return db_role
 
 
+def _ensure_internal_project(project: Project) -> None:
+    if project.project_source == "EXTERNAL":
+        raise HTTPException(status_code=400, detail="外部项目不允许维护项目组成员")
+
+
 @router.get("", response_model=ProjectMemberListResponse)
 def list_project_members(
     project_id: int,
@@ -65,9 +70,9 @@ def batch_create_project_member(
     project = db.query(Project).filter(Project.id == payload.project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    _ensure_internal_project(project)
 
     db_role = _parse_member_role(payload.member_role)
-
     if db_role == "LEADER" and len(payload.user_ids) != 1:
         raise HTTPException(status_code=400, detail="项目负责人一次只能设置1人")
 
@@ -100,7 +105,6 @@ def batch_create_project_member(
     db.commit()
     for row, _ in created:
         db.refresh(row)
-
     return ProjectMemberListResponse(items=[_to_response(item, user) for item, user in created])
 
 
@@ -114,6 +118,10 @@ def update_project_member(
     row = db.query(ProjectMember).filter(ProjectMember.id == member_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="成员不存在")
+    project = db.query(Project).filter(Project.id == row.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    _ensure_internal_project(project)
 
     row.member_role = _parse_member_role(payload.member_role)
     db.commit()
@@ -134,6 +142,7 @@ def complete_project_members(
     project = db.query(Project).filter(Project.id == payload.project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    _ensure_internal_project(project)
 
     leader = (
         db.query(ProjectMember)
@@ -182,5 +191,9 @@ def delete_project_member(
     row = db.query(ProjectMember).filter(ProjectMember.id == member_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="成员不存在")
+    project = db.query(Project).filter(Project.id == row.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    _ensure_internal_project(project)
     db.delete(row)
     db.commit()

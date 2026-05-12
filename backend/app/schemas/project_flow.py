@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from app.schemas.contract_review import ContractReviewRecordResponse
+
 
 class ProjectFlowProject(BaseModel):
     id: int
@@ -7,6 +9,13 @@ class ProjectFlowProject(BaseModel):
     project_name: str
     client_name: str
     undertaking_unit: str
+    report_type: str | None = None
+    valuation_base_date: str | None = None
+    business_salesman: str | None = None
+    project_source: str = "INTERNAL"
+    project_source_display: str = "内部项目"
+    external_project_leader_name: str | None = None
+    project_leader_display_name: str | None = None
     current_step: str
     status_display: str
 
@@ -16,6 +25,10 @@ class ProjectFlowResponse(BaseModel):
     current_work_order_id: int | None = None
     current_work_order_status: str | None = None
     current_handler_user_id: int | None = None
+    contract_reviewer_id: int | None = None
+    contract_reviewer_name: str | None = None
+    contract_review_status: str | None = None
+    contract_review_status_display: str | None = None
     first_reviewer_id: int | None = None
     second_reviewer_id: int | None = None
     third_reviewer_id: int | None = None
@@ -30,3 +43,4 @@ class ProjectFlowResponse(BaseModel):
     available_action: str
     can_operate: bool
     flow_steps: list[str]
+    contract_review_records: list[ContractReviewRecordResponse] = []

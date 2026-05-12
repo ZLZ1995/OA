@@ -31,6 +31,7 @@ router = APIRouter(prefix="/reviews", tags=["审核"])
 
 ROUND_SUBMIT_STATUS = {
     "FIRST": {
+        WorkOrderStatus.CONTRACT_APPROVED,
         WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
         WorkOrderStatus.FIRST_REVIEW_REJECTED,
     },
@@ -88,18 +89,11 @@ def _ensure_reviewer_has_round_role(db: Session, reviewer_user_id: int, review_r
         db.query(UserRole.id)
         .join(Role, Role.id == UserRole.role_id)
         .join(User, User.id == UserRole.user_id)
-        .filter(
-            User.id == reviewer_user_id,
-            User.is_active.is_(True),
-            Role.code == required_role,
-        )
+        .filter(User.id == reviewer_user_id, User.is_active.is_(True), Role.code == required_role)
         .first()
     )
     if not exists:
-        raise HTTPException(
-            status_code=400,
-            detail=f"所选审核人不具备{review_round}轮审核角色",
-        )
+        raise HTTPException(status_code=400, detail=f"所选审核人不具备{review_round}轮审核角色")
 
 
 @router.get("/candidates", response_model=ReviewCandidateListResponse)
@@ -116,8 +110,8 @@ def list_review_candidates(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    if work_order.project_leader_id != current_user.id and "ADMIN" not in role_codes:
-        raise HTTPException(status_code=403, detail="仅项目负责人可查看审核候选人")
+    if current_user.id not in {work_order.project_leader_id, work_order.initiator_user_id} and "ADMIN" not in role_codes:
+        raise HTTPException(status_code=403, detail="仅项目负责人或创建人可查看审核候选人")
 
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if not project:
@@ -146,7 +140,6 @@ def list_review_candidates(
         .all()
     )
     allowed_ids = set(filter_candidates([u.id for u in reviewer_users], excluded_user_ids))
-
     return ReviewCandidateListResponse(
         items=[
             ReviewCandidateResponse(user_id=user.id, username=user.username, real_name=user.real_name)
@@ -161,14 +154,13 @@ def submit_review(
     payload: ReviewSubmitRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("PROJECT_LEADER")),
+    _: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
 ) -> ReviewRecordResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-
-    if work_order.project_leader_id != current_user.id:
-        raise HTTPException(status_code=403, detail="仅项目负责人可发起审核")
+    if current_user.id not in {work_order.project_leader_id, work_order.initiator_user_id} and not any(item.role.code == "ADMIN" for item in current_user.roles):
+        raise HTTPException(status_code=403, detail="仅项目负责人或创建人可发起审核")
 
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if not project:
@@ -190,6 +182,10 @@ def submit_review(
         raise HTTPException(status_code=400, detail=msg)
 
     from_status = WorkOrderStatus(work_order.current_status)
+    if payload.review_round == "FIRST" and from_status == WorkOrderStatus.CONTRACT_APPROVED:
+        work_order.current_status = WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT.value
+        from_status = WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT
+
     to_status = ROUND_REVIEWING_STATUS[payload.review_round]
     allowed_submit_statuses = ROUND_SUBMIT_STATUS[payload.review_round]
     if from_status not in allowed_submit_statuses:
@@ -246,7 +242,7 @@ def decide_review(
         "SECOND": work_order.second_reviewer_id,
         "THIRD": work_order.third_reviewer_id,
     }[payload.review_round]
-    if reviewer_id != current_user.id:
+    if reviewer_id != current_user.id and not any(item.role.code == "ADMIN" for item in current_user.roles):
         raise HTTPException(status_code=403, detail="仅当前轮审核老师可操作")
 
     from_status = WorkOrderStatus(work_order.current_status)
@@ -285,7 +281,6 @@ def decide_review(
         operator_user_id=current_user.id,
         remark=payload.comment,
     )
-
     db.commit()
     db.refresh(record)
     return _to_review_record_response(db, record)
@@ -300,12 +295,10 @@ def list_reviews(
     rows = (
         db.query(ReviewRecord)
         .filter(ReviewRecord.work_order_id == work_order_id)
-        .order_by(ReviewRecord.acted_at.desc())
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
         .all()
     )
-    return ReviewRecordListResponse(
-        items=[_to_review_record_response(db, item) for item in rows]
-    )
+    return ReviewRecordListResponse(items=[_to_review_record_response(db, item) for item in rows])
 
 
 @router.post("/work-orders/{work_order_id}/withdraw-latest")
@@ -331,7 +324,7 @@ def withdraw_latest_review_step(
     if "ADMIN" not in role_codes:
         if latest.action in {"APPROVE", "REJECT_RETURN"} and latest.reviewer_user_id != current_user.id:
             raise HTTPException(status_code=403, detail="只能撤回本人最新审核操作")
-        if latest.action == "SUBMIT" and work_order.project_leader_id != current_user.id:
+        if latest.action == "SUBMIT" and current_user.id not in {work_order.project_leader_id, work_order.initiator_user_id}:
             raise HTTPException(status_code=403, detail="只能由送审人员撤回最新送审操作")
 
     current_status = WorkOrderStatus(work_order.current_status)
@@ -375,10 +368,7 @@ def withdraw_latest_review_step(
 
     previous_record = (
         db.query(ReviewRecord)
-        .filter(
-            ReviewRecord.work_order_id == work_order_id,
-            ReviewRecord.acted_at < latest.acted_at,
-        )
+        .filter(ReviewRecord.work_order_id == work_order_id, ReviewRecord.acted_at < latest.acted_at)
         .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
         .first()
     )

@@ -57,11 +57,13 @@ import ReviewSubmitPanel from './panels/ReviewSubmitPanel.vue'
 import ReportIssuePanel from './panels/ReportIssuePanel.vue'
 import InvoicePanel from './panels/InvoicePanel.vue'
 import ArchivePanel from './panels/ArchivePanel.vue'
+import ContractReviewPanel from './panels/ContractReviewPanel.vue'
 
-const flowNodes = [
+const baseFlowNodes = [
   { key: 'basic', label: '项目基本信息' },
   { key: 'members', label: '项目组成员' },
   { key: 'contract', label: '合同上传' },
+  { key: 'contractReview', label: '合同审核' },
   { key: 'review', label: '报告送审' },
   { key: 'issue', label: '报告出具' },
   { key: 'invoice', label: '发票开具' },
@@ -72,27 +74,11 @@ const panelMap: Record<string, any> = {
   basic: ProjectBasicPanel,
   members: ProjectMembersPanel,
   contract: ContractUploadPanel,
+  contractReview: ContractReviewPanel,
   review: ReviewSubmitPanel,
   issue: ReportIssuePanel,
   invoice: InvoicePanel,
   archive: ArchivePanel
-}
-
-const stepTimeline = ['项目创建', '项目组成员', '合同上传', '报告送审', '报告出具', '发票开具', '报告归档']
-const stepAliasMap: Record<string, string> = {
-  项目创建: '项目创建',
-  项目组成员管理: '项目组成员',
-  项目组成员: '项目组成员',
-  合同上传: '合同上传',
-  报告送审: '报告送审',
-  一审: '报告送审',
-  二审: '报告送审',
-  三审: '报告送审',
-  报告出具: '报告出具',
-  开具发票: '发票开具',
-  发票开具: '发票开具',
-  报告归档: '报告归档',
-  已归档: '报告归档'
 }
 
 const route = useRoute()
@@ -101,15 +87,23 @@ const auth = useAuthStore()
 const projectId = Number(route.params.id)
 const flow = ref<ProjectFlowData | null>(null)
 const workOrderId = ref<number>()
-const activeNode = ref(flowNodes[0].key)
+const activeNode = ref('basic')
 const userRoles = computed(() => auth.user?.roles || [])
 const canProjectOperate = computed(() => Boolean(flow.value?.can_operate))
 const activePanel = computed(() => panelMap[activeNode.value] || ProjectBasicPanel)
+
+const availableNodes = computed(() => {
+  if (flow.value?.project.project_source === 'EXTERNAL') {
+    return baseFlowNodes.filter(node => node.key !== 'members')
+  }
+  return baseFlowNodes
+})
+
+const stepTimeline = computed(() => flow.value?.flow_steps || [])
 const activeFlowStep = computed(() => {
   const current = flow.value?.project.current_step
-  if (!current) return 0
-  const normalized = stepAliasMap[current] ?? current
-  const idx = stepTimeline.indexOf(normalized)
+  if (!current || !stepTimeline.value.length) return 0
+  const idx = stepTimeline.value.indexOf(current)
   return idx >= 0 ? idx : 0
 })
 
@@ -118,25 +112,28 @@ const visibleFlowNodes = computed(() => {
   const roles = userRoles.value
   const canSeeAll = ['管理员', '项目负责人', '项目组成员', '创建人'].includes(roleName)
 
-  if (canSeeAll) return flowNodes
+  if (canSeeAll) return availableNodes.value
+  if (roleName === '合同审核人' || roles.includes('CONTRACT_REVIEWER')) {
+    return availableNodes.value.filter(node => ['basic', 'contractReview'].includes(node.key))
+  }
   if (roleName.includes('审老师') || roles.some(role => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].includes(role))) {
-    return flowNodes.filter(node => node.key === 'review')
+    return availableNodes.value.filter(node => node.key === 'review')
   }
   if (roleName === '文印室' || roles.includes('PRINT_ROOM')) {
-    return flowNodes.filter(node => node.key === 'issue')
+    return availableNodes.value.filter(node => node.key === 'issue')
   }
   if (roleName === '财务' || roles.includes('FINANCE')) {
-    return flowNodes.filter(node => node.key === 'invoice')
+    return availableNodes.value.filter(node => node.key === 'invoice')
   }
   if (roles.includes('ARCHIVE_MANAGER')) {
-    return flowNodes.filter(node => node.key === 'archive')
+    return availableNodes.value.filter(node => node.key === 'archive')
   }
-  return flowNodes.filter(node => node.key === activeNode.value)
+  return availableNodes.value.filter(node => node.key === activeNode.value)
 })
 
 function ensureVisibleActiveNode() {
   if (!visibleFlowNodes.value.some(node => node.key === activeNode.value)) {
-    activeNode.value = visibleFlowNodes.value[0]?.key || flowNodes[0].key
+    activeNode.value = visibleFlowNodes.value[0]?.key || availableNodes.value[0]?.key || 'basic'
   }
 }
 

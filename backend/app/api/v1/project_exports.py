@@ -15,6 +15,7 @@ from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.services.project_flow import get_project_leader_display_name, get_project_source_display
 
 router = APIRouter(prefix="/project-exports", tags=["项目清单导出"])
 
@@ -76,27 +77,27 @@ def _xlsx(rows: list[list[object]]) -> bytes:
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
         '<sheetData>'
         f'{"".join(sheet_rows)}'
-        '</sheetData>'
-        '</worksheet>'
+        "</sheetData>"
+        "</worksheet>"
     )
     workbook_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
         '<sheets><sheet name="项目清单" sheetId="1" r:id="rId1"/></sheets>'
-        '</workbook>'
+        "</workbook>"
     )
     rels_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
-        '</Relationships>'
+        "</Relationships>"
     )
     workbook_rels_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
-        '</Relationships>'
+        "</Relationships>"
     )
     content_types_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -105,7 +106,7 @@ def _xlsx(rows: list[list[object]]) -> bytes:
         '<Default Extension="xml" ContentType="application/xml"/>'
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
         '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-        '</Types>'
+        "</Types>"
     )
 
     buffer = BytesIO()
@@ -130,6 +131,12 @@ def _collect_rows(
     amount_max: float | None,
     project_date_from: date | None,
     project_date_to: date | None,
+    report_type: str | None = None,
+    valuation_base_date_from: date | None = None,
+    valuation_base_date_to: date | None = None,
+    business_salesman: str | None = None,
+    project_source: str | None = None,
+    external_project_leader_name: str | None = None,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     projects = db.query(Project).filter(Project.deleted_at.is_(None)).order_by(Project.id.desc()).all()
@@ -146,6 +153,7 @@ def _collect_rows(
         second_reviewer_name = _user_name(db, work_order.second_reviewer_id) if work_order else ""
         third_reviewer_name = _user_name(db, work_order.third_reviewer_id) if work_order else ""
         project_created_date = _project_created_date(project)
+        leader_display_name = get_project_leader_display_name(project, leader.real_name if leader else None) or ""
 
         if not _contains(project.project_code, project_no):
             continue
@@ -153,7 +161,7 @@ def _collect_rows(
             continue
         if not _contains(record.paper_report_no if record else None, report_no):
             continue
-        if not _contains(leader.real_name if leader else None, project_leader_name):
+        if not _contains(leader_display_name, project_leader_name):
             continue
         if undertaking_unit and project.undertaking_unit != undertaking_unit:
             continue
@@ -167,22 +175,42 @@ def _collect_rows(
             continue
         if project_date_to and project_created_date > project_date_to:
             continue
+        if report_type and project.report_type != report_type:
+            continue
+        if valuation_base_date_from and (project.valuation_base_date is None or project.valuation_base_date < valuation_base_date_from):
+            continue
+        if valuation_base_date_to and (project.valuation_base_date is None or project.valuation_base_date > valuation_base_date_to):
+            continue
+        if not _contains(project.business_salesman, business_salesman):
+            continue
+        if project_source and project.project_source != project_source:
+            continue
+        if not _contains(project.external_project_leader_name, external_project_leader_name):
+            continue
 
-        rows.append({
-            "project_no": project.project_code,
-            "project_name": project.project_name,
-            "project_created_date": _format_date(project_created_date),
-            "project_progress": _project_progress(project, work_order),
-            "report_no": record.paper_report_no if record else "",
-            "project_leader_name": leader.real_name if leader else "",
-            "undertaking_unit": project.undertaking_unit,
-            "amount": amount if amount is not None else "",
-            "signer_names": signers,
-            "first_reviewer_name": first_reviewer_name,
-            "second_reviewer_name": second_reviewer_name,
-            "third_reviewer_name": third_reviewer_name,
-            "archive_date": _format_date(archived_at),
-        })
+        rows.append(
+            {
+                "project_no": project.project_code,
+                "project_name": project.project_name,
+                "project_created_date": _format_date(project_created_date),
+                "project_progress": _project_progress(project, work_order),
+                "report_no": record.paper_report_no if record else "",
+                "project_leader_name": leader_display_name,
+                "undertaking_unit": project.undertaking_unit,
+                "report_type": project.report_type or "",
+                "valuation_base_date": _format_date(project.valuation_base_date),
+                "business_salesman": project.business_salesman or "",
+                "project_source": project.project_source,
+                "project_source_display": get_project_source_display(project.project_source),
+                "external_project_leader_name": project.external_project_leader_name or "",
+                "amount": amount if amount is not None else "",
+                "signer_names": signers,
+                "first_reviewer_name": first_reviewer_name,
+                "second_reviewer_name": second_reviewer_name,
+                "third_reviewer_name": third_reviewer_name,
+                "archive_date": _format_date(archived_at),
+            }
+        )
     return rows
 
 
@@ -198,10 +226,36 @@ def list_project_export_rows(
     amount_max: float | None = Query(default=None, ge=0),
     project_date_from: date | None = None,
     project_date_to: date | None = None,
+    report_type: str | None = None,
+    valuation_base_date_from: date | None = None,
+    valuation_base_date_to: date | None = None,
+    business_salesman: str | None = None,
+    project_source: str | None = None,
+    external_project_leader_name: str | None = None,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> dict[str, list[dict[str, object]]]:
-    return {"items": _collect_rows(db, project_no, project_name, report_no, project_leader_name, undertaking_unit, signer_name, amount_min, amount_max, project_date_from, project_date_to)}
+    return {
+        "items": _collect_rows(
+            db,
+            project_no,
+            project_name,
+            report_no,
+            project_leader_name,
+            undertaking_unit,
+            signer_name,
+            amount_min,
+            amount_max,
+            project_date_from,
+            project_date_to,
+            report_type,
+            valuation_base_date_from,
+            valuation_base_date_to,
+            business_salesman,
+            project_source,
+            external_project_leader_name,
+        )
+    }
 
 
 @router.get("/excel")
@@ -216,29 +270,79 @@ def export_project_rows_excel(
     amount_max: float | None = Query(default=None, ge=0),
     project_date_from: date | None = None,
     project_date_to: date | None = None,
+    report_type: str | None = None,
+    valuation_base_date_from: date | None = None,
+    valuation_base_date_to: date | None = None,
+    business_salesman: str | None = None,
+    project_source: str | None = None,
+    external_project_leader_name: str | None = None,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> Response:
-    rows = _collect_rows(db, project_no, project_name, report_no, project_leader_name, undertaking_unit, signer_name, amount_min, amount_max, project_date_from, project_date_to)
-    data = [["项目编号", "项目名称", "项目立项日期", "项目进度", "报告编号", "项目负责人姓名", "承接单位", "收费金额", "签字评估师姓名", "一审人员姓名", "二审人员姓名", "三审人员姓名", "归档日期"]]
-    data.extend([
+    rows = _collect_rows(
+        db,
+        project_no,
+        project_name,
+        report_no,
+        project_leader_name,
+        undertaking_unit,
+        signer_name,
+        amount_min,
+        amount_max,
+        project_date_from,
+        project_date_to,
+        report_type,
+        valuation_base_date_from,
+        valuation_base_date_to,
+        business_salesman,
+        project_source,
+        external_project_leader_name,
+    )
+    data = [[
+        "项目编号",
+        "项目名称",
+        "项目立项日期",
+        "项目进度",
+        "报告编号",
+        "项目负责人姓名",
+        "承接单位",
+        "报告类型",
+        "评估基准日",
+        "项目承接业务员",
+        "项目来源",
+        "外部项目负责人姓名",
+        "收费金额",
+        "签字评估师姓名",
+        "一审人员姓名",
+        "二审人员姓名",
+        "三审人员姓名",
+        "归档日期",
+    ]]
+    data.extend(
         [
-            row["project_no"],
-            row["project_name"],
-            row["project_created_date"],
-            row["project_progress"],
-            row["report_no"],
-            row["project_leader_name"],
-            row["undertaking_unit"],
-            row["amount"],
-            row["signer_names"],
-            row["first_reviewer_name"],
-            row["second_reviewer_name"],
-            row["third_reviewer_name"],
-            row["archive_date"],
+            [
+                row["project_no"],
+                row["project_name"],
+                row["project_created_date"],
+                row["project_progress"],
+                row["report_no"],
+                row["project_leader_name"],
+                row["undertaking_unit"],
+                row["report_type"],
+                row["valuation_base_date"],
+                row["business_salesman"],
+                row["project_source_display"],
+                row["external_project_leader_name"],
+                row["amount"],
+                row["signer_names"],
+                row["first_reviewer_name"],
+                row["second_reviewer_name"],
+                row["third_reviewer_name"],
+                row["archive_date"],
+            ]
+            for row in rows
         ]
-        for row in rows
-    ])
+    )
     content = _xlsx(data)
     filename = f"project-list-{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
     return Response(

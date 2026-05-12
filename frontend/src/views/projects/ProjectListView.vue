@@ -1,76 +1,113 @@
 <template>
   <el-card class="page-card" shadow="never">
     <template #header>项目列表</template>
-    <el-form inline @submit.prevent>
-      <el-form-item label="项目编号">
-        <el-input v-model="form.project_code" placeholder="可留空自动生成" />
-        <div style="margin-top: 8px">
-          <el-button text type="primary" :loading="generatingCode" @click="onGenerateCode">生成编号</el-button>
-        </div>
-      </el-form-item>
-      <el-form-item label="承接单位">
-        <el-select v-model="form.undertaking_unit" style="width: 160px">
-          <el-option label="中勤" value="中勤" />
-          <el-option label="中立国际" value="中立国际" />
-          <el-option label="中众" value="中众" />
-          <el-option label="其他" value="其他" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="项目名称">
-        <el-input v-model="form.project_name" />
-      </el-form-item>
-      <el-form-item label="客户名称">
-        <el-input v-model="form.client_name" />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="onCreate">新建项目</el-button>
-      </el-form-item>
+
+    <el-form label-width="120px" @submit.prevent>
+      <el-row :gutter="12">
+        <el-col :span="8">
+          <el-form-item label="项目编号">
+            <el-input v-model="form.project_code" placeholder="可留空自动生成" />
+            <div style="margin-top: 8px">
+              <el-button text type="primary" :loading="generatingCode" @click="onGenerateCode">生成编号</el-button>
+            </div>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="承接单位">
+            <el-select v-model="form.undertaking_unit" style="width: 100%">
+              <el-option label="中勤" value="中勤" />
+              <el-option label="中联国际" value="中联国际" />
+              <el-option label="中证" value="中证" />
+              <el-option label="其他" value="其他" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="报告类型">
+            <el-select v-model="form.report_type" style="width: 100%">
+              <el-option label="评估报告" value="评估报告" />
+              <el-option label="估值报告" value="估值报告" />
+              <el-option label="咨询报告" value="咨询报告" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="项目名称">
+            <el-input v-model="form.project_name" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="客户名称">
+            <el-input v-model="form.client_name" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="评估基准日">
+            <el-date-picker v-model="form.valuation_base_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="项目承接业务员">
+            <el-input v-model="form.business_salesman" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="项目来源">
+            <el-radio-group v-model="form.project_source">
+              <el-radio-button label="INTERNAL">内部项目</el-radio-button>
+              <el-radio-button label="EXTERNAL">外部项目</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+        </el-col>
+        <el-col v-if="form.project_source === 'EXTERNAL'" :span="8">
+          <el-form-item label="外部项目负责人">
+            <el-input v-model="form.external_project_leader_name" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="24">
+          <el-form-item>
+            <el-button type="primary" @click="onCreate">新建项目</el-button>
+          </el-form-item>
+        </el-col>
+      </el-row>
     </el-form>
 
     <el-table :data="rows" style="margin-top: 12px" v-loading="loading">
-      <el-table-column prop="project_code" label="项目编号" />
-      <el-table-column prop="project_name" label="项目名称" />
-      <el-table-column prop="client_name" label="客户名称" />
-      <el-table-column prop="project_leader_id" label="项目负责人ID" />
-      <el-table-column prop="status_display" label="状态显示" />
-            <el-table-column label="操作" width="200">
+      <el-table-column prop="project_code" label="项目编号" min-width="150" />
+      <el-table-column prop="project_name" label="项目名称" min-width="160" />
+      <el-table-column prop="client_name" label="客户名称" min-width="160" />
+      <el-table-column prop="report_type" label="报告类型" min-width="110" />
+      <el-table-column prop="valuation_base_date" label="评估基准日" min-width="120" />
+      <el-table-column prop="business_salesman" label="项目承接业务员" min-width="140" />
+      <el-table-column prop="project_source_display" label="项目来源" min-width="100" />
+      <el-table-column prop="project_leader_display_name" label="项目负责人" min-width="130" />
+      <el-table-column prop="contract_review_status_display" label="合同审核状态" min-width="130" />
+      <el-table-column prop="status_display" label="当前状态" min-width="120" />
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
+          <el-button type="primary" link @click="goDetail(row.id)">详情</el-button>
           <el-button type="warning" link @click="onArchive(row)">归档</el-button>
           <el-button type="danger" link @click="onDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
-
-    <el-dialog v-model="editDialogVisible" title="编辑项目" width="460px">
-      <el-form label-width="88px">
-        <el-form-item label="项目名称">
-          <el-input v-model="editing.project_name" />
-        </el-form-item>
-        <el-form-item label="客户名称">
-          <el-input v-model="editing.client_name" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveProject">保存</el-button>
-      </template>
-    </el-dialog>
   </el-card>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
 import {
   archiveProject,
   createProject,
   deleteProject,
   generateProjectCode,
   listProjects,
-  updateProject,
-  type ProjectItem
+  type ProjectItem,
+  type ProjectUndertakingUnit,
+  type ReportType,
+  type ProjectSource
 } from '@/api/projects'
 import { useAuthStore } from '@/store/auth'
 
@@ -79,18 +116,17 @@ const router = useRouter()
 const loading = ref(false)
 const rows = ref<ProjectItem[]>([])
 const generatingCode = ref(false)
-const editDialogVisible = ref(false)
-const editing = reactive({
-  id: 0,
-  project_name: '',
-  client_name: ''
-})
 
 const form = reactive({
   project_code: '',
-  undertaking_unit: '中勤' as '中勤' | '中立国际' | '中众' | '其他',
+  undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_name: '',
-  client_name: ''
+  client_name: '',
+  report_type: '评估报告' as ReportType,
+  valuation_base_date: '',
+  business_salesman: '',
+  project_source: 'INTERNAL' as ProjectSource,
+  external_project_leader_name: ''
 })
 
 async function loadProjects() {
@@ -102,8 +138,6 @@ async function loadProjects() {
     loading.value = false
   }
 }
-
-
 
 async function onGenerateCode() {
   generatingCode.value = true
@@ -126,10 +160,20 @@ async function onCreate() {
     await router.push('/login')
     return
   }
-  if (!form.project_name || !form.client_name || !form.undertaking_unit) {
-    ElMessage.warning('请填写完整项目信息')
+
+  if (!form.project_name || !form.client_name || !form.undertaking_unit || !form.report_type) {
+    ElMessage.warning('请填写完整项目基础信息')
     return
   }
+  if (!form.business_salesman.trim()) {
+    ElMessage.warning('请填写项目承接业务员')
+    return
+  }
+  if (form.project_source === 'EXTERNAL' && !form.external_project_leader_name.trim()) {
+    ElMessage.warning('外部项目必须填写外部项目负责人姓名')
+    return
+  }
+
   try {
     const projectCode = form.project_code.trim()
     await createProject({
@@ -137,6 +181,11 @@ async function onCreate() {
       undertaking_unit: form.undertaking_unit,
       project_name: form.project_name,
       client_name: form.client_name,
+      report_type: form.report_type,
+      valuation_base_date: form.valuation_base_date || undefined,
+      business_salesman: form.business_salesman.trim(),
+      project_source: form.project_source,
+      external_project_leader_name: form.project_source === 'EXTERNAL' ? form.external_project_leader_name.trim() : undefined,
       business_user_id: currentUser.id,
       project_leader_id: currentUser.id
     })
@@ -145,6 +194,11 @@ async function onCreate() {
     form.undertaking_unit = '中勤'
     form.project_name = ''
     form.client_name = ''
+    form.report_type = '评估报告'
+    form.valuation_base_date = ''
+    form.business_salesman = ''
+    form.project_source = 'INTERNAL'
+    form.external_project_leader_name = ''
     await loadProjects()
   } catch (error: any) {
     const status = error?.response?.status
@@ -179,7 +233,7 @@ async function onDelete(row: ProjectItem) {
 
 async function onArchive(row: ProjectItem) {
   await ElMessageBox.confirm(
-    '确认归档该项目吗？归档后表示该项目流程已结束，项目将不再进入后续工单管理选择范围。',
+    '确认归档该项目吗？归档后表示该项目流程已结束，不再进入后续工单办理范围。',
     '归档确认',
     { type: 'warning' }
   )
@@ -188,15 +242,8 @@ async function onArchive(row: ProjectItem) {
   await loadProjects()
 }
 
-async function saveProject() {
-  if (!editing.id) return
-  await updateProject(editing.id, {
-    project_name: editing.project_name,
-    client_name: editing.client_name
-  })
-  editDialogVisible.value = false
-  ElMessage.success('项目已更新')
-  await loadProjects()
+function goDetail(projectId: number) {
+  router.push(`/projects/${projectId}`)
 }
 
 onMounted(loadProjects)

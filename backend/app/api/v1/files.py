@@ -1,9 +1,7 @@
 from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-
 from pathlib import Path
 
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -11,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.project import Project
+from app.models.project_member import ProjectMember
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
@@ -38,6 +38,38 @@ def _to_file_response(row: WorkOrderFile) -> WorkOrderFileResponse:
     )
 
 
+def _ensure_project_contract_operator(db: Session, work_order: WorkOrder, current_user: User) -> None:
+    if any(item.role.code == "ADMIN" for item in current_user.roles):
+        return
+    if work_order.project_leader_id == current_user.id:
+        return
+    if current_user.id == work_order.initiator_user_id:
+        return
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project and project.project_source == "EXTERNAL":
+        raise HTTPException(status_code=403, detail="外部项目仅项目创建人或负责人可操作合同")
+    is_member = db.query(ProjectMember.id).filter(
+        ProjectMember.project_id == work_order.project_id,
+        ProjectMember.user_id == current_user.id,
+    ).first()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可操作合同")
+
+
+def _get_latest_contract_file(db: Session, work_order_id: int) -> WorkOrderFile | None:
+    return (
+        db.query(WorkOrderFile)
+        .filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.file_category == "CONTRACT",
+            WorkOrderFile.business_stage == "CONTRACT",
+            WorkOrderFile.is_current.is_(True),
+        )
+        .order_by(WorkOrderFile.version_no.desc())
+        .first()
+    )
+
+
 @router.post("/upload", response_model=WorkOrderFileResponse, status_code=status.HTTP_201_CREATED)
 def upload_file(
     work_order_id: int = Form(...),
@@ -46,11 +78,30 @@ def upload_file(
     upload: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER", "PRINT_ROOM", "FINANCE", "FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER", "ARCHIVE_MANAGER")),
+    _: set[str] = Depends(
+        require_roles(
+            "ADMIN",
+            "SALES",
+            "PROJECT_LEADER",
+            "PROJECT_MEMBER",
+            "PRINT_ROOM",
+            "FINANCE",
+            "CONTRACT_REVIEWER",
+            "FIRST_REVIEWER",
+            "SECOND_REVIEWER",
+            "THIRD_REVIEWER",
+            "ARCHIVE_MANAGER",
+        )
+    ),
 ) -> WorkOrderFileResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+
+    if file_category == "CONTRACT":
+        if work_order.current_status in {WorkOrderStatus.CONTRACT_REVIEWING.value, WorkOrderStatus.CONTRACT_APPROVED.value}:
+            raise HTTPException(status_code=400, detail="合同审核中或已通过，合同文件已锁定")
+        _ensure_project_contract_operator(db, work_order, current_user)
 
     if file_category == "FORMAL_REPORT":
         if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
@@ -96,10 +147,11 @@ def upload_file(
     )
     db.add(row)
 
-    if work_order.current_status in {
+    if file_category == "CONTRACT" and work_order.current_status in {
         WorkOrderStatus.WORK_ORDER_CREATED.value,
         WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value,
-    } and file_category == "CONTRACT":
+        WorkOrderStatus.CONTRACT_REJECTED.value,
+    }:
         work_order.current_status = WorkOrderStatus.CONTRACT_UPLOADED.value
         work_order.current_handler_user_id = work_order.project_leader_id
 
@@ -128,11 +180,35 @@ def replace_work_order_file(
     file_id: int,
     upload: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER", "PRINT_ROOM", "FINANCE", "FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER", "ARCHIVE_MANAGER")),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(
+        require_roles(
+            "ADMIN",
+            "SALES",
+            "PROJECT_LEADER",
+            "PROJECT_MEMBER",
+            "PRINT_ROOM",
+            "FINANCE",
+            "CONTRACT_REVIEWER",
+            "FIRST_REVIEWER",
+            "SECOND_REVIEWER",
+            "THIRD_REVIEWER",
+            "ARCHIVE_MANAGER",
+        )
+    ),
 ) -> WorkOrderFileResponse:
     row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="文件不存在")
+
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == row.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    if row.file_category == "CONTRACT":
+        if work_order.current_status in {WorkOrderStatus.CONTRACT_REVIEWING.value, WorkOrderStatus.CONTRACT_APPROVED.value}:
+            raise HTTPException(status_code=400, detail="合同审核中或已通过，合同文件已锁定")
+        _ensure_project_contract_operator(db, work_order, current_user)
 
     old_path = Path(settings.local_storage_dir) / row.storage_key
     storage_key, file_size = save_upload_file(upload)
@@ -158,25 +234,16 @@ def complete_contract_upload(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+    _ensure_project_contract_operator(db, work_order, current_user)
 
-    has_contract = (
-        db.query(WorkOrderFile.id)
-        .filter(
-            and_(
-                WorkOrderFile.work_order_id == work_order_id,
-                or_(
-                    WorkOrderFile.file_category == "CONTRACT",
-                    WorkOrderFile.business_stage == "CONTRACT",
-                ),
-            )
-        )
-        .first()
-    )
+    has_contract = _get_latest_contract_file(db, work_order_id)
     if not has_contract:
         raise HTTPException(status_code=400, detail="请先上传合同扫描件")
+    if not work_order.contract_reviewer_id:
+        raise HTTPException(status_code=400, detail="请先选择合同审核人")
 
     from_status = WorkOrderStatus(work_order.current_status)
-    to_status = WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT
+    to_status = WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT
     if from_status == to_status:
         return {"status": "ok"}
 
@@ -184,9 +251,10 @@ def complete_contract_upload(
         WorkOrderStatus.WORK_ORDER_CREATED,
         WorkOrderStatus.WAIT_CONTRACT_UPLOAD,
         WorkOrderStatus.CONTRACT_UPLOADED,
+        WorkOrderStatus.CONTRACT_REJECTED,
     }
     if from_status not in allowed_statuses:
-        raise HTTPException(status_code=400, detail="当前工单状态无法提交合同上传")
+        raise HTTPException(status_code=400, detail="当前工单状态无法提交合同审核")
 
     work_order.current_status = to_status.value
     work_order.current_handler_user_id = work_order.project_leader_id
@@ -197,7 +265,7 @@ def complete_contract_upload(
         to_status=to_status.value,
         action_type="COMPLETE_CONTRACT_UPLOAD",
         operator_user_id=current_user.id,
-        remark="合同上传完成，进入报告送审",
+        remark="合同上传完成，待提交合同审核",
     )
     db.commit()
     return {"status": "ok"}
