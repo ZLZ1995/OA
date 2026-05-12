@@ -122,7 +122,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         if can_approve_termination:
             step = "项目终止/废止审核"
         elif work_order.current_status == "CONTRACT_REVIEWING" and work_order.contract_reviewer_id == current_user.id:
-            step = "合同审核"
+            step = "合同初稿审核"
         elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
             step = "财务开票"
         elif rejected_invoice and is_project_party:
@@ -148,8 +148,8 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             if can_approve_termination
             else "开票信息被退回，请修改后重新提交"
             if rejected_invoice and is_project_party
-            else "请处理合同审核"
-            if step == "合同审核" and work_order.contract_reviewer_id == current_user.id
+            else "请处理合同初稿审核"
+            if step == "合同初稿审核" and work_order.contract_reviewer_id == current_user.id
             else f"待处理：{step}"
         )
         todo_projects.append(

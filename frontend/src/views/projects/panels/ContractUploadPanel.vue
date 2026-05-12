@@ -3,7 +3,7 @@
     v-if="!canEdit"
     type="info"
     :closable="false"
-    title="当前账号无合同上传权限，仅可查看。"
+    title="当前账号无合同初稿上传权限，仅可查看。"
     show-icon
     style="margin-bottom: 12px"
   />
@@ -12,14 +12,14 @@
     v-if="isLocked"
     type="success"
     :closable="false"
-    title="合同审核已通过，合同文件已锁定。"
+    title="合同初稿审核已通过，合同初稿文件已锁定。"
     show-icon
     style="margin-bottom: 12px"
   />
 
   <el-form label-width="120px">
     <el-form-item label="当前审核状态">
-      <el-tag :type="statusTagType" effect="plain">{{ flowInfo?.contract_review_status_display || '待上传合同' }}</el-tag>
+      <el-tag :type="statusTagType" effect="plain">{{ flowInfo?.contract_review_status_display || '待上传合同初稿' }}</el-tag>
     </el-form-item>
     <el-form-item label="合同审核人">
       <el-select v-model="reviewerId" placeholder="选择合同审核人" style="width: 320px" :disabled="!canSubmitContract">
@@ -29,16 +29,16 @@
     <el-form-item label="提交说明">
       <el-input v-model="comment" type="textarea" :rows="3" :disabled="!canSubmitContract" />
     </el-form-item>
-    <el-form-item label="上传合同">
+    <el-form-item label="上传合同初稿">
       <el-upload :auto-upload="false" :on-change="onSelect" :show-file-list="false" :disabled="!canEditContract">
-        <el-button type="primary" :disabled="!canEditContract">上传合同扫描件</el-button>
+        <el-button type="primary" :disabled="!canEditContract">上传合同初稿扫描件</el-button>
       </el-upload>
     </el-form-item>
   </el-form>
 
   <el-table :data="contracts" style="margin-top: 12px" v-loading="loading">
     <el-table-column prop="origin_file_name" label="文件名" min-width="220" />
-    <el-table-column prop="uploaded_by" label="上传人ID" width="100" />
+    <el-table-column prop="uploaded_by_name" label="上传人" min-width="120" />
     <el-table-column prop="uploaded_at" label="上传时间" min-width="190" />
     <el-table-column label="操作" width="220">
       <template #default="{ row }">
@@ -63,7 +63,7 @@
       :loading="submitting"
       @click="onComplete"
     >
-      提交合同审核
+      提交合同初稿审核
     </el-button>
   </div>
 </template>
@@ -114,7 +114,7 @@ async function load() {
   loading.value = true
   try {
     const files = (await listWorkOrderFiles(props.workOrderId)).items
-    contracts.value = files.filter(file => file.business_stage === 'CONTRACT' || file.file_category === 'CONTRACT')
+    contracts.value = files.filter(file => file.business_stage === 'CONTRACT_DRAFT' || file.file_category === 'CONTRACT_DRAFT')
     reviewerId.value = props.flowInfo?.contract_reviewer_id || reviewerId.value
     reviewerOptions.value = (await listUserCandidates('CONTRACT_REVIEWER')).items
   } finally {
@@ -123,22 +123,22 @@ async function load() {
 }
 
 async function onSelect(file: UploadFile) {
-  if (!props.workOrderId) return ElMessage.warning('当前项目暂无关联工单，无法上传合同')
+  if (!props.workOrderId) return ElMessage.warning('当前项目暂无关联工单，无法上传合同初稿')
   if (!file.raw) return
   await uploadWorkOrderFile({
     work_order_id: props.workOrderId,
-    file_category: 'CONTRACT',
-    business_stage: 'CONTRACT',
+    file_category: 'CONTRACT_DRAFT',
+    business_stage: 'CONTRACT_DRAFT',
     file: file.raw
   })
-  ElMessage.success('合同上传成功')
+  ElMessage.success('合同初稿上传成功')
   await load()
   emit('changed')
 }
 
 async function onReplace(row: WorkOrderFileItem, file: File) {
   await replaceWorkOrderFile(row.id, file)
-  ElMessage.success('合同文件已替换')
+  ElMessage.success('合同初稿文件已替换')
   await load()
   emit('changed')
 }
@@ -161,7 +161,7 @@ async function onReplaceInput(row: WorkOrderFileItem, event: Event) {
 
 async function onComplete() {
   if (!props.workOrderId) return ElMessage.warning('当前项目暂无关联工单，无法提交')
-  if (!contracts.value.length) return ElMessage.warning('请先上传合同扫描件')
+  if (!contracts.value.length) return ElMessage.warning('请先上传合同初稿扫描件')
   if (!reviewerId.value) return ElMessage.warning('请选择合同审核人')
 
   submitting.value = true
@@ -173,7 +173,7 @@ async function onComplete() {
       reviewer_user_id: reviewerId.value,
       comment: comment.value || undefined
     })
-    ElMessage.success('合同已提交审核')
+    ElMessage.success('合同初稿已提交审核')
     comment.value = ''
     emit('changed')
   } finally {

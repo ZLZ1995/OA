@@ -62,8 +62,8 @@ import ContractReviewPanel from './panels/ContractReviewPanel.vue'
 const baseFlowNodes = [
   { key: 'basic', label: '项目基本信息' },
   { key: 'members', label: '项目组成员' },
-  { key: 'contract', label: '合同上传' },
-  { key: 'contractReview', label: '合同审核' },
+  { key: 'contract', label: '合同初稿上传' },
+  { key: 'contractReview', label: '合同初稿审核' },
   { key: 'review', label: '报告送审' },
   { key: 'issue', label: '报告出具' },
   { key: 'invoice', label: '发票开具' },

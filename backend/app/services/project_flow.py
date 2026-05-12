@@ -12,12 +12,12 @@ PROJECT_SOURCE_LABELS = {
 STATUS_TO_STEP = {
     "PROJECT_CREATED": "项目创建",
     "WORK_ORDER_CREATED": "项目组成员",
-    "WAIT_CONTRACT_UPLOAD": "合同上传",
-    "CONTRACT_UPLOADED": "合同上传",
-    "WAIT_PRINTROOM_OFFICIAL_CONTRACT": "合同上传",
-    "WAIT_CONTRACT_REVIEW_SUBMIT": "合同审核",
-    "CONTRACT_REVIEWING": "合同审核",
-    "CONTRACT_REJECTED": "合同审核",
+    "WAIT_CONTRACT_UPLOAD": "合同初稿上传",
+    "CONTRACT_UPLOADED": "合同初稿上传",
+    "WAIT_PRINTROOM_OFFICIAL_CONTRACT": "合同初稿上传",
+    "WAIT_CONTRACT_REVIEW_SUBMIT": "合同初稿审核",
+    "CONTRACT_REVIEWING": "合同初稿审核",
+    "CONTRACT_REJECTED": "合同初稿审核",
     "CONTRACT_APPROVED": "报告送审",
     "WAIT_FIRST_REVIEW_SUBMIT": "报告送审",
     "FIRST_REVIEWING": "一审",
@@ -46,8 +46,8 @@ STATUS_TO_STEP = {
 FLOW_STEPS = [
     "项目创建",
     "项目组成员",
-    "合同上传",
-    "合同审核",
+    "合同初稿上传",
+    "合同初稿审核",
     "报告送审",
     "一审",
     "二审",
@@ -60,8 +60,8 @@ FLOW_STEPS = [
 
 EXTERNAL_FLOW_STEPS = [
     "项目创建",
-    "合同上传",
-    "合同审核",
+    "合同初稿上传",
+    "合同初稿审核",
     "报告送审",
     "一审",
     "二审",
@@ -96,7 +96,7 @@ def normalize_project_step(status: str | None, archived: bool, project_source: s
         return "已归档"
     step = STATUS_TO_STEP.get(status or "", "项目创建")
     if project_source == "EXTERNAL" and step == "项目组成员":
-        return "合同上传"
+        return "合同初稿上传"
     return step
 
 
@@ -142,8 +142,8 @@ def get_user_role_in_project(project: Project, work_order: WorkOrder | None, cur
 
 
 def build_todo_action(step: str, user_role: str) -> str | None:
-    if user_role == "合同审核人" and step == "合同审核":
-        return "请处理合同审核"
+    if user_role == "合同审核人" and step == "合同初稿审核":
+        return "请处理合同初稿审核"
     if user_role == "一审老师" and step == "一审":
         return "请处理一审"
     if user_role == "二审老师" and step == "二审":
@@ -151,9 +151,9 @@ def build_todo_action(step: str, user_role: str) -> str | None:
     if user_role == "三审老师" and step == "三审":
         return "请处理三审"
     if user_role == "三审老师" and step == "报告出具":
-        return "请上传正式报告文件"
+        return "请上传正式报告文件和合同扫描件"
     if user_role == "文印室" and step == "报告出具":
-        return "请上传报告扫描件"
+        return "请处理报告出具"
     if user_role == "财务" and step == "发票开具":
         return "请处理开票"
     if user_role == "档案管理员" and step == "报告归档":
@@ -162,10 +162,10 @@ def build_todo_action(step: str, user_role: str) -> str | None:
         mapping = {
             "项目创建": "请完善项目组成员",
             "项目组成员": "请完善项目组成员",
-            "合同上传": "请上传合同",
-            "合同审核": "请提交合同审核",
+            "合同初稿上传": "请上传合同初稿",
+            "合同初稿审核": "请提交合同初稿审核",
             "报告送审": "请提交报告送审",
-            "报告出具": "请上传报告扫描件",
+            "报告出具": "请跟进报告出具",
             "发票开具": "请提交开票信息",
             "报告归档": "请办理归档",
         }

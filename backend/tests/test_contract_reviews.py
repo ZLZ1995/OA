@@ -65,8 +65,8 @@ def _seed_project_and_work_order(db: Session, creator: User, leader: User) -> tu
     db.add(
         WorkOrderFile(
             work_order_id=work_order.id,
-            file_category="CONTRACT",
-            business_stage="CONTRACT",
+            file_category="CONTRACT_DRAFT",
+            business_stage="CONTRACT_DRAFT",
             version_no=1,
             is_current=True,
             origin_file_name="contract.pdf",

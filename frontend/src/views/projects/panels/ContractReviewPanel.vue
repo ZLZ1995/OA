@@ -3,7 +3,7 @@
     v-if="!workOrderId"
     type="warning"
     :closable="false"
-    title="当前项目暂无关联工单，无法办理合同审核。"
+    title="当前项目暂无关联工单，无法办理合同初稿审核。"
     show-icon
     style="margin-bottom: 12px"
   />
@@ -14,11 +14,12 @@
       <el-descriptions-item label="报告类型">{{ flowInfo?.project.report_type || '-' }}</el-descriptions-item>
       <el-descriptions-item label="项目来源">{{ flowInfo?.project.project_source_display || '-' }}</el-descriptions-item>
       <el-descriptions-item label="项目负责人">{{ flowInfo?.project.project_leader_display_name || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="合同审核状态">{{ flowInfo?.contract_review_status_display || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="合同初稿审核状态">{{ flowInfo?.contract_review_status_display || '-' }}</el-descriptions-item>
     </el-descriptions>
 
     <el-table :data="contractFiles" v-loading="loading" style="margin-bottom: 16px">
-      <el-table-column prop="origin_file_name" label="待审核合同文件" min-width="240" />
+      <el-table-column prop="origin_file_name" label="待审核合同初稿" min-width="240" />
+      <el-table-column prop="uploaded_by_name" label="上传人" min-width="120" />
       <el-table-column prop="uploaded_at" label="上传时间" min-width="190" />
       <el-table-column label="操作" width="120">
         <template #default="{ row }">
@@ -48,13 +49,13 @@
       </el-form-item>
     </el-form>
 
-    <el-divider>合同审核记录</el-divider>
+    <el-divider>合同初稿审核记录</el-divider>
     <el-table :data="records">
       <el-table-column prop="actionLabel" label="动作" width="120" />
       <el-table-column prop="operator_user_name" label="操作人" width="120" />
       <el-table-column prop="reviewer_user_name" label="审核人" width="120" />
       <el-table-column prop="comment" label="意见" min-width="220" show-overflow-tooltip />
-      <el-table-column label="合同文件" min-width="220">
+      <el-table-column label="合同初稿" min-width="220">
         <template #default="{ row }">
           <template v-if="row.contract_file">
             <span>{{ row.contract_file.origin_file_name }}</span>
@@ -132,7 +133,7 @@ async function load() {
       listWorkOrderFiles(props.workOrderId)
     ])
     records.value = recordData.items.map(item => ({ ...item, actionLabel: actionLabel(item.action_type) }))
-    contractFiles.value = fileData.items.filter(file => file.file_category === 'CONTRACT' && file.is_current)
+    contractFiles.value = fileData.items.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.is_current)
     const latestReviewAttachment = fileData.items
       .filter(file => file.file_category === 'CONTRACT_REVIEW_ATTACHMENT')
       .sort((a, b) => b.id - a.id)[0]
@@ -156,12 +157,12 @@ async function onAttachmentSelected(file: UploadFile) {
 
 async function onApprove() {
   const submitRecord = records.value.find(item => item.action_type === 'SUBMIT_CONTRACT')
-  if (!submitRecord) return ElMessage.warning('未找到待处理的合同提交记录')
+  if (!submitRecord) return ElMessage.warning('未找到待处理的合同初稿提交记录')
   await approveContractReview(submitRecord.id, {
     comment: reviewComment.value || undefined,
     review_attachment_file_id: reviewAttachment.value?.id
   })
-  ElMessage.success('合同审核通过')
+  ElMessage.success('合同初稿审核通过')
   reviewComment.value = ''
   reviewAttachment.value = null
   emit('changed')
@@ -169,12 +170,12 @@ async function onApprove() {
 
 async function onReject() {
   const submitRecord = records.value.find(item => item.action_type === 'SUBMIT_CONTRACT')
-  if (!submitRecord) return ElMessage.warning('未找到待处理的合同提交记录')
+  if (!submitRecord) return ElMessage.warning('未找到待处理的合同初稿提交记录')
   await rejectContractReview(submitRecord.id, {
     comment: reviewComment.value || undefined,
     review_attachment_file_id: reviewAttachment.value?.id
   })
-  ElMessage.success('合同已退回修改')
+  ElMessage.success('合同初稿已退回修改')
   reviewComment.value = ''
   reviewAttachment.value = null
   emit('changed')

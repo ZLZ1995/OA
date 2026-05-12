@@ -16,13 +16,6 @@
           <div v-for="file in contractFiles" :key="file.id" class="download-item">
             <span>{{ file.origin_file_name }}</span>
             <el-button type="primary" link @click="download(file)">下载</el-button>
-            <el-button v-if="canPrintRoom" type="warning" link @click="triggerReplace(file.id)">更换文件</el-button>
-            <input
-              :ref="el => setReplaceInput(file.id, el)"
-              class="hidden-file-input"
-              type="file"
-              @change="event => onReplaceInput(file, event)"
-            />
           </div>
         </div>
         <span v-else>-</span>
@@ -115,7 +108,7 @@ async function loadFiles() {
   copyCount.value = info.copy_count || copyCount.value
   remark.value = info.remark || remark.value
   const files = (await listWorkOrderFiles(props.workOrderId)).items
-  contractFiles.value = files.filter(file => file.file_category === 'CONTRACT' || file.business_stage === 'CONTRACT')
+  contractFiles.value = files.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' || file.business_stage === 'FINAL_CONTRACT_SCAN')
   formalReportFiles.value = files.filter(file => file.file_category === 'FORMAL_REPORT' || file.business_stage === 'FORMAL_REPORT')
   reportScanFiles.value = files.filter(file => file.file_category === 'REPORT_SCAN' || file.business_stage === 'REPORT_SCAN')
 }
@@ -170,7 +163,7 @@ async function rollback() {
 async function contractError() {
   if (!props.workOrderId) return
   await markContractError({ work_order_id: props.workOrderId, remark: remark.value || undefined })
-  ElMessage.success('已退回合同上传')
+  ElMessage.success('已退回合同初稿上传')
   emit('changed')
 }
 
@@ -186,7 +179,7 @@ function download(file: WorkOrderFileItem) {
 }
 
 onMounted(loadFiles)
-watch(() => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.signer_two], loadFiles)
+watch(() => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.signer_two, props.flowInfo?.current_work_order_status], loadFiles)
 </script>
 
 <style scoped>

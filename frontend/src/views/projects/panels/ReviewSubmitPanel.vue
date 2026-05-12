@@ -20,6 +20,17 @@
           <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
         </el-select>
       </el-form-item>
+
+      <el-form-item v-if="showContractDraftDownload" label="合同初稿下载">
+        <div v-if="contractDraftFiles.length" class="contract-file-list">
+          <div v-for="file in contractDraftFiles" :key="file.id" class="contract-file-item">
+            <span>{{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）</span>
+            <el-button type="primary" plain @click="download(file)">下载合同初稿</el-button>
+          </div>
+        </div>
+        <span v-else>-</span>
+      </el-form-item>
+
       <el-form-item :label="isReplyFlow ? '意见回复文件' : '待审报告包'">
         <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview">
           <el-button :disabled="!canSubmitReview">{{ isReplyFlow ? '上传审核意见回复' : '上传待审报告' }}</el-button>
@@ -46,11 +57,11 @@
     <template v-if="canReview">
       <el-divider>审核处理</el-divider>
       <el-form label-width="120px">
-        <el-form-item label="合同扫描件">
-          <div v-if="contractFiles.length" class="contract-file-list">
-            <div v-for="file in contractFiles" :key="file.id" class="contract-file-item">
+        <el-form-item label="合同初稿">
+          <div v-if="contractDraftFiles.length" class="contract-file-list">
+            <div v-for="file in contractDraftFiles" :key="file.id" class="contract-file-item">
               <span>{{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）</span>
-              <el-button type="primary" plain @click="download(file)">下载合同扫描件</el-button>
+              <el-button type="primary" plain @click="download(file)">下载合同初稿</el-button>
             </div>
           </div>
           <span v-else>-</span>
@@ -78,7 +89,15 @@
     </template>
 
     <template v-if="showFormalReportPanel">
-      <el-divider>正式报告文件</el-divider>
+      <el-divider>三审通过后资料</el-divider>
+      <el-alert
+        v-if="!finalContractFiles.length"
+        type="warning"
+        :closable="false"
+        title="合同扫描件为必传项，未上传前不能转发文印室。"
+        show-icon
+        style="margin-bottom: 12px"
+      />
       <el-form label-width="120px">
         <el-form-item label="正式报告文件">
           <el-upload :auto-upload="false" :on-change="onFormalReportSelected" :show-file-list="false">
@@ -86,6 +105,16 @@
           </el-upload>
           <div class="file-list" v-if="formalReportFiles.length">
             <el-tag v-for="file in formalReportFiles" :key="file.id" type="info" effect="plain">
+              {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
+            </el-tag>
+          </div>
+        </el-form-item>
+        <el-form-item label="合同扫描件">
+          <el-upload :auto-upload="false" :on-change="onFinalContractSelected" :show-file-list="false">
+            <el-button type="primary">上传合同扫描件</el-button>
+          </el-upload>
+          <div class="file-list" v-if="finalContractFiles.length">
+            <el-tag v-for="file in finalContractFiles" :key="file.id" type="success" effect="plain">
               {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
             </el-tag>
           </div>
@@ -111,10 +140,10 @@
     </template>
 
     <el-divider>审核记录</el-divider>
-      <el-table :data="reviewRows" v-loading="loading">
-        <el-table-column prop="roundLabel" label="轮次" width="180" />
-        <el-table-column prop="reviewerName" label="本轮审核人" width="120" show-overflow-tooltip />
-        <el-table-column prop="comment" label="意见" min-width="160" show-overflow-tooltip />
+    <el-table :data="reviewRows" v-loading="loading">
+      <el-table-column prop="roundLabel" label="轮次" width="180" />
+      <el-table-column prop="reviewerName" label="本轮审核人" width="120" show-overflow-tooltip />
+      <el-table-column prop="comment" label="意见" min-width="160" show-overflow-tooltip />
       <el-table-column label="附件" min-width="280">
         <template #default="{ row }">
           <div v-if="row.files.length" class="attachment-list">
@@ -212,13 +241,15 @@ const canUploadFormalReport = computed(() => {
   )
 })
 const showFormalReportPanel = computed(() => canUploadFormalReport.value)
+const showContractDraftDownload = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].some(role => props.userRoles.includes(role)))
 
 const reviewPackageFiles = computed(() => files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.business_stage === reviewStage(reviewRound.value)))
 const replyFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_REPLY' && file.business_stage === reviewStage(reviewRound.value)))
 const submitFiles = computed(() => isReplyFlow.value ? replyFiles.value : reviewPackageFiles.value)
 const opinionFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
 const formalReportFiles = computed(() => files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.business_stage === 'FORMAL_REPORT'))
-const contractFiles = computed(() => files.value.filter(file => file.file_category === 'CONTRACT' && file.business_stage === 'CONTRACT' && file.is_current))
+const contractDraftFiles = computed(() => files.value.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.business_stage === 'CONTRACT_DRAFT' && file.is_current))
+const finalContractFiles = computed(() => files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.business_stage === 'FINAL_CONTRACT_SCAN' && file.is_current))
 
 const reviewStatusText = computed(() => {
   if (isReplyFlow.value) return `${roundLabel(reviewRound.value)}意见已返回等待回复`
@@ -265,7 +296,7 @@ const reviewRows = computed<ReviewRow[]>(() => {
 })
 
 const REVIEW_STATUS_TEXT: Record<string, string> = {
-  CONTRACT_APPROVED: '合同审核已通过，待上传待审报告',
+  CONTRACT_APPROVED: '合同初稿审核已通过，待上传待审报告',
   WAIT_FIRST_REVIEW_SUBMIT: '待上传文件',
   FIRST_REVIEWING: '一审审核中',
   FIRST_REVIEW_REJECTED: '一审意见已返回等待回复',
@@ -275,7 +306,7 @@ const REVIEW_STATUS_TEXT: Record<string, string> = {
   WAIT_THIRD_REVIEW_SUBMIT: '二审已通过，待提交三审',
   THIRD_REVIEWING: '三审审核中',
   THIRD_REVIEW_REJECTED: '三审意见已返回等待回复',
-  THIRD_APPROVED_WAIT_PRINTROOM: '三审已通过等待提交正式报告'
+  THIRD_APPROVED_WAIT_PRINTROOM: '三审已通过，待补充正式报告与合同扫描件'
 }
 
 function isSubmitStatus(status: string) {
@@ -419,12 +450,22 @@ async function onFormalReportSelected(file: UploadFile) {
   emit('changed')
 }
 
+async function onFinalContractSelected(file: UploadFile) {
+  if (!props.workOrderId || !file.raw) return
+  if (!canUploadFormalReport.value) return ElMessage.warning('仅三审老师可上传合同扫描件')
+  await uploadWorkOrderFile({ work_order_id: props.workOrderId, file_category: 'FINAL_CONTRACT_SCAN', business_stage: 'FINAL_CONTRACT_SCAN', file: file.raw })
+  ElMessage.success('合同扫描件已上传')
+  await loadFiles()
+  emit('changed')
+}
+
 async function onTransferPrintRoom() {
   if (!props.workOrderId) return
   if (!signerOne.value || !signerTwo.value) return ElMessage.warning('请填写两名签字评估师')
   if (!formalReportCount.value) return ElMessage.warning('请填写报告出具数量')
   if (!printRoomHandlerId.value) return ElMessage.warning('请选择文印室人员')
   if (!formalReportFiles.value.length) return ElMessage.warning('请先上传正式报告文件')
+  if (!finalContractFiles.value.length) return ElMessage.warning('请先上传合同扫描件后再转发文印室')
   await updateWorkOrder(props.workOrderId, {
     signer_one: signerOne.value,
     signer_two: signerTwo.value,
