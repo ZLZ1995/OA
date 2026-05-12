@@ -110,8 +110,8 @@ def test_complete_contract_upload_advances_to_review_submit() -> None:
     db.add(
         WorkOrderFile(
             work_order_id=work_order.id,
-            file_category="CONTRACT",
-            business_stage="CONTRACT",
+            file_category="CONTRACT_DRAFT",
+            business_stage="CONTRACT_DRAFT",
             version_no=1,
             is_current=True,
             origin_file_name="contract.pdf",

@@ -14,6 +14,7 @@ class WorkOrderFileResponse(BaseModel):
     storage_key: str
     file_size: int | None = None
     uploaded_by: int
+    uploaded_by_name: str | None = None
     uploaded_at: datetime
 
 

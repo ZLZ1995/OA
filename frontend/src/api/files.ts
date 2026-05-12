@@ -11,6 +11,7 @@ export interface WorkOrderFileItem {
   storage_key: string
   file_size?: number | null
   uploaded_by: number
+  uploaded_by_name?: string | null
   uploaded_at: string
 }
 

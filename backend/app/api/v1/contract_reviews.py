@@ -24,6 +24,9 @@ from app.workflows.transitions import can_transit
 
 router = APIRouter(prefix="/contract-reviews", tags=["合同审核"])
 
+CONTRACT_DRAFT_FILE_CATEGORY = "CONTRACT_DRAFT"
+CONTRACT_DRAFT_STAGE = "CONTRACT_DRAFT"
+
 CONTRACT_STATUS_LABELS = {
     WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value: "待上传合同",
     WorkOrderStatus.CONTRACT_UPLOADED.value: "合同已上传",
@@ -71,8 +74,8 @@ def _get_current_contract_file(db: Session, work_order_id: int) -> WorkOrderFile
         db.query(WorkOrderFile)
         .filter(
             WorkOrderFile.work_order_id == work_order_id,
-            WorkOrderFile.file_category == "CONTRACT",
-            WorkOrderFile.business_stage == "CONTRACT",
+            WorkOrderFile.file_category == CONTRACT_DRAFT_FILE_CATEGORY,
+            WorkOrderFile.business_stage == CONTRACT_DRAFT_STAGE,
             WorkOrderFile.is_current.is_(True),
         )
         .order_by(WorkOrderFile.version_no.desc())

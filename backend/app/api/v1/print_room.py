@@ -11,6 +11,7 @@ from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.models.work_order_file import WorkOrderFile
 from app.schemas.print_room import (
     IssueOfficialContractRequest,
     IssuePaperReportRequest,
@@ -24,6 +25,15 @@ from app.workflows.states import WorkOrderStatus
 from app.workflows.transitions import can_transit
 
 router = APIRouter(prefix="/print-room", tags=["文印室"])
+
+
+def _has_current_final_contract_scan(db: Session, work_order_id: int) -> bool:
+    return db.query(WorkOrderFile.id).filter(
+        WorkOrderFile.work_order_id == work_order_id,
+        WorkOrderFile.file_category == "FINAL_CONTRACT_SCAN",
+        WorkOrderFile.business_stage == "FINAL_CONTRACT_SCAN",
+        WorkOrderFile.is_current.is_(True),
+    ).first() is not None
 
 
 def _ensure_project_operator(db: Session, work_order: WorkOrder, user_id: int) -> None:
@@ -73,6 +83,8 @@ def transfer_to_print_room(
         raise HTTPException(status_code=400, detail="当前状态不可转发文印室")
     if not work_order.signer_one or not work_order.signer_two or not work_order.formal_report_count:
         raise HTTPException(status_code=400, detail="请填写签字评估师和报告出具数量")
+    if not _has_current_final_contract_scan(db, work_order.id):
+        raise HTTPException(status_code=400, detail="请先上传合同扫描件后再转发文印室")
     handler = db.query(User).filter(User.id == payload.handler_user_id, User.is_active.is_(True)).first()
     if not handler or not any(item.role.code == "PRINT_ROOM" for item in handler.roles):
         raise HTTPException(status_code=400, detail="请选择有效的文印室人员")

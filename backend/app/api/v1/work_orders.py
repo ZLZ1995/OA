@@ -21,13 +21,13 @@ router = APIRouter(prefix="/work-orders", tags=["工单"])
 STATUS_LABEL_MAP = {
     WorkOrderStatus.PROJECT_CREATED.value: "项目创建",
     WorkOrderStatus.WORK_ORDER_CREATED.value: "工单创建",
-    WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value: "合同上传",
-    WorkOrderStatus.CONTRACT_UPLOADED.value: "合同上传",
-    WorkOrderStatus.WAIT_PRINTROOM_OFFICIAL_CONTRACT.value: "合同上传",
-    WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value: "合同审核",
-    WorkOrderStatus.CONTRACT_REVIEWING.value: "合同审核中",
-    WorkOrderStatus.CONTRACT_REJECTED.value: "合同审核退回",
-    WorkOrderStatus.CONTRACT_APPROVED.value: "合同审核通过",
+    WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value: "合同初稿上传",
+    WorkOrderStatus.CONTRACT_UPLOADED.value: "合同初稿上传",
+    WorkOrderStatus.WAIT_PRINTROOM_OFFICIAL_CONTRACT.value: "合同初稿上传",
+    WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value: "合同初稿审核",
+    WorkOrderStatus.CONTRACT_REVIEWING.value: "合同初稿审核中",
+    WorkOrderStatus.CONTRACT_REJECTED.value: "合同初稿审核退回",
+    WorkOrderStatus.CONTRACT_APPROVED.value: "合同初稿审核通过",
     WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT.value: "报告送审",
     WorkOrderStatus.FIRST_REVIEWING.value: "一审",
     WorkOrderStatus.FIRST_REVIEW_REJECTED.value: "一审退回",
@@ -39,9 +39,9 @@ STATUS_LABEL_MAP = {
     WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT.value: "三审",
     WorkOrderStatus.THIRD_REVIEWING.value: "三审",
     WorkOrderStatus.THIRD_REVIEW_REJECTED.value: "三审退回",
-    WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "正式报告文件",
-    WorkOrderStatus.PRINTROOM_PROCESSING.value: "文印室出具",
-    WorkOrderStatus.PAPER_REPORT_ISSUED.value: "文印室出具",
+    WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "报告出具准备",
+    WorkOrderStatus.PRINTROOM_PROCESSING.value: "报告出具",
+    WorkOrderStatus.PAPER_REPORT_ISSUED.value: "报告出具完成",
     WorkOrderStatus.WAIT_INVOICE_INFO.value: "开票信息",
     WorkOrderStatus.INVOICE_INFO_REJECTED.value: "开票信息退回",
     WorkOrderStatus.INVOICE_PROCESSING.value: "财务开票",
@@ -157,7 +157,7 @@ def update_work_order(
 
     if signer_keys & set(data) and "ADMIN" not in role_codes:
         if set(data) - signer_keys:
-            raise HTTPException(status_code=403, detail="正式报告信息只能由三审老师在正式报告环节填写")
+            raise HTTPException(status_code=403, detail="正式报告信息只能由三审老师在报告送审末尾填写")
         if "THIRD_REVIEWER" not in role_codes:
             raise HTTPException(status_code=403, detail="仅三审老师可填写签字评估师")
         if row.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
@@ -166,7 +166,7 @@ def update_work_order(
             raise HTTPException(status_code=403, detail="仅该项目三审老师可填写签字评估师")
     elif contract_keys & set(data) and "ADMIN" not in role_codes:
         if set(data) - contract_keys:
-            raise HTTPException(status_code=403, detail="合同审核人只能单独更新合同审核人字段")
+            raise HTTPException(status_code=403, detail="合同审核人字段只能单独更新")
         if "PROJECT_LEADER" not in role_codes and "SALES" not in role_codes:
             raise HTTPException(status_code=403, detail="仅项目方可指定合同审核人")
     elif "ADMIN" not in role_codes and not ({"SALES", "PROJECT_LEADER"} & role_codes):
