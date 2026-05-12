@@ -36,6 +36,15 @@
               <el-option label="咨询报告" value="咨询报告" />
             </el-select>
           </el-form-item>
+          <el-form-item label="评估基准日">
+            <el-date-picker
+              v-model="form.valuation_base_date"
+              type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="选择评估基准日"
+              style="width: 100%"
+            />
+          </el-form-item>
           <el-form-item label="项目承接业务员">
             <el-input v-model="form.business_salesman" />
           </el-form-item>
@@ -125,6 +134,7 @@ const form = reactive({
   project_name: '',
   client_name: '',
   report_type: '评估报告' as ReportType,
+  valuation_base_date: '',
   business_salesman: '',
   project_source: 'INTERNAL' as ProjectSource,
   external_project_leader_name: ''
@@ -153,6 +163,7 @@ async function onCreate() {
     project_name: form.project_name,
     client_name: form.client_name,
     report_type: form.report_type,
+    valuation_base_date: form.valuation_base_date || undefined,
     business_salesman: form.business_salesman.trim(),
     project_source: form.project_source,
     external_project_leader_name: form.project_source === 'EXTERNAL' ? form.external_project_leader_name.trim() : undefined,
@@ -163,6 +174,7 @@ async function onCreate() {
   form.project_name = ''
   form.client_name = ''
   form.business_salesman = ''
+  form.valuation_base_date = ''
   form.project_source = 'INTERNAL'
   form.external_project_leader_name = ''
   ElMessage.success('项目创建成功')
