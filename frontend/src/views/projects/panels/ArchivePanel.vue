@@ -75,7 +75,7 @@
 import { computed, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
 import { approveArchive, finalizeArchive, rejectArchive, submitArchive } from '@/api/archives'
-import { getWorkOrderFileDownloadUrl, listWorkOrderFiles, replaceWorkOrderFile, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
+import { downloadWorkOrderFile, listWorkOrderFiles, replaceWorkOrderFile, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import { listProjectMembers, type ProjectMemberItem } from '@/api/projectMembers'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { listUserCandidates, type UserItem } from '@/api/users'
@@ -178,7 +178,7 @@ async function onReplaceInput(row: WorkOrderFileItem, event: Event) {
 }
 
 function download(file: WorkOrderFileItem) {
-  window.open(getWorkOrderFileDownloadUrl(file.id), '_blank')
+  downloadWorkOrderFile(file.id, file.origin_file_name)
 }
 
 onMounted(load)

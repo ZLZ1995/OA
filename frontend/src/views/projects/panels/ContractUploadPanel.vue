@@ -73,10 +73,10 @@ import { computed, onMounted, ref, watch, type ComponentPublicInstance } from 'v
 import { ElMessage, type UploadFile } from 'element-plus'
 import {
   completeContractUpload,
-  getWorkOrderFileDownloadUrl,
   listWorkOrderFiles,
   replaceWorkOrderFile,
   uploadWorkOrderFile,
+  downloadWorkOrderFile,
   type WorkOrderFileItem
 } from '@/api/files'
 import { submitContractReview } from '@/api/contractReviews'
@@ -182,7 +182,7 @@ async function onComplete() {
 }
 
 function download(row: WorkOrderFileItem) {
-  window.open(getWorkOrderFileDownloadUrl(row.id), '_blank')
+  downloadWorkOrderFile(row.id, row.origin_file_name)
 }
 
 onMounted(load)

@@ -65,7 +65,7 @@
 import { computed, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
 import { getPrintRoomInfo, issueOfficialContract, issuePaperReport, markContractError, reportError, rollbackThird } from '@/api/printRoom'
-import { getWorkOrderFileDownloadUrl, listWorkOrderFiles, replaceWorkOrderFile, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
+import { downloadWorkOrderFile, listWorkOrderFiles, replaceWorkOrderFile, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import type { ProjectFlowData } from '@/api/projectFlow'
 
 const props = defineProps<{ workOrderId?: number; canOperate: boolean; userRoles?: string[]; flowInfo?: ProjectFlowData }>()
@@ -175,7 +175,7 @@ async function reportErrorBack() {
 }
 
 function download(file: WorkOrderFileItem) {
-  window.open(getWorkOrderFileDownloadUrl(file.id), '_blank')
+  downloadWorkOrderFile(file.id, file.origin_file_name)
 }
 
 onMounted(loadFiles)

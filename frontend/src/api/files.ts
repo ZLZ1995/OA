@@ -55,10 +55,16 @@ export async function completeContractUpload(workOrderId: number) {
   return data as { status: string }
 }
 
-export function getWorkOrderFileDownloadUrl(fileId: number) {
-  const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
-  const apiBaseUrl = configuredApiBaseUrl
-    ? configuredApiBaseUrl.replace(/\/+$/, '')
-    : '/api/v1'
-  return `${apiBaseUrl}/files/${fileId}/download`
+export async function downloadWorkOrderFile(fileId: number, filename?: string) {
+  const { data } = await http.get(`/files/${fileId}/download`, {
+    responseType: 'blob'
+  })
+  const url = window.URL.createObjectURL(data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename || `file-${fileId}`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
 }
