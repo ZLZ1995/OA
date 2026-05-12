@@ -265,6 +265,7 @@ const reviewRows = computed<ReviewRow[]>(() => {
 })
 
 const REVIEW_STATUS_TEXT: Record<string, string> = {
+  CONTRACT_APPROVED: '合同审核已通过，待上传待审报告',
   WAIT_FIRST_REVIEW_SUBMIT: '待上传文件',
   FIRST_REVIEWING: '一审审核中',
   FIRST_REVIEW_REJECTED: '一审意见已返回等待回复',
@@ -278,7 +279,7 @@ const REVIEW_STATUS_TEXT: Record<string, string> = {
 }
 
 function isSubmitStatus(status: string) {
-  return ['WAIT_FIRST_REVIEW_SUBMIT', 'FIRST_REVIEW_REJECTED', 'WAIT_SECOND_REVIEW_SUBMIT', 'SECOND_REVIEW_REJECTED', 'WAIT_THIRD_REVIEW_SUBMIT', 'THIRD_REVIEW_REJECTED'].includes(status)
+  return ['CONTRACT_APPROVED', 'WAIT_FIRST_REVIEW_SUBMIT', 'FIRST_REVIEW_REJECTED', 'WAIT_SECOND_REVIEW_SUBMIT', 'SECOND_REVIEW_REJECTED', 'WAIT_THIRD_REVIEW_SUBMIT', 'THIRD_REVIEW_REJECTED'].includes(status)
 }
 
 function syncRoundWithStatus() {
