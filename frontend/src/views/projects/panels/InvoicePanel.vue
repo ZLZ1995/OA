@@ -98,7 +98,7 @@ const amount = ref(0)
 
 const statusCode = computed(() => props.flowInfo?.current_work_order_status || '')
 const canFinance = computed(() => props.userRoles.some(role => ['FINANCE', 'ADMIN'].includes(role)))
-const currentInvoice = computed(() => invoices.value[0])
+const currentInvoice = computed(() => invoices.value.find(item => item.status === 'SUBMITTED' || item.status === 'REJECTED'))
 const canSubmitInfo = computed(() => {
   if (!props.canOperate || canFinance.value) return false
   return !currentInvoice.value || currentInvoice.value.status === 'REJECTED'
@@ -111,14 +111,14 @@ async function load() {
   try {
     invoices.value = (await listInvoices()).items.filter(item => item.work_order_id === props.workOrderId)
     const current = currentInvoice.value
-    invoiceInfo.value = current?.invoice_info || invoiceInfo.value
+    invoiceInfo.value = current?.invoice_info || ''
     invoiceType.value = (current?.invoice_type as '专票' | '普票') || invoiceType.value
     if (current?.invoice_info?.includes('开票单位：')) {
       invoiceUnit.value = current.invoice_info.split('开票单位：')[1]?.split('\n')[0] || invoiceUnit.value
     } else {
       invoiceUnit.value = props.flowInfo?.project.undertaking_unit || invoiceUnit.value
     }
-    amount.value = current?.amount ?? amount.value
+    amount.value = current?.amount ?? 0
     invoiceFiles.value = (await listWorkOrderFiles(props.workOrderId)).items.filter(
       file => file.file_category === 'INVOICE_FILE' || file.business_stage === 'INVOICE'
     )
