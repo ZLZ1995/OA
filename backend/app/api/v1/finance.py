@@ -46,9 +46,11 @@ def create_invoice(
         raise HTTPException(status_code=400, detail="请填写开票信息和发票类型")
 
     row = db.query(Invoice).filter(Invoice.work_order_id == payload.work_order_id).order_by(Invoice.id.desc()).first()
+    if row and row.status == "SUBMITTED":
+        raise HTTPException(status_code=400, detail="已有待财务处理的开票申请，请处理完成后再提交新申请")
     data = payload.model_dump()
     data["invoice_no"] = payload.invoice_no or f"PENDING-{payload.work_order_id}"
-    if row:
+    if row and row.status == "REJECTED":
         for key, value in data.items():
             setattr(row, key, value)
     else:

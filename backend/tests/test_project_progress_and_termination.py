@@ -137,6 +137,40 @@ def test_invoice_submission_does_not_change_main_workflow_status() -> None:
     assert work_order.current_handler_user_id == 999
 
 
+def test_invoice_submission_can_start_new_round_after_issued_invoice() -> None:
+    from app.api.v1.finance import create_invoice
+    from app.schemas.invoice import InvoiceCreate
+
+    db = _build_session()
+    leader = _seed_user(db)
+    _, work_order = _seed_project(db, leader, project_code="P-INVOICE-MULTI")
+    db.add(Invoice(
+        work_order_id=work_order.id,
+        invoice_no="INV-OLD",
+        invoice_info="old info",
+        invoice_type="专票",
+        amount=100,
+        status="ISSUED",
+    ))
+    db.commit()
+
+    create_invoice(
+        payload=InvoiceCreate(
+            work_order_id=work_order.id,
+            invoice_info="开票单位：中勤\n第二轮开票信息",
+            invoice_type="普票",
+            amount=200,
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    invoices = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.asc()).all()
+    assert [invoice.status for invoice in invoices] == ["ISSUED", "SUBMITTED"]
+    assert invoices[1].amount == 200
+
+
 def test_finance_todo_comes_from_submitted_invoice() -> None:
     from app.api.v1.workbench import get_workbench
 
