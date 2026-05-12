@@ -122,14 +122,14 @@ def get_user_role_in_project(project: Project, work_order: WorkOrder | None, cur
         return "项目负责人"
     if is_member:
         return "项目组成员"
-    if work_order and work_order.contract_reviewer_id == current_user.id:
-        return "合同审核人"
     if work_order and work_order.first_reviewer_id == current_user.id:
         return "一审老师"
     if work_order and work_order.second_reviewer_id == current_user.id:
         return "二审老师"
     if work_order and work_order.third_reviewer_id == current_user.id:
         return "三审老师"
+    if work_order and work_order.contract_reviewer_id == current_user.id:
+        return "合同审核人"
     if any(item.role.code == "PRINT_ROOM" for item in current_user.roles):
         return "文印室"
     if any(item.role.code == "FINANCE" for item in current_user.roles):
