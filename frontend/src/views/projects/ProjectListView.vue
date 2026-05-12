@@ -17,7 +17,7 @@
             <el-select v-model="form.undertaking_unit" style="width: 100%">
               <el-option label="中勤" value="中勤" />
               <el-option label="中联国际" value="中联国际" />
-              <el-option label="中证" value="中证" />
+              <el-option label="中众" value="中众" />
               <el-option label="其他" value="其他" />
             </el-select>
           </el-form-item>

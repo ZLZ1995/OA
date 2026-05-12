@@ -1,6 +1,6 @@
 import http from './http'
 
-export type ProjectUndertakingUnit = '中勤' | '中联国际' | '中证' | '其他'
+export type ProjectUndertakingUnit = '中勤' | '中联国际' | '中众' | '其他'
 export type ReportType = '评估报告' | '估值报告' | '咨询报告'
 export type ProjectSource = 'INTERNAL' | 'EXTERNAL'
 
