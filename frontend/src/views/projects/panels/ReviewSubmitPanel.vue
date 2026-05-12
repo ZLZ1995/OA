@@ -168,7 +168,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
 import { decideReview, listReviewCandidates, listReviews, submitReview, withdrawLatestReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
-import { getWorkOrderFileDownloadUrl, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
+import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import { useAuthStore } from '@/store/auth'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { updateWorkOrder } from '@/api/workorders'
@@ -497,7 +497,7 @@ async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
 }
 
 function download(file: WorkOrderFileItem) {
-  window.open(getWorkOrderFileDownloadUrl(file.id), '_blank')
+  downloadWorkOrderFile(file.id, file.origin_file_name)
 }
 
 function canWithdrawRow(row: ReviewRow) {

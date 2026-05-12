@@ -83,7 +83,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import type { WorkOrderFileItem } from '@/api/files'
-import { getWorkOrderFileDownloadUrl, listWorkOrderFiles, uploadWorkOrderFile } from '@/api/files'
+import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile } from '@/api/files'
 import {
   approveContractReview,
   rejectContractReview,
@@ -182,7 +182,7 @@ async function onReject() {
 }
 
 function download(file: Pick<WorkOrderFileItem, 'id'>) {
-  window.open(getWorkOrderFileDownloadUrl(file.id), '_blank')
+  downloadWorkOrderFile(file.id)
 }
 
 onMounted(load)
