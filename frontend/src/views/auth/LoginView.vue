@@ -1,8 +1,28 @@
 <template>
   <div class="login-page">
-    <el-card class="login-card">
-      <h2>资产评估项目流程管理系统</h2>
-      <el-form :model="form" @submit.prevent>
+    <section class="login-shell">
+      <div class="brand-panel">
+        <div class="brand-content">
+          <div class="brand-mark">
+            <img src="/zhongqin-logo.png" alt="中勤" />
+          </div>
+          <div class="company-name">中勤资产评估有限公司</div>
+          <h1>中勤资产评估项目流程管理系统</h1>
+          <p>项目立项、合同流转、报告审核、文印开票、底稿归档的一体化流程管理平台。</p>
+          <div class="brand-metrics">
+            <span>项目全流程</span>
+            <span>审核留痕</span>
+            <span>数据归档</span>
+          </div>
+        </div>
+      </div>
+
+      <el-card class="login-card" shadow="never">
+        <div class="login-card-title">
+          <span>账号登录</span>
+          <small>内部系统，仅限授权人员使用</small>
+        </div>
+        <el-form :model="form" label-position="top" @submit.prevent>
         <el-form-item label="账号">
           <el-input v-model="form.username" placeholder="请输入账号" />
         </el-form-item>
@@ -17,6 +37,7 @@
         </el-form-item>
       </el-form>
     </el-card>
+    </section>
 
     <el-dialog v-model="resetVisible" title="重置密码" width="420px">
       <el-form :model="resetForm" label-width="90px" @submit.prevent>
@@ -164,7 +185,175 @@ async function onLogin() {
 </script>
 
 <style scoped>
-.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f7f8fa; }
-.login-card { width: 420px; }
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 56px;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(31, 78, 121, 0.16), transparent 28%),
+    radial-gradient(circle at 82% 76%, rgba(15, 118, 110, 0.10), transparent 26%),
+    linear-gradient(135deg, #eef3f8 0%, #f8fafc 100%);
+}
+
+.login-shell {
+  width: min(1120px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) 430px;
+  overflow: hidden;
+  border: 1px solid rgba(217, 227, 238, 0.9);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgba(31, 78, 121, 0.18);
+}
+
+.brand-panel {
+  min-height: 560px;
+  padding: 64px 58px;
+  color: #fff;
+  background:
+    linear-gradient(135deg, rgba(31, 78, 121, 0.98), rgba(14, 82, 90, 0.92)),
+    #1f4e79;
+  position: relative;
+  overflow: hidden;
+}
+
+.brand-panel::before,
+.brand-panel::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.brand-panel::before {
+  width: 260px;
+  height: 260px;
+  right: -92px;
+  top: -84px;
+}
+
+.brand-panel::after {
+  width: 180px;
+  height: 180px;
+  left: -72px;
+  bottom: -60px;
+}
+
+.brand-content {
+  position: relative;
+  z-index: 1;
+}
+
+.brand-mark {
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #e60012;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.company-name {
+  margin-top: 36px;
+  margin-bottom: 18px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.brand-panel h1 {
+  margin: 0;
+  max-width: none;
+  font-size: 34px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.brand-panel p {
+  margin: 24px 0 0;
+  max-width: none;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: nowrap;
+}
+
+.brand-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 46px;
+}
+
+.brand-metrics span {
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.10);
+  font-size: 13px;
+}
+
+.login-card {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  box-shadow: none;
+}
+
+.login-card :deep(.el-card__body) {
+  width: 100%;
+  padding: 56px 46px;
+}
+
+.login-card-title {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.login-card-title span {
+  color: #1f2937;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.login-card-title small {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.login-card :deep(.el-button) {
+  min-width: 104px;
+  height: 38px;
+}
+
+.login-card :deep(.el-input__wrapper) {
+  min-height: 40px;
+}
+
 .password-hint { margin-top: 6px; color: #909399; font-size: 12px; line-height: 1.4; }
+
+@media (max-width: 860px) {
+  .login-page { padding: 24px; }
+  .login-shell { grid-template-columns: 1fr; }
+  .brand-panel { min-height: auto; padding: 32px; }
+  .brand-panel h1,
+  .brand-panel p {
+    white-space: normal;
+  }
+}
 </style>

@@ -1,5 +1,14 @@
 <template>
-  <div class="workbench-grid">
+  <div class="workbench-page">
+    <div class="workbench-hero">
+      <div>
+        <p>中勤资产评估有限公司</p>
+        <h1>中勤资产评估项目流程管理系统</h1>
+      </div>
+      <el-tag effect="plain" type="primary">流程工作台</el-tag>
+    </div>
+
+    <div class="workbench-grid">
     <el-card class="create-card" shadow="never">
       <template #header>项目创建区</template>
       <el-form label-width="88px">
@@ -64,6 +73,7 @@
         </el-table-column>
       </el-table>
     </el-card>
+    </div>
   </div>
 </template>
 
@@ -171,13 +181,56 @@ onMounted(load)
 </script>
 
 <style scoped>
+.workbench-page {
+  display: grid;
+  gap: 16px;
+}
+
+.workbench-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 86px;
+  padding: 22px 24px;
+  border: 1px solid var(--zq-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(31, 78, 121, 0.94), rgba(23, 63, 99, 0.9)),
+    var(--zq-primary);
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(31, 78, 121, 0.12);
+}
+
+.workbench-hero p,
+.workbench-hero h1 {
+  margin: 0;
+}
+
+.workbench-hero p {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workbench-hero h1 {
+  margin-top: 8px;
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.workbench-hero :deep(.el-tag) {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .workbench-grid {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   grid-template-areas:
     "create todo"
     "mine mine";
-  gap: 16px;
+  gap: 14px;
   align-items: start;
 }
 
@@ -207,6 +260,14 @@ onMounted(load)
   white-space: nowrap;
   padding-left: 8px;
   padding-right: 8px;
+}
+
+.wide-table :deep(th.el-table__cell) {
+  height: 42px;
+}
+
+.wide-table :deep(td.el-table__cell) {
+  height: 44px;
 }
 
 .wide-table :deep(.el-button + .el-button) {
