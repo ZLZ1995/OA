@@ -23,20 +23,20 @@
           <small>内部系统，仅限授权人员使用</small>
         </div>
         <el-form :model="form" label-position="top" @submit.prevent>
-        <el-form-item label="账号">
-          <el-input v-model="form.username" placeholder="请输入账号" />
-        </el-form-item>
-        <el-form-item label="密码">
-          <el-input v-model="form.password" type="password" show-password placeholder="请输入密码" />
-        </el-form-item>
-        <el-form-item>
-          <el-space wrap>
-            <el-button type="primary" :loading="loading" @click="onLogin">登录</el-button>
-            <el-button @click="openResetDialog">重置密码</el-button>
-          </el-space>
-        </el-form-item>
-      </el-form>
-    </el-card>
+          <el-form-item label="账号">
+            <el-input v-model="form.username" placeholder="请输入账号" />
+          </el-form-item>
+          <el-form-item label="密码">
+            <el-input v-model="form.password" type="password" show-password placeholder="请输入密码" />
+          </el-form-item>
+          <el-form-item>
+            <el-space wrap>
+              <el-button type="primary" :loading="loading" @click="onLogin">登录</el-button>
+              <el-button @click="openResetDialog">重置密码</el-button>
+            </el-space>
+          </el-form-item>
+        </el-form>
+      </el-card>
     </section>
 
     <el-dialog v-model="resetVisible" title="重置密码" width="420px">
@@ -146,21 +146,30 @@ async function onResetPassword() {
 }
 
 async function onLogin() {
-  try {
-    loading.value = true
-    auth.clearAuth()
+  let redirectTo = '/workbench'
+  loading.value = true
+  auth.clearAuth()
 
+  try {
     const token = await login(form)
     auth.setToken(token.access_token)
-    auth.setUser(await me())
+  } catch (err) {
+    auth.clearAuth()
+    ElMessage.error(getErrorMessage(err))
+    loading.value = false
+    return
+  }
 
-    const profile = await auth.ensureUserLoaded()
-    const isAdmin = (profile?.roles || []).includes('ADMIN')
-    const redirectTo = typeof route.query.redirect === 'string' ? route.query.redirect : (isAdmin ? '/accounts' : '/workbench')
+  try {
+    const profile = await me()
+    auth.setUser(profile)
+
+    const isAdmin = (profile.roles || []).includes('ADMIN')
+    redirectTo = typeof route.query.redirect === 'string'
+      ? route.query.redirect
+      : (isAdmin ? '/accounts' : '/workbench')
     await router.replace(redirectTo)
 
-    // Some production environments may keep the page on /login when route guards run concurrently.
-    // If that happens, force a hard navigation so users can still enter the main app.
     if (router.currentRoute.value.path === '/login') {
       window.location.assign(redirectTo)
       return
@@ -169,15 +178,7 @@ async function onLogin() {
     ElMessage.success('登录成功')
   } catch (err) {
     auth.clearAuth()
-    const status =
-      typeof err === 'object' && err !== null
-        ? (err as { response?: { status?: number } }).response?.status
-        : undefined
-    if (status === 401) {
-      ElMessage.error(getErrorMessage(err))
-      return
-    }
-    ElMessage.error(getErrorMessage(err))
+    ElMessage.error(`登录后加载用户信息失败：${getErrorMessage(err)}`)
   } finally {
     loading.value = false
   }
@@ -345,12 +346,27 @@ async function onLogin() {
   min-height: 40px;
 }
 
-.password-hint { margin-top: 6px; color: #909399; font-size: 12px; line-height: 1.4; }
+.password-hint {
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.4;
+}
 
 @media (max-width: 860px) {
-  .login-page { padding: 24px; }
-  .login-shell { grid-template-columns: 1fr; }
-  .brand-panel { min-height: auto; padding: 32px; }
+  .login-page {
+    padding: 24px;
+  }
+
+  .login-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .brand-panel {
+    min-height: auto;
+    padding: 32px;
+  }
+
   .brand-panel h1,
   .brand-panel p {
     white-space: normal;

@@ -33,7 +33,7 @@ router = APIRouter(prefix="/projects", tags=["项目"])
 
 UNIT_CODE_MAP = {
     "中勤": "ZQ",
-    "中联国际": "ZLGJ",
+    "中立国际": "ZLGJ",
     "中众": "ZZ",
     "其他": "QT",
 }
