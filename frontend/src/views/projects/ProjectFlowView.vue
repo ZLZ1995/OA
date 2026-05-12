@@ -111,9 +111,10 @@ const visibleFlowNodes = computed(() => {
   const roleName = flow.value?.user_role_in_project || ''
   const roles = userRoles.value
   const canSeeAll = ['管理员', '项目负责人', '项目组成员', '创建人'].includes(roleName)
+  const currentStatus = flow.value?.current_work_order_status || ''
 
   if (canSeeAll) return availableNodes.value
-  if (roleName === '合同审核人' || roles.includes('CONTRACT_REVIEWER')) {
+  if (roleName === '合同审核人' || (roles.includes('CONTRACT_REVIEWER') && ['WAIT_CONTRACT_REVIEW_SUBMIT', 'CONTRACT_REVIEWING', 'CONTRACT_REJECTED'].includes(currentStatus))) {
     return availableNodes.value.filter(node => ['basic', 'contractReview'].includes(node.key))
   }
   if (roleName.includes('审老师') || roles.some(role => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].includes(role))) {
