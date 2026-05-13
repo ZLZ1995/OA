@@ -236,7 +236,11 @@ def submit_review(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     pending_change = _latest_pending_reviewer_change(db, work_order.id, payload.review_round)
-    target_reviewer_id = pending_change.reviewer_user_id if pending_change else payload.reviewer_user_id
+    target_reviewer_id = (
+        pending_change.reviewer_user_id
+        if pending_change and pending_change.reviewer_user_id == payload.reviewer_user_id
+        else payload.reviewer_user_id
+    )
 
     _ensure_reviewer_has_round_role(db, target_reviewer_id, payload.review_round)
 

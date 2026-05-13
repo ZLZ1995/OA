@@ -289,6 +289,40 @@ def test_finance_todo_still_visible_during_report_mailing() -> None:
     assert result.todo_projects[0].current_step == "财务开票"
 
 
+def test_project_party_todo_moves_to_archive_after_mailing_confirmed() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db)
+    project, work_order = _seed_project(db, leader, project_code="P-MAIL-ARCHIVE")
+    work_order.current_status = "WAIT_ARCHIVE_SUBMIT"
+    work_order.current_handler_user_id = leader.id
+    work_order.mailing_status = "COMPLETED"
+    db.commit()
+
+    result = get_workbench(db=db, current_user=leader)
+
+    assert [item.id for item in result.todo_projects] == [project.id]
+    assert result.todo_projects[0].current_step == "报告归档"
+
+
+def test_legacy_mailing_completed_todo_displays_archive_step() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db)
+    project, work_order = _seed_project(db, leader, project_code="P-LEGACY-MAIL")
+    work_order.current_status = "REPORT_MAILING_COMPLETED"
+    work_order.current_handler_user_id = leader.id
+    work_order.mailing_status = "COMPLETED"
+    db.commit()
+
+    result = get_workbench(db=db, current_user=leader)
+
+    assert [item.id for item in result.todo_projects] == [project.id]
+    assert result.todo_projects[0].current_step == "报告归档"
+
+
 def test_submitted_invoice_todo_only_visible_to_selected_finance() -> None:
     from app.api.v1.workbench import get_workbench
 

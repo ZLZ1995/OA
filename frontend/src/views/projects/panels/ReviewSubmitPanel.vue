@@ -36,16 +36,11 @@
           <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
         </el-select>
       </el-form-item>
-      <template v-if="canChangeReviewer">
+      <template v-if="showReviewerChangePanel">
         <el-form-item label="变更审核老师">
-          <el-space wrap>
-            <el-select v-model="changeReviewerUserId" placeholder="选择新的审核老师" style="width: 320px" :disabled="hasChangedReviewer">
-              <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
-            </el-select>
-            <el-button type="warning" plain :disabled="!changeReviewerUserId || hasChangedReviewer" @click="onChangeReviewer">
-              保存变更
-            </el-button>
-          </el-space>
+          <el-select v-model="changeReviewerUserId" placeholder="选择新的审核老师" style="width: 320px" :disabled="hasChangedReviewer">
+            <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="变更备注">
           <el-input v-model="changeReviewerComment" type="textarea" :rows="2" :disabled="hasChangedReviewer" placeholder="选填" />
@@ -55,11 +50,23 @@
           type="info"
           :closable="false"
           show-icon
-          title="审核人变更已保存，重新提交审核后正式生效。"
+          title="审核人变更已保存，提交并更换审核人后正式流转给新审核人。"
           style="margin-bottom: 12px"
         />
+        <el-form-item label="报告文件处理">
+          <el-radio-group v-model="replyFileMode" :disabled="!canSubmitReview">
+            <el-radio-button label="REUPLOAD">重新上传文件</el-radio-button>
+            <el-radio-button label="REUSE">沿用上轮文件</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
       </template>
 
+      <el-form-item v-if="isReplyFlow && !showReviewerChangePanel" label="报告文件处理">
+        <el-radio-group v-model="replyFileMode" :disabled="!canSubmitReview">
+          <el-radio-button label="REUPLOAD">重新上传文件</el-radio-button>
+          <el-radio-button label="REUSE">沿用上轮文件</el-radio-button>
+        </el-radio-group>
+      </el-form-item>
       <el-form-item v-if="showContractDraftDownload" label="合同初稿下载">
         <div v-if="contractDraftFiles.length" class="contract-file-list">
           <div v-for="file in contractDraftFiles" :key="file.id" class="contract-file-item">
@@ -70,24 +77,34 @@
         <span v-else>-</span>
       </el-form-item>
 
-      <el-form-item :label="isReplyFlow ? '意见回复文件' : '待审报告包'">
-        <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview">
-          <el-button :disabled="!canSubmitReview">{{ isReplyFlow ? '上传审核意见回复' : '上传待审报告' }}</el-button>
+      <el-form-item :label="showReviewerChangePanel ? '重新上传文件' : (isReplyFlow ? '意见回复文件' : '待审报告包')">
+        <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
+          <el-button :disabled="!canSubmitReview || reusePreviousFile">{{ isReplyFlow ? '上传审核意见回复' : '上传待审报告' }}</el-button>
         </el-upload>
+        <el-tag v-if="reusePreviousFile" type="info" effect="plain" style="margin-left: 12px">将沿用上轮已提交文件</el-tag>
         <div class="file-list" v-if="submitFiles.length">
           <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
             {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
           </el-tag>
         </div>
       </el-form-item>
-      <el-form-item label="送审备注" v-if="canSubmitReview">
+      <el-form-item label="送审备注" v-if="canSubmitReview && !showReviewerChangePanel">
         <el-input v-model="comment" type="textarea" :rows="3" />
       </el-form-item>
       <el-form-item>
         <el-space wrap>
-          <el-button type="primary" :disabled="!canSubmitReview || submitFiles.length === 0" @click="onSubmit">
+          <el-button v-if="!showReviewerChangePanel" type="primary" :disabled="!canSubmitReview || (!reusePreviousFile && submitFiles.length === 0)" @click="onSubmit">
             {{ isReplyFlow ? '提交审核意见回复' : '提交审核' }}
           </el-button>
+          <el-button v-if="canChangeReviewer && !showReviewerChangePanel" type="warning" plain @click="openReviewerChangePanel">
+            更换审核人
+          </el-button>
+          <template v-if="showReviewerChangePanel">
+            <el-button type="warning" :disabled="!canSubmitReviewerChange" @click="onSubmitWithReviewerChange">
+              提交并更换审核人
+            </el-button>
+            <el-button plain @click="cancelReviewerChangePanel">取消更换</el-button>
+          </template>
           <el-tag :type="statusTagType" effect="plain">{{ reviewStatusText }}</el-tag>
         </el-space>
       </el-form-item>
@@ -227,6 +244,8 @@ const auth = useAuthStore()
 const reviewRound = ref<ReviewRound>('FIRST')
 const reviewerUserId = ref<number>()
 const changeReviewerUserId = ref<number>()
+const replyFileMode = ref<'REUPLOAD' | 'REUSE'>('REUPLOAD')
+const isReviewerChangePanelOpen = ref(false)
 const comment = ref('')
 const changeReviewerComment = ref('')
 const reviewComment = ref('')
@@ -260,6 +279,13 @@ const pendingReviewerChange = computed(() => records.value
   .sort((a, b) => new Date(b.acted_at).getTime() - new Date(a.acted_at).getTime())[0])
 const hasChangedReviewer = computed(() => Boolean(pendingReviewerChange.value))
 const canChangeReviewer = computed(() => canSubmitReview.value && isReplyFlow.value)
+const reusePreviousFile = computed(() => isReplyFlow.value && replyFileMode.value === 'REUSE')
+const showReviewerChangePanel = computed(() => canChangeReviewer.value && isReviewerChangePanelOpen.value)
+const canSubmitReviewerChange = computed(() =>
+  canSubmitReview.value &&
+  Boolean(changeReviewerUserId.value || pendingReviewerChange.value?.reviewer_user_id) &&
+  (reusePreviousFile.value || submitFiles.value.length > 0)
+)
 const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'FIRST') return props.flowInfo?.first_reviewer_id
   if (reviewRound.value === 'SECOND') return props.flowInfo?.second_reviewer_id
@@ -437,9 +463,12 @@ async function loadCandidates() {
     userOptions.value = []
     return
   }
-  userOptions.value = (await listReviewCandidates(props.workOrderId, reviewRound.value)).items
+  userOptions.value = (await listReviewCandidates(props.workOrderId, reviewRound.value)).items.filter(
+    user => user.user_id !== currentRoundReviewerId.value
+  )
   if (pendingReviewerChange.value) {
     changeReviewerUserId.value = pendingReviewerChange.value.reviewer_user_id
+    isReviewerChangePanelOpen.value = true
   }
 }
 
@@ -527,27 +556,57 @@ async function onTransferPrintRoom() {
 }
 
 async function onSubmit() {
-  const targetReviewerId = isReplyFlow.value ? (pendingReviewerChange.value?.reviewer_user_id || currentRoundReviewerId.value) : reviewerUserId.value
+  const targetReviewerId = isReplyFlow.value ? currentRoundReviewerId.value : reviewerUserId.value
   if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
-  if (!submitFiles.value.length) return ElMessage.warning(isReplyFlow.value ? '请先上传审核意见回复' : '请先上传待审报告')
+  if (!reusePreviousFile.value && !submitFiles.value.length) return ElMessage.warning(isReplyFlow.value ? '请先上传审核意见回复，或选择沿用上轮文件' : '请先上传待审报告')
   await submitReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, reviewer_user_id: targetReviewerId, comment: comment.value || undefined })
   ElMessage.success(isReplyFlow.value ? '审核意见回复已提交' : '提交审核成功')
   comment.value = ''
+  replyFileMode.value = 'REUPLOAD'
   await Promise.all([loadRecords(), loadFiles()])
   emit('changed')
 }
 
-async function onChangeReviewer() {
-  if (!props.workOrderId || !changeReviewerUserId.value) return
-  await changeReviewAssignee({
+function openReviewerChangePanel() {
+  isReviewerChangePanelOpen.value = true
+  changeReviewerUserId.value = pendingReviewerChange.value?.reviewer_user_id
+  changeReviewerComment.value = pendingReviewerChange.value?.comment || changeReviewerComment.value
+}
+
+function cancelReviewerChangePanel() {
+  isReviewerChangePanelOpen.value = false
+  if (!pendingReviewerChange.value) {
+    changeReviewerUserId.value = undefined
+    changeReviewerComment.value = ''
+  }
+  replyFileMode.value = 'REUPLOAD'
+}
+
+async function onSubmitWithReviewerChange() {
+  if (!props.workOrderId) return
+  const targetReviewerId = pendingReviewerChange.value?.reviewer_user_id || changeReviewerUserId.value
+  if (!targetReviewerId) return ElMessage.warning('请选择新的审核老师')
+  if (!reusePreviousFile.value && !submitFiles.value.length) return ElMessage.warning('请重新上传文件，或选择沿用上轮文件')
+  if (!pendingReviewerChange.value) {
+    await changeReviewAssignee({
+      work_order_id: props.workOrderId,
+      review_round: reviewRound.value,
+      reviewer_user_id: targetReviewerId,
+      comment: changeReviewerComment.value || undefined
+    })
+  }
+  await submitReview({
     work_order_id: props.workOrderId,
     review_round: reviewRound.value,
-    reviewer_user_id: changeReviewerUserId.value,
+    reviewer_user_id: targetReviewerId,
     comment: changeReviewerComment.value || undefined
   })
-  ElMessage.success('审核人变更已保存，重新提交审核后生效')
+  ElMessage.success('已提交审核意见回复并更换审核人')
   changeReviewerComment.value = ''
-  await Promise.all([loadRecords(), loadCandidates()])
+  comment.value = ''
+  replyFileMode.value = 'REUPLOAD'
+  isReviewerChangePanelOpen.value = false
+  await Promise.all([loadRecords(), loadCandidates(), loadFiles()])
   emit('changed')
 }
 
@@ -584,6 +643,10 @@ async function onWithdraw() {
 
 async function reloadPanelData() {
   syncRoundWithStatus()
+  if (!isReplyFlow.value) {
+    replyFileMode.value = 'REUPLOAD'
+    isReviewerChangePanelOpen.value = false
+  }
   signerOne.value = props.flowInfo?.signer_one || signerOne.value
   signerTwo.value = props.flowInfo?.signer_two || signerTwo.value
   formalReportCount.value = props.flowInfo?.formal_report_count || formalReportCount.value

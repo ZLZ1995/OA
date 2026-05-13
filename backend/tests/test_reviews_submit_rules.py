@@ -181,7 +181,7 @@ def test_rejected_review_assignee_change_takes_effect_on_resubmit() -> None:
         payload=ReviewSubmitRequest(
             work_order_id=work_order.id,
             review_round="FIRST",
-            reviewer_user_id=reviewer.id,
+            reviewer_user_id=new_reviewer.id,
             comment="沿用文件重新提交",
         ),
         db=db,
@@ -193,6 +193,64 @@ def test_rejected_review_assignee_change_takes_effect_on_resubmit() -> None:
     assert result.reviewer_user_id == new_reviewer.id
     assert work_order.first_reviewer_id == new_reviewer.id
     assert work_order.current_handler_user_id == new_reviewer.id
+
+
+def test_pending_reviewer_change_does_not_override_plain_resubmit() -> None:
+    from app.api.v1.reviews import change_reviewer_after_reject, submit_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    new_reviewer = User(username="reviewer2", password_hash="x", real_name="Reviewer2", is_active=True)
+    db.add(new_reviewer)
+    db.flush()
+
+    first_role = db.query(Role).filter(Role.code == "FIRST_REVIEWER").first()
+    assert first_role is not None
+    db.add(UserRole(user_id=reviewer.id, role_id=first_role.id))
+    db.add(UserRole(user_id=new_reviewer.id, role_id=first_role.id))
+    work_order.current_status = "FIRST_REVIEW_REJECTED"
+    work_order.current_handler_user_id = leader.id
+    work_order.first_reviewer_id = reviewer.id
+    db.add(
+        ReviewRecord(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            reviewer_user_id=reviewer.id,
+            action="REJECT_RETURN",
+            comment="退回",
+            acted_at=work_order.created_at,
+        )
+    )
+    db.commit()
+
+    change_reviewer_after_reject(
+        payload=ReviewAssigneeChangeRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            reviewer_user_id=new_reviewer.id,
+            comment="更换老师",
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    result = submit_review(
+        payload=ReviewSubmitRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            reviewer_user_id=reviewer.id,
+            comment="普通回复",
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert result.reviewer_user_id == reviewer.id
+    assert work_order.first_reviewer_id == reviewer.id
+    assert work_order.current_handler_user_id == reviewer.id
 
 
 def test_rejected_review_assignee_change_only_once_per_rejection() -> None:
