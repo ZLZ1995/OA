@@ -28,6 +28,7 @@
           :can-operate="canProjectOperate"
           :user-roles="userRoles"
           @changed="onPanelChanged"
+          @navigate="onPanelNavigate"
         />
       </el-card>
     </el-col>
@@ -55,6 +56,7 @@ import ProjectMembersPanel from './panels/ProjectMembersPanel.vue'
 import ContractUploadPanel from './panels/ContractUploadPanel.vue'
 import ReviewSubmitPanel from './panels/ReviewSubmitPanel.vue'
 import ReportIssuePanel from './panels/ReportIssuePanel.vue'
+import ReportMailingPanel from './panels/ReportMailingPanel.vue'
 import InvoicePanel from './panels/InvoicePanel.vue'
 import ArchivePanel from './panels/ArchivePanel.vue'
 import ContractReviewPanel from './panels/ContractReviewPanel.vue'
@@ -66,6 +68,7 @@ const baseFlowNodes = [
   { key: 'contractReview', label: '合同初稿审核' },
   { key: 'review', label: '报告送审' },
   { key: 'issue', label: '报告出具' },
+  { key: 'mailing', label: '报告邮寄' },
   { key: 'invoice', label: '发票开具' },
   { key: 'archive', label: '报告归档' }
 ]
@@ -77,6 +80,7 @@ const panelMap: Record<string, any> = {
   contractReview: ContractReviewPanel,
   review: ReviewSubmitPanel,
   issue: ReportIssuePanel,
+  mailing: ReportMailingPanel,
   invoice: InvoicePanel,
   archive: ArchivePanel
 }
@@ -110,8 +114,8 @@ const activeFlowStep = computed(() => {
 const visibleFlowNodes = computed(() => {
   const roleName = flow.value?.user_role_in_project || ''
   const roles = userRoles.value
-  const canSeeAll = ['管理员', '项目负责人', '项目组成员', '创建人'].includes(roleName)
   const currentStatus = flow.value?.current_work_order_status || ''
+  const canSeeAll = ['管理员', '项目负责人', '项目组成员', '创建人'].includes(roleName)
 
   if (canSeeAll) return availableNodes.value
   if (roleName === '合同审核人' || (roles.includes('CONTRACT_REVIEWER') && ['WAIT_CONTRACT_REVIEW_SUBMIT', 'CONTRACT_REVIEWING', 'CONTRACT_REJECTED'].includes(currentStatus))) {
@@ -121,7 +125,7 @@ const visibleFlowNodes = computed(() => {
     return availableNodes.value.filter(node => node.key === 'review')
   }
   if (roleName === '文印室' || roles.includes('PRINT_ROOM')) {
-    return availableNodes.value.filter(node => node.key === 'issue')
+    return availableNodes.value.filter(node => ['issue', 'mailing'].includes(node.key))
   }
   if (roleName === '财务' || roles.includes('FINANCE')) {
     return availableNodes.value.filter(node => node.key === 'invoice')
@@ -191,6 +195,10 @@ async function load() {
 
 async function onPanelChanged() {
   await load()
+}
+
+function onPanelNavigate(key: string) {
+  activeNode.value = key
 }
 
 watch(visibleFlowNodes, ensureVisibleActiveNode)
