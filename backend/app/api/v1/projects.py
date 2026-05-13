@@ -16,6 +16,7 @@ from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.project_update_log import ProjectUpdateLog
+from app.models.report_mailing_record import ReportMailingRecord
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.schemas.contract_review import ContractReviewRecordResponse
@@ -109,6 +110,7 @@ def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrd
     print_room_record = db.query(PrintRoomRecord).filter(PrintRoomRecord.work_order_id == work_order.id).first()
     invoice = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.desc()).first()
     contract = db.query(Contract).filter(Contract.work_order_id == work_order.id).first()
+    mailing_record = db.query(ReportMailingRecord).filter(ReportMailingRecord.work_order_id == work_order.id).order_by(ReportMailingRecord.id.desc()).first()
 
     def user_name(user_id: int | None) -> str | None:
         if not user_id:
@@ -122,8 +124,14 @@ def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrd
         "second_reviewer_name": user_name(work_order.second_reviewer_id),
         "third_reviewer_name": user_name(work_order.third_reviewer_id),
         "print_room_handler_name": user_name(work_order.print_room_handler_id),
+        "mailing_handler_name": user_name(work_order.mailing_handler_user_id),
         "invoice_handler_name": user_name(invoice.handled_by if invoice else None),
         "archive_reviewer_name": user_name(work_order.archive_reviewer_id),
+        "mailing_receiver_name": mailing_record.receiver_name if mailing_record else None,
+        "mailing_receiver_phone": mailing_record.receiver_phone if mailing_record else None,
+        "mailing_receiver_address": mailing_record.receiver_address if mailing_record else None,
+        "mailing_receiver_remark": mailing_record.receiver_remark if mailing_record else None,
+        "mailing_express_no": mailing_record.express_no if mailing_record else None,
     }
 
 
@@ -526,6 +534,7 @@ def get_project_flow(
             second_reviewer_name=readonly_fields.get("second_reviewer_name"),
             third_reviewer_name=readonly_fields.get("third_reviewer_name"),
             print_room_handler_name=readonly_fields.get("print_room_handler_name"),
+            mailing_handler_name=readonly_fields.get("mailing_handler_name"),
             invoice_handler_name=readonly_fields.get("invoice_handler_name"),
             archive_reviewer_name=readonly_fields.get("archive_reviewer_name"),
             current_step=step,
@@ -567,9 +576,11 @@ def get_project_flow(
         signer_two=work_order.signer_two if work_order else None,
         formal_report_count=work_order.formal_report_count if work_order else None,
         print_room_handler_id=work_order.print_room_handler_id if work_order else None,
+        mailing_handler_user_id=work_order.mailing_handler_user_id if work_order else None,
         archive_reviewer_id=work_order.archive_reviewer_id if work_order else None,
         archive_submitter_id=work_order.archive_submitter_id if work_order else None,
         archive_submission_type=work_order.archive_submission_type if work_order else None,
+        mailing_status=work_order.mailing_status if work_order else None,
         user_role_in_project=role,
         available_action=action,
         can_operate=role != "无权限" and not is_termination_locked,

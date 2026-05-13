@@ -36,6 +36,8 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             project.archived_at is not None,
             project.project_source,
         )
+        if latest_work_order and latest_work_order.current_status == "REPORT_MAILING_COMPLETED":
+            step = "报告邮寄"
         if project.termination_status == "PENDING":
             step = "项目终止/废止审核中"
         elif project.termination_status == "APPROVED" and project.archived_at is None:
@@ -75,6 +77,9 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         )
     if "CONTRACT_REVIEWER" in role_codes or "ADMIN" in role_codes:
         role_pool_filters.append(WorkOrder.contract_reviewer_id == current_user.id)
+    if "PRINT_ROOM" in role_codes or "ADMIN" in role_codes:
+        role_pool_filters.append(WorkOrder.print_room_handler_id == current_user.id)
+        role_pool_filters.append(WorkOrder.mailing_handler_user_id == current_user.id)
     if "ADMIN" in role_codes:
         role_pool_filters.append(Project.termination_status == "PENDING")
 
@@ -104,18 +109,43 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         if project.id in seen:
             continue
         rejected_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "REJECTED").first()
+        pending_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "SUBMITTED").first()
+
         is_project_party = (
             work_order.project_leader_id == current_user.id
             or work_order.project_id in member_project_id_set
             or project.business_user_id == current_user.id
             or work_order.initiator_user_id == current_user.id
         )
+        is_print_room_assignee = (
+            ("PRINT_ROOM" in role_codes or "ADMIN" in role_codes)
+            and (
+                work_order.current_handler_user_id == current_user.id
+                or work_order.print_room_handler_id == current_user.id
+                or work_order.mailing_handler_user_id == current_user.id
+            )
+        )
         if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id and not rejected_invoice:
-            if work_order.current_status not in {"WAIT_CONTRACT_REVIEW_SUBMIT", "CONTRACT_REJECTED"}:
+            if work_order.current_status not in {"WAIT_CONTRACT_REVIEW_SUBMIT", "CONTRACT_REJECTED", "REPORT_MAILING", "REPORT_MAILING_COMPLETED"}:
                 continue
 
-        pending_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "SUBMITTED").first()
-        if pending_invoice and "FINANCE" not in role_codes and "ADMIN" not in role_codes:
+        if (
+            pending_invoice
+            and "FINANCE" not in role_codes
+            and "ADMIN" not in role_codes
+            and not (
+                work_order.current_status in {"REPORT_MAILING", "REPORT_MAILING_COMPLETED"}
+                and work_order.mailing_handler_user_id == current_user.id
+            )
+        ):
+            continue
+
+        if (
+            work_order.current_status in {"REPORT_MAILING", "REPORT_MAILING_COMPLETED"}
+            and not is_project_party
+            and not is_print_room_assignee
+            and "ADMIN" not in role_codes
+        ):
             continue
 
         can_approve_termination = "ADMIN" in role_codes and project.termination_status == "PENDING"
@@ -123,6 +153,8 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             step = "项目终止/废止审核"
         elif work_order.current_status == "CONTRACT_REVIEWING" and work_order.contract_reviewer_id == current_user.id:
             step = "合同初稿审核"
+        elif work_order.current_status == "REPORT_MAILING" or work_order.current_status == "REPORT_MAILING_COMPLETED":
+            step = "报告邮寄"
         elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
             step = "财务开票"
         elif rejected_invoice and is_project_party:
@@ -150,6 +182,8 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             if rejected_invoice and is_project_party
             else "请处理合同初稿审核"
             if step == "合同初稿审核" and work_order.contract_reviewer_id == current_user.id
+            else "请填写快递单号"
+            if step == "报告邮寄" and work_order.mailing_handler_user_id == current_user.id
             else f"待处理：{step}"
         )
         todo_projects.append(

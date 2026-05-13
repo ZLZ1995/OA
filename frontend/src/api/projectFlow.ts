@@ -32,6 +32,7 @@ export interface ProjectFlowData {
     print_room_handler_name?: string | null
     invoice_handler_name?: string | null
     archive_reviewer_name?: string | null
+    mailing_handler_name?: string | null
     current_step: string
     status_display: string
   }
@@ -52,6 +53,8 @@ export interface ProjectFlowData {
   archive_reviewer_id?: number | null
   archive_submitter_id?: number | null
   archive_submission_type?: string | null
+  mailing_handler_user_id?: number | null
+  mailing_status?: string | null
   user_role_in_project: string
   available_action: string
   can_operate: boolean

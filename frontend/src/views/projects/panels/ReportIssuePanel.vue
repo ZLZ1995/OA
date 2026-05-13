@@ -232,13 +232,20 @@ async function reportErrorBack() {
 }
 
 async function goMailing() {
-  if (!props.workOrderId) return
-  if (!['REPORT_MAILING', 'REPORT_MAILING_COMPLETED'].includes(props.flowInfo?.current_work_order_status || '')) {
-    await startReportMailing(props.workOrderId)
-    ElMessage.success('已进入报告邮寄')
+  if (!props.workOrderId) {
+    ElMessage.warning('当前项目暂无关联工单')
+    return
   }
-  emit('changed')
-  emit('navigate', 'mailing')
+  try {
+    if (!['REPORT_MAILING', 'REPORT_MAILING_COMPLETED'].includes(props.flowInfo?.current_work_order_status || '')) {
+      await startReportMailing(props.workOrderId)
+      ElMessage.success('已进入报告邮寄')
+    }
+    emit('navigate', 'mailing')
+    emit('changed')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '进入报告邮寄失败')
+  }
 }
 
 function download(file: WorkOrderFileItem) {

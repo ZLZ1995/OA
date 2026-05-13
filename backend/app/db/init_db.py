@@ -115,6 +115,7 @@ def init_db() -> None:
         ensure_work_order_file_columns(db)
         ensure_contract_review_table(db)
         ensure_project_update_log_table(db)
+        ensure_report_mailing_table(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
         sync_local_bootstrap_users(db)
@@ -183,12 +184,16 @@ def ensure_work_order_columns(db: Session) -> None:
         db.execute(text("ALTER TABLE work_orders ADD COLUMN formal_report_count INTEGER NULL"))
     if "print_room_handler_id" not in existing_columns:
         db.execute(text("ALTER TABLE work_orders ADD COLUMN print_room_handler_id INTEGER NULL"))
+    if "mailing_handler_user_id" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN mailing_handler_user_id INTEGER NULL"))
     if "archive_reviewer_id" not in existing_columns:
         db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_reviewer_id INTEGER NULL"))
     if "archive_submitter_id" not in existing_columns:
         db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_submitter_id INTEGER NULL"))
     if "archive_submission_type" not in existing_columns:
         db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_submission_type VARCHAR(16) NULL"))
+    if "mailing_status" not in existing_columns:
+        db.execute(text("ALTER TABLE work_orders ADD COLUMN mailing_status VARCHAR(32) NULL"))
 
     invoice_columns = {row[1] for row in db.execute(text("PRAGMA table_info('invoices')")).fetchall()}
     if "invoice_info" not in invoice_columns:
@@ -241,6 +246,37 @@ def ensure_project_update_log_table(db: Session) -> None:
                     operator_user_id INTEGER NOT NULL,
                     changed_fields TEXT NOT NULL,
                     remark VARCHAR(255) NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        )
+    db.commit()
+
+
+def ensure_report_mailing_table(db: Session) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    table_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='report_mailing_records'")).fetchone()
+    if not table_exists:
+        db.execute(
+            text(
+                """
+                CREATE TABLE report_mailing_records (
+                    id INTEGER PRIMARY KEY,
+                    work_order_id INTEGER NOT NULL,
+                    project_id INTEGER NOT NULL,
+                    action_type VARCHAR(32) NOT NULL,
+                    operator_user_id INTEGER NOT NULL,
+                    receiver_name VARCHAR(128) NULL,
+                    receiver_phone VARCHAR(64) NULL,
+                    receiver_address TEXT NULL,
+                    receiver_remark TEXT NULL,
+                    express_no VARCHAR(128) NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+                    invalidated_express_no VARCHAR(128) NULL,
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
                 )

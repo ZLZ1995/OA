@@ -4,3 +4,8 @@ __pycache__/
 backend/.venv/
 frontend/node_modules/
 frontend/dist/
+*.db
+*.log
+logs/
+backend/uploads/
+.git.local-empty-backup/

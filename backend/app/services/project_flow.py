@@ -33,6 +33,8 @@ STATUS_TO_STEP = {
     "THIRD_APPROVED_WAIT_PRINTROOM": "报告出具",
     "PRINTROOM_PROCESSING": "报告出具",
     "PAPER_REPORT_ISSUED": "发票开具",
+    "REPORT_MAILING": "报告邮寄",
+    "REPORT_MAILING_COMPLETED": "报告邮寄",
     "WAIT_INVOICE_INFO": "发票开具",
     "INVOICE_INFO_REJECTED": "发票开具",
     "INVOICE_PROCESSING": "发票开具",
@@ -53,6 +55,7 @@ FLOW_STEPS = [
     "二审",
     "三审",
     "报告出具",
+    "报告邮寄",
     "发票开具",
     "报告归档",
     "已归档",
@@ -67,6 +70,7 @@ EXTERNAL_FLOW_STEPS = [
     "二审",
     "三审",
     "报告出具",
+    "报告邮寄",
     "发票开具",
     "报告归档",
     "已归档",
@@ -154,6 +158,8 @@ def build_todo_action(step: str, user_role: str) -> str | None:
         return "请上传正式报告文件和合同扫描件"
     if user_role == "文印室" and step == "报告出具":
         return "请处理报告出具"
+    if user_role == "文印室" and step == "报告邮寄":
+        return "请填写快递单号"
     if user_role == "财务" and step == "发票开具":
         return "请处理开票"
     if user_role == "档案管理员" and step == "报告归档":
@@ -166,6 +172,7 @@ def build_todo_action(step: str, user_role: str) -> str | None:
             "合同初稿审核": "请提交合同初稿审核",
             "报告送审": "请提交报告送审",
             "报告出具": "请跟进报告出具",
+            "报告邮寄": "请填写和确认邮寄信息",
             "发票开具": "请提交开票信息",
             "报告归档": "请办理归档",
         }
