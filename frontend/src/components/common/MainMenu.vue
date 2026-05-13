@@ -25,6 +25,7 @@ const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/wo
 const ADMIN_MENUS = [
   { key: 'accounts', title: '账号管理', path: '/accounts' },
   { key: 'termination-approvals', title: '终止/废止审核', path: '/termination-approvals' },
+  { key: 'project-delete-approvals', title: '项目删除审核', path: '/project-delete-approvals' },
   { key: 'project-exports', title: '项目清单导出', path: '/project-exports' }
 ]
 
