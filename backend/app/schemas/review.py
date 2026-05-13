@@ -17,6 +17,13 @@ class ReviewDecisionRequest(BaseModel):
     comment: str | None = None
 
 
+class ReviewAssigneeChangeRequest(BaseModel):
+    work_order_id: int
+    review_round: str = Field(pattern="^(FIRST|SECOND|THIRD)$")
+    reviewer_user_id: int
+    comment: str | None = None
+
+
 class ReviewRecordResponse(BaseModel):
     id: int
     work_order_id: int

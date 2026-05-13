@@ -18,6 +18,7 @@ from app.schemas.review import (
     ReviewCandidateListResponse,
     ReviewCandidateResponse,
     ReviewDecisionRequest,
+    ReviewAssigneeChangeRequest,
     ReviewRecordListResponse,
     ReviewRecordResponse,
     ReviewSubmitRequest,
@@ -75,6 +76,12 @@ ROUND_WAIT_STATUS = {
     "THIRD": WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
 }
 
+ROUND_CURRENT_REVIEWER_ATTR = {
+    "FIRST": "first_reviewer_id",
+    "SECOND": "second_reviewer_id",
+    "THIRD": "third_reviewer_id",
+}
+
 
 def _to_review_record_response(db: Session, record: ReviewRecord) -> ReviewRecordResponse:
     reviewer_name = db.query(User.real_name).filter(User.id == record.reviewer_user_id).scalar()
@@ -96,13 +103,75 @@ def _ensure_reviewer_has_round_role(db: Session, reviewer_user_id: int, review_r
         raise HTTPException(status_code=400, detail=f"所选审核人不具备{review_round}轮审核角色")
 
 
+def _is_project_party(db: Session, work_order: WorkOrder, current_user: User) -> bool:
+    if current_user.id in {work_order.project_leader_id, work_order.initiator_user_id}:
+        return True
+    from app.models.project_member import ProjectMember
+
+    return db.query(ProjectMember.id).filter(
+        ProjectMember.project_id == work_order.project_id,
+        ProjectMember.user_id == current_user.id,
+    ).first() is not None
+
+
+def _latest_pending_reviewer_change(db: Session, work_order_id: int, review_round: str) -> ReviewRecord | None:
+    latest_submit = (
+        db.query(ReviewRecord)
+        .filter(
+            ReviewRecord.work_order_id == work_order_id,
+            ReviewRecord.review_round == review_round,
+            ReviewRecord.action == "SUBMIT",
+        )
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+    latest_submit_at = latest_submit.acted_at if latest_submit else datetime.min.replace(tzinfo=timezone.utc)
+    return (
+        db.query(ReviewRecord)
+        .filter(
+            ReviewRecord.work_order_id == work_order_id,
+            ReviewRecord.review_round == review_round,
+            ReviewRecord.action == "CHANGE_REVIEWER",
+            ReviewRecord.acted_at > latest_submit_at,
+        )
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+
+
+def _has_reviewer_change_after_rejection(db: Session, work_order_id: int, review_round: str) -> bool:
+    latest_rejection = (
+        db.query(ReviewRecord)
+        .filter(
+            ReviewRecord.work_order_id == work_order_id,
+            ReviewRecord.review_round == review_round,
+            ReviewRecord.action == "REJECT_RETURN",
+        )
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+    if not latest_rejection:
+        return False
+    return (
+        db.query(ReviewRecord.id)
+        .filter(
+            ReviewRecord.work_order_id == work_order_id,
+            ReviewRecord.review_round == review_round,
+            ReviewRecord.action == "CHANGE_REVIEWER",
+            ReviewRecord.acted_at > latest_rejection.acted_at,
+        )
+        .first()
+        is not None
+    )
+
+
 @router.get("/candidates", response_model=ReviewCandidateListResponse)
 def list_review_candidates(
     work_order_id: int,
     review_round: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
+    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "ADMIN")),
 ) -> ReviewCandidateListResponse:
     if review_round not in ROUND_ROLE_CODE:
         raise HTTPException(status_code=400, detail="非法审核轮次")
@@ -110,8 +179,8 @@ def list_review_candidates(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    if current_user.id not in {work_order.project_leader_id, work_order.initiator_user_id} and "ADMIN" not in role_codes:
-        raise HTTPException(status_code=403, detail="仅项目负责人或创建人可查看审核候选人")
+    if "ADMIN" not in role_codes and not _is_project_party(db, work_order, current_user):
+        raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可查看审核候选人")
 
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if not project:
@@ -154,23 +223,26 @@ def submit_review(
     payload: ReviewSubmitRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
+    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "ADMIN")),
 ) -> ReviewRecordResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    if current_user.id not in {work_order.project_leader_id, work_order.initiator_user_id} and not any(item.role.code == "ADMIN" for item in current_user.roles):
-        raise HTTPException(status_code=403, detail="仅项目负责人或创建人可发起审核")
+    if "ADMIN" not in role_codes and not _is_project_party(db, work_order, current_user):
+        raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可发起审核")
 
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    _ensure_reviewer_has_round_role(db, payload.reviewer_user_id, payload.review_round)
+    pending_change = _latest_pending_reviewer_change(db, work_order.id, payload.review_round)
+    target_reviewer_id = pending_change.reviewer_user_id if pending_change else payload.reviewer_user_id
 
-    first_reviewer_id = payload.reviewer_user_id if payload.review_round == "FIRST" else work_order.first_reviewer_id
-    second_reviewer_id = payload.reviewer_user_id if payload.review_round == "SECOND" else work_order.second_reviewer_id
-    third_reviewer_id = payload.reviewer_user_id if payload.review_round == "THIRD" else work_order.third_reviewer_id
+    _ensure_reviewer_has_round_role(db, target_reviewer_id, payload.review_round)
+
+    first_reviewer_id = target_reviewer_id if payload.review_round == "FIRST" else work_order.first_reviewer_id
+    second_reviewer_id = target_reviewer_id if payload.review_round == "SECOND" else work_order.second_reviewer_id
+    third_reviewer_id = target_reviewer_id if payload.review_round == "THIRD" else work_order.third_reviewer_id
     ok, msg = validate_reviewer_avoidance(
         project_leader_id=work_order.project_leader_id,
         business_user_id=project.business_user_id,
@@ -194,19 +266,19 @@ def submit_review(
         raise HTTPException(status_code=400, detail="非法状态迁移")
 
     if payload.review_round == "FIRST":
-        work_order.first_reviewer_id = payload.reviewer_user_id
+        work_order.first_reviewer_id = target_reviewer_id
     elif payload.review_round == "SECOND":
-        work_order.second_reviewer_id = payload.reviewer_user_id
+        work_order.second_reviewer_id = target_reviewer_id
     else:
-        work_order.third_reviewer_id = payload.reviewer_user_id
+        work_order.third_reviewer_id = target_reviewer_id
 
     work_order.current_status = to_status.value
-    work_order.current_handler_user_id = payload.reviewer_user_id
+    work_order.current_handler_user_id = target_reviewer_id
 
     record = ReviewRecord(
         work_order_id=work_order.id,
         review_round=payload.review_round,
-        reviewer_user_id=payload.reviewer_user_id,
+        reviewer_user_id=target_reviewer_id,
         action="SUBMIT",
         comment=payload.comment,
         acted_at=datetime.now(timezone.utc),
@@ -220,6 +292,76 @@ def submit_review(
         action_type=f"SUBMIT_{payload.review_round}",
         operator_user_id=current_user.id,
         remark=payload.comment,
+    )
+    db.commit()
+    db.refresh(record)
+    return _to_review_record_response(db, record)
+
+
+@router.post("/change-reviewer", response_model=ReviewRecordResponse)
+def change_reviewer_after_reject(
+    payload: ReviewAssigneeChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "ADMIN")),
+) -> ReviewRecordResponse:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    if "ADMIN" not in role_codes and not _is_project_party(db, work_order, current_user):
+        raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可变更审核人")
+
+    rejected_status = ROUND_REJECTED_STATUS[payload.review_round]
+    if WorkOrderStatus(work_order.current_status) != rejected_status:
+        raise HTTPException(status_code=400, detail="仅当前轮次被退回后可变更审核人")
+    if _has_reviewer_change_after_rejection(db, work_order.id, payload.review_round):
+        raise HTTPException(status_code=400, detail="本次退回已变更过审核人")
+
+    old_reviewer_id = getattr(work_order, ROUND_CURRENT_REVIEWER_ATTR[payload.review_round])
+    if old_reviewer_id == payload.reviewer_user_id:
+        raise HTTPException(status_code=400, detail="新审核人不能与原审核人相同")
+
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    _ensure_reviewer_has_round_role(db, payload.reviewer_user_id, payload.review_round)
+    candidate_first = payload.reviewer_user_id if payload.review_round == "FIRST" else work_order.first_reviewer_id
+    candidate_second = payload.reviewer_user_id if payload.review_round == "SECOND" else work_order.second_reviewer_id
+    candidate_third = payload.reviewer_user_id if payload.review_round == "THIRD" else work_order.third_reviewer_id
+    ok, msg = validate_reviewer_avoidance(
+        project_leader_id=work_order.project_leader_id,
+        business_user_id=project.business_user_id,
+        first_reviewer_id=candidate_first,
+        second_reviewer_id=candidate_second,
+        third_reviewer_id=candidate_third,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+
+    old_name = db.query(User.real_name).filter(User.id == old_reviewer_id).scalar() or "-"
+    new_name = db.query(User.real_name).filter(User.id == payload.reviewer_user_id).scalar() or "-"
+    comment = f"原审核人：{old_name}；新审核人：{new_name}"
+    if payload.comment:
+        comment = f"{comment}；备注：{payload.comment}"
+
+    record = ReviewRecord(
+        work_order_id=work_order.id,
+        review_round=payload.review_round,
+        reviewer_user_id=payload.reviewer_user_id,
+        action="CHANGE_REVIEWER",
+        comment=comment,
+        acted_at=datetime.now(timezone.utc),
+    )
+    db.add(record)
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=work_order.current_status,
+        to_status=work_order.current_status,
+        action_type=f"CHANGE_{payload.review_round}_REVIEWER",
+        operator_user_id=current_user.id,
+        remark=comment,
     )
     db.commit()
     db.refresh(record)
