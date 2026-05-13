@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,16 +9,19 @@ from app.api.deps import get_current_user, require_roles
 from app.api.v1.contract_reviews import get_contract_review_status_display
 from app.db.session import get_db
 from app.models.archive import Archive
+from app.models.contract import Contract
 from app.models.contract_review_record import ContractReviewRecord
+from app.models.invoice import Invoice
+from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_member import ProjectMember
+from app.models.project_update_log import ProjectUpdateLog
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.schemas.contract_review import ContractReviewRecordResponse
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectResponse, ProjectUpdate
-from app.schemas.project_flow import ProjectFlowProject, ProjectFlowResponse
+from app.schemas.project_flow import ProjectFlowProject, ProjectFlowResponse, ProjectUpdateLogItem
 from app.services.project_flow import (
-    assert_project_creator,
     build_todo_action,
     get_flow_steps,
     get_project_leader_display_name,
@@ -60,9 +64,67 @@ def _serialize_contract_review_records(db: Session, work_order_id: int | None) -
         .order_by(ContractReviewRecord.created_at.desc(), ContractReviewRecord.id.desc())
         .all()
     )
-    from app.api.v1.contract_reviews import _serialize_record  # local import to avoid cycles
+    from app.api.v1.contract_reviews import _serialize_record
 
     return [_serialize_record(db, row) for row in rows]
+
+
+def _resolve_contract_review_status_from_history(records: list[ContractReviewRecordResponse]) -> tuple[str | None, str | None]:
+    for item in records:
+        if item.action_type == "APPROVE_CONTRACT":
+            return "CONTRACT_APPROVED", "合同初稿审核通过"
+        if item.action_type == "REJECT_CONTRACT":
+            return "CONTRACT_REJECTED", "合同初稿审核退回"
+        if item.action_type == "SUBMIT_CONTRACT":
+            return "CONTRACT_REVIEWING", "合同初稿审核中"
+    return None, None
+
+
+def _serialize_project_update_logs(db: Session, project_id: int) -> list[ProjectUpdateLogItem]:
+    rows = (
+        db.query(ProjectUpdateLog)
+        .filter(ProjectUpdateLog.project_id == project_id)
+        .order_by(ProjectUpdateLog.created_at.desc(), ProjectUpdateLog.id.desc())
+        .all()
+    )
+    items: list[ProjectUpdateLogItem] = []
+    for row in rows:
+        operator_name = db.query(User.real_name).filter(User.id == row.operator_user_id).scalar()
+        items.append(
+            ProjectUpdateLogItem(
+                id=row.id,
+                operator_user_id=row.operator_user_id,
+                operator_user_name=operator_name,
+                changed_fields=row.changed_fields,
+                created_at=row.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+        )
+    return items
+
+
+def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrder | None) -> dict[str, str | float | None]:
+    if not work_order:
+        return {}
+
+    print_room_record = db.query(PrintRoomRecord).filter(PrintRoomRecord.work_order_id == work_order.id).first()
+    invoice = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.desc()).first()
+    contract = db.query(Contract).filter(Contract.work_order_id == work_order.id).first()
+
+    def user_name(user_id: int | None) -> str | None:
+        if not user_id:
+            return None
+        return db.query(User.real_name).filter(User.id == user_id).scalar()
+
+    return {
+        "contract_no": contract.contract_no if contract else None,
+        "report_no": print_room_record.paper_report_no if print_room_record else None,
+        "first_reviewer_name": user_name(work_order.first_reviewer_id),
+        "second_reviewer_name": user_name(work_order.second_reviewer_id),
+        "third_reviewer_name": user_name(work_order.third_reviewer_id),
+        "print_room_handler_name": user_name(work_order.print_room_handler_id),
+        "invoice_handler_name": user_name(invoice.handled_by if invoice else None),
+        "archive_reviewer_name": user_name(work_order.archive_reviewer_id),
+    }
 
 
 def _serialize_project(db: Session, project: Project) -> ProjectResponse:
@@ -70,28 +132,44 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
     leader_name = db.query(User.real_name).filter(User.id == project.project_leader_id).scalar()
     latest_status = work_order.current_status if work_order else None
     status_cn = _build_status_display(project, latest_status)
+    readonly_fields = _get_readonly_flow_fields(db, project, work_order)
+    contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
+    history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
+
     data = ProjectResponse.model_validate(project, from_attributes=True).model_dump()
-    data.pop("status", None)
-    data.pop("status_display", None)
-    data.pop("project_source_display", None)
-    data.pop("project_leader_display_name", None)
-    data.pop("contract_review_status", None)
-    data.pop("contract_review_status_display", None)
+    for key in ["status", "status_display", "project_source_display", "project_leader_display_name", "contract_review_status", "contract_review_status_display", "contract_no", "report_no"]:
+        data.pop(key, None)
+
     return ProjectResponse(
         **data,
         status=status_cn,
         status_display=status_cn,
         project_source_display=get_project_source_display(project.project_source),
         project_leader_display_name=get_project_leader_display_name(project, leader_name),
-        contract_review_status=latest_status if latest_status in {
-            WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value,
-            WorkOrderStatus.CONTRACT_UPLOADED.value,
-            WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value,
-            WorkOrderStatus.CONTRACT_REVIEWING.value,
-            WorkOrderStatus.CONTRACT_REJECTED.value,
-            WorkOrderStatus.CONTRACT_APPROVED.value,
-        } else None,
-        contract_review_status_display=get_contract_review_status_display(latest_status),
+        report_no=readonly_fields.get("report_no"),
+        contract_no=readonly_fields.get("contract_no"),
+        contract_review_status=(
+            latest_status if latest_status in {
+                WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value,
+                WorkOrderStatus.CONTRACT_UPLOADED.value,
+                WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value,
+                WorkOrderStatus.CONTRACT_REVIEWING.value,
+                WorkOrderStatus.CONTRACT_REJECTED.value,
+                WorkOrderStatus.CONTRACT_APPROVED.value,
+            } else history_contract_status
+        ),
+        contract_review_status_display=(
+            get_contract_review_status_display(latest_status)
+            if latest_status in {
+                WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value,
+                WorkOrderStatus.CONTRACT_UPLOADED.value,
+                WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value,
+                WorkOrderStatus.CONTRACT_REVIEWING.value,
+                WorkOrderStatus.CONTRACT_REJECTED.value,
+                WorkOrderStatus.CONTRACT_APPROVED.value,
+            }
+            else history_contract_status_display
+        ),
     )
 
 
@@ -114,6 +192,32 @@ def _generate_project_code(db: Session, undertaking_unit: str) -> str:
         except ValueError:
             next_seq = 1
     return f"{prefix}{next_seq:03d}"
+
+
+def _can_edit_project_basic_info(db: Session, project_id: int, project: Project, current_user: User) -> bool:
+    if project.archived_at is not None:
+        return False
+    if current_user.id == project.project_leader_id:
+        return True
+    return db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
+
+
+def _record_project_update_log(db: Session, project: Project, current_user: User, before: dict[str, object], after: dict[str, object]) -> None:
+    changed: dict[str, dict[str, object]] = {}
+    for key, before_value in before.items():
+        after_value = after.get(key)
+        if before_value != after_value:
+            changed[key] = {"before": before_value, "after": after_value}
+    if not changed:
+        return
+    db.add(
+        ProjectUpdateLog(
+            project_id=project.id,
+            operator_user_id=current_user.id,
+            changed_fields=json.dumps(changed, ensure_ascii=False),
+            remark="项目基本信息修改",
+        )
+    )
 
 
 @router.get("", response_model=ProjectListResponse)
@@ -203,7 +307,8 @@ def update_project(
         raise HTTPException(status_code=404, detail="项目不存在")
     if row.termination_status == "PENDING":
         raise HTTPException(status_code=400, detail="项目终止/废止审核中，已锁定编辑")
-    assert_project_creator(row, current_user)
+    if not _can_edit_project_basic_info(db, project_id, row, current_user):
+        raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可编辑项目基本信息")
 
     data = payload.model_dump(exclude_unset=True)
     project_source = data.get("project_source", row.project_source)
@@ -213,8 +318,33 @@ def update_project(
     if project_source != "EXTERNAL":
         data["external_project_leader_name"] = None
 
+    before = {
+        "undertaking_unit": row.undertaking_unit,
+        "project_name": row.project_name,
+        "client_name": row.client_name,
+        "report_type": row.report_type,
+        "valuation_base_date": row.valuation_base_date.isoformat() if row.valuation_base_date else None,
+        "business_salesman": row.business_salesman,
+        "project_amount": row.project_amount,
+        "project_source": row.project_source,
+        "external_project_leader_name": row.external_project_leader_name,
+    }
+
     for key, value in data.items():
         setattr(row, key, value)
+
+    after = {
+        "undertaking_unit": row.undertaking_unit,
+        "project_name": row.project_name,
+        "client_name": row.client_name,
+        "report_type": row.report_type,
+        "valuation_base_date": row.valuation_base_date.isoformat() if row.valuation_base_date else None,
+        "business_salesman": row.business_salesman,
+        "project_amount": row.project_amount,
+        "project_source": row.project_source,
+        "external_project_leader_name": row.external_project_leader_name,
+    }
+    _record_project_update_log(db, row, current_user, before, after)
 
     db.commit()
     db.refresh(row)
@@ -234,7 +364,8 @@ def delete_project(
         raise HTTPException(status_code=400, detail="项目已归档，不可删除")
     if row.termination_status == "PENDING":
         raise HTTPException(status_code=400, detail="项目终止/废止审核中，不可删除")
-    assert_project_creator(row, current_user)
+    if row.business_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="只有项目创建人可以删除项目")
     row.deleted_at = datetime.now()
     db.commit()
 
@@ -370,6 +501,9 @@ def get_project_flow(
     action = "项目终止/废止流程处理中，当前业务已锁定" if is_termination_locked else build_todo_action(step, role) or "当前暂无待办操作"
     leader_name = db.query(User.real_name).filter(User.id == project.project_leader_id).scalar()
     contract_reviewer_name = db.query(User.real_name).filter(User.id == work_order.contract_reviewer_id).scalar() if work_order and work_order.contract_reviewer_id else None
+    readonly_fields = _get_readonly_flow_fields(db, project, work_order)
+    contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
+    history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
 
     return ProjectFlowResponse(
         project=ProjectFlowProject(
@@ -381,10 +515,19 @@ def get_project_flow(
             report_type=project.report_type,
             valuation_base_date=project.valuation_base_date.strftime("%Y-%m-%d") if project.valuation_base_date else None,
             business_salesman=project.business_salesman,
+            project_amount=project.project_amount,
             project_source=project.project_source,
             project_source_display=get_project_source_display(project.project_source),
             external_project_leader_name=project.external_project_leader_name,
             project_leader_display_name=get_project_leader_display_name(project, leader_name),
+            contract_no=readonly_fields.get("contract_no"),
+            report_no=readonly_fields.get("report_no"),
+            first_reviewer_name=readonly_fields.get("first_reviewer_name"),
+            second_reviewer_name=readonly_fields.get("second_reviewer_name"),
+            third_reviewer_name=readonly_fields.get("third_reviewer_name"),
+            print_room_handler_name=readonly_fields.get("print_room_handler_name"),
+            invoice_handler_name=readonly_fields.get("invoice_handler_name"),
+            archive_reviewer_name=readonly_fields.get("archive_reviewer_name"),
             current_step=step,
             status_display=step,
         ),
@@ -393,8 +536,30 @@ def get_project_flow(
         current_handler_user_id=work_order.current_handler_user_id if work_order else None,
         contract_reviewer_id=work_order.contract_reviewer_id if work_order else None,
         contract_reviewer_name=contract_reviewer_name,
-        contract_review_status=work_order.current_status if work_order else None,
-        contract_review_status_display=get_contract_review_status_display(work_order.current_status if work_order else None),
+        contract_review_status=(
+            work_order.current_status
+            if work_order and work_order.current_status in {
+                WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value,
+                WorkOrderStatus.CONTRACT_UPLOADED.value,
+                WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value,
+                WorkOrderStatus.CONTRACT_REVIEWING.value,
+                WorkOrderStatus.CONTRACT_REJECTED.value,
+                WorkOrderStatus.CONTRACT_APPROVED.value,
+            }
+            else history_contract_status
+        ),
+        contract_review_status_display=(
+            get_contract_review_status_display(work_order.current_status if work_order else None)
+            if work_order and work_order.current_status in {
+                WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value,
+                WorkOrderStatus.CONTRACT_UPLOADED.value,
+                WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value,
+                WorkOrderStatus.CONTRACT_REVIEWING.value,
+                WorkOrderStatus.CONTRACT_REJECTED.value,
+                WorkOrderStatus.CONTRACT_APPROVED.value,
+            }
+            else history_contract_status_display
+        ),
         first_reviewer_id=work_order.first_reviewer_id if work_order else None,
         second_reviewer_id=work_order.second_reviewer_id if work_order else None,
         third_reviewer_id=work_order.third_reviewer_id if work_order else None,
@@ -409,5 +574,6 @@ def get_project_flow(
         available_action=action,
         can_operate=role != "无权限" and not is_termination_locked,
         flow_steps=get_flow_steps(project),
-        contract_review_records=_serialize_contract_review_records(db, work_order.id if work_order else None),
+        contract_review_records=contract_review_records,
+        project_update_logs=_serialize_project_update_logs(db, project.id),
     )

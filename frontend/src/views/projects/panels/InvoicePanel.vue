@@ -47,17 +47,18 @@
 
     <template v-if="canFinance">
       <el-divider>财务处理</el-divider>
-      <el-upload :auto-upload="false" :on-change="onInvoiceFileSelected" :show-file-list="false">
-        <el-button type="primary" :disabled="!currentInvoice">上传电子票</el-button>
-      </el-upload>
-      <el-button
-        type="success"
-        style="margin-left: 12px"
-        :disabled="!currentInvoice || invoiceFiles.length === 0"
-        @click="onComplete"
-      >
-        确认完成
-      </el-button>
+      <div class="finance-actions">
+        <el-upload :auto-upload="false" :on-change="onInvoiceFileSelected" :show-file-list="false">
+          <el-button type="primary" :disabled="!currentInvoice">上传电子票</el-button>
+        </el-upload>
+        <el-button
+          type="success"
+          :disabled="!currentInvoice || invoiceFiles.length === 0"
+          @click="onComplete"
+        >
+          确认完成
+        </el-button>
+      </div>
     </template>
 
     <el-divider>发票下载</el-divider>
@@ -96,7 +97,6 @@ const invoiceType = ref<'专票' | '普票'>('专票')
 const invoiceUnit = ref('中勤')
 const amount = ref(0)
 
-const statusCode = computed(() => props.flowInfo?.current_work_order_status || '')
 const canFinance = computed(() => props.userRoles.some(role => ['FINANCE', 'ADMIN'].includes(role)))
 const currentInvoice = computed(() => invoices.value.find(item => item.status === 'SUBMITTED' || item.status === 'REJECTED'))
 const canSubmitInfo = computed(() => {
@@ -131,7 +131,7 @@ async function onSubmitInfo() {
   if (!props.workOrderId) return
   if (!invoiceInfo.value) return ElMessage.warning('请填写开票信息')
   if (!invoiceType.value) return ElMessage.warning('请选择发票类型')
-  if (!amount.value || amount.value <= 0) return ElMessage.warning('请填写开票金额')
+  if (amount.value === null || amount.value < 0) return ElMessage.warning('请填写有效的开票金额')
   await createInvoice({
     work_order_id: props.workOrderId,
     invoice_info: `开票单位：${invoiceUnit.value}\n${invoiceInfo.value}`,
@@ -230,6 +230,13 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.finance-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .hidden-file-input {
