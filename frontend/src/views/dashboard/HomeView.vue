@@ -102,6 +102,57 @@
         </el-table>
       </el-card>
     </div>
+
+    <el-dialog v-model="editVisible" title="编辑项目" width="520px">
+      <el-form label-width="120px">
+        <el-form-item label="承接单位">
+          <el-select v-model="editForm.undertaking_unit" style="width: 100%">
+            <el-option label="中勤" value="中勤" />
+            <el-option label="中立国际" value="中立国际" />
+            <el-option label="中众" value="中众" />
+            <el-option label="其他" value="其他" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目名称">
+          <el-input v-model="editForm.project_name" />
+        </el-form-item>
+        <el-form-item label="客户名称">
+          <el-input v-model="editForm.client_name" />
+        </el-form-item>
+        <el-form-item label="报告类型">
+          <el-select v-model="editForm.report_type" style="width: 100%">
+            <el-option label="评估报告" value="评估报告" />
+            <el-option label="估值报告" value="估值报告" />
+            <el-option label="咨询报告" value="咨询报告" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="评估基准日">
+          <el-date-picker
+            v-model="editForm.valuation_base_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择评估基准日"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="项目承接业务员">
+          <el-input v-model="editForm.business_salesman" />
+        </el-form-item>
+        <el-form-item label="项目来源">
+          <el-radio-group v-model="editForm.project_source">
+            <el-radio-button label="INTERNAL">内部</el-radio-button>
+            <el-radio-button label="EXTERNAL">外部</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="editForm.project_source === 'EXTERNAL'" label="外部负责人">
+          <el-input v-model="editForm.external_project_leader_name" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editLoading" @click="saveProject">确认更改并保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -115,8 +166,10 @@ import {
   approveProjectTermination,
   createProject,
   deleteProject,
+  getProject,
   requestProjectTermination,
   updateProject,
+  type ProjectItem,
   type ProjectUndertakingUnit,
   type ReportType,
   type ProjectSource
@@ -127,10 +180,24 @@ const router = useRouter()
 const auth = useAuthStore()
 const myProjects = ref<WorkbenchProjectItem[]>([])
 const todoProjects = ref<WorkbenchProjectItem[]>([])
+const editVisible = ref(false)
+const editLoading = ref(false)
+const editingProjectId = ref<number>()
 
 const form = reactive({
   undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_code: '',
+  project_name: '',
+  client_name: '',
+  report_type: '评估报告' as ReportType,
+  valuation_base_date: '',
+  business_salesman: '',
+  project_source: 'INTERNAL' as ProjectSource,
+  external_project_leader_name: ''
+})
+
+const editForm = reactive({
+  undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_name: '',
   client_name: '',
   report_type: '评估报告' as ReportType,
@@ -182,9 +249,10 @@ async function onCreate() {
 }
 
 async function editProject(row: WorkbenchProjectItem) {
-  await updateProject(row.id, { project_name: row.project_name, client_name: row.client_name })
-  ElMessage.success('项目已更新')
-  await load()
+  const project = await getProject(row.id)
+  fillEditForm(project)
+  editingProjectId.value = row.id
+  editVisible.value = true
 }
 
 async function archive(id: number) {
@@ -223,6 +291,54 @@ async function remove(id: number) {
   await deleteProject(id)
   ElMessage.success('项目已删除')
   await load()
+}
+
+function fillEditForm(project: ProjectItem) {
+  editForm.undertaking_unit = project.undertaking_unit
+  editForm.project_name = project.project_name
+  editForm.client_name = project.client_name
+  editForm.report_type = project.report_type
+  editForm.valuation_base_date = project.valuation_base_date || ''
+  editForm.business_salesman = project.business_salesman || ''
+  editForm.project_source = project.project_source
+  editForm.external_project_leader_name = project.external_project_leader_name || ''
+}
+
+async function saveProject() {
+  if (!editingProjectId.value) return
+  if (!editForm.project_name.trim() || !editForm.client_name.trim()) {
+    ElMessage.warning('请填写项目名称和客户名称')
+    return
+  }
+  if (!editForm.business_salesman.trim()) {
+    ElMessage.warning('请填写项目承接业务员')
+    return
+  }
+  if (editForm.project_source === 'EXTERNAL' && !editForm.external_project_leader_name.trim()) {
+    ElMessage.warning('外部项目必须填写外部项目负责人姓名')
+    return
+  }
+
+  editLoading.value = true
+  try {
+    await updateProject(editingProjectId.value, {
+      undertaking_unit: editForm.undertaking_unit,
+      project_name: editForm.project_name.trim(),
+      client_name: editForm.client_name.trim(),
+      report_type: editForm.report_type,
+      valuation_base_date: editForm.valuation_base_date || undefined,
+      business_salesman: editForm.business_salesman.trim(),
+      project_source: editForm.project_source,
+      external_project_leader_name: editForm.project_source === 'EXTERNAL'
+        ? editForm.external_project_leader_name.trim()
+        : null
+    })
+    ElMessage.success('项目已更新')
+    editVisible.value = false
+    await load()
+  } finally {
+    editLoading.value = false
+  }
 }
 
 function goProject(id: number) {

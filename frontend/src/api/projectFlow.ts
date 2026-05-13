@@ -1,6 +1,14 @@
 import http from './http'
 import type { ContractReviewRecordItem } from './contractReviews'
 
+export interface ProjectUpdateLogItem {
+  id: number
+  operator_user_id: number
+  operator_user_name?: string | null
+  changed_fields: string
+  created_at: string
+}
+
 export interface ProjectFlowData {
   project: {
     id: number
@@ -11,10 +19,19 @@ export interface ProjectFlowData {
     report_type?: string | null
     valuation_base_date?: string | null
     business_salesman?: string | null
+    project_amount?: number | null
     project_source: 'INTERNAL' | 'EXTERNAL'
     project_source_display: string
     external_project_leader_name?: string | null
     project_leader_display_name?: string | null
+    contract_no?: string | null
+    report_no?: string | null
+    first_reviewer_name?: string | null
+    second_reviewer_name?: string | null
+    third_reviewer_name?: string | null
+    print_room_handler_name?: string | null
+    invoice_handler_name?: string | null
+    archive_reviewer_name?: string | null
     current_step: string
     status_display: string
   }
@@ -40,6 +57,7 @@ export interface ProjectFlowData {
   can_operate: boolean
   flow_steps: string[]
   contract_review_records: ContractReviewRecordItem[]
+  project_update_logs: ProjectUpdateLogItem[]
 }
 
 export async function getProjectFlow(projectId: number | string) {
