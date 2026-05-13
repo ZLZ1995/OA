@@ -61,12 +61,6 @@
         </el-form-item>
       </template>
 
-      <el-form-item v-if="isReplyFlow && !showReviewerChangePanel" label="报告文件处理">
-        <el-radio-group v-model="replyFileMode" :disabled="!canSubmitReview">
-          <el-radio-button label="REUPLOAD">重新上传文件</el-radio-button>
-          <el-radio-button label="REUSE">沿用上轮文件</el-radio-button>
-        </el-radio-group>
-      </el-form-item>
       <el-form-item v-if="showContractDraftDownload" label="合同初稿下载">
         <div v-if="contractDraftFiles.length" class="contract-file-list">
           <div v-for="file in contractDraftFiles" :key="file.id" class="contract-file-item">
