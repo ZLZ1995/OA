@@ -36,6 +36,29 @@
           <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
         </el-select>
       </el-form-item>
+      <template v-if="canChangeReviewer">
+        <el-form-item label="变更审核老师">
+          <el-space wrap>
+            <el-select v-model="changeReviewerUserId" placeholder="选择新的审核老师" style="width: 320px" :disabled="hasChangedReviewer">
+              <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
+            </el-select>
+            <el-button type="warning" plain :disabled="!changeReviewerUserId || hasChangedReviewer" @click="onChangeReviewer">
+              保存变更
+            </el-button>
+          </el-space>
+        </el-form-item>
+        <el-form-item label="变更备注">
+          <el-input v-model="changeReviewerComment" type="textarea" :rows="2" :disabled="hasChangedReviewer" placeholder="选填" />
+        </el-form-item>
+        <el-alert
+          v-if="pendingReviewerChange"
+          type="info"
+          :closable="false"
+          show-icon
+          title="审核人变更已保存，重新提交审核后正式生效。"
+          style="margin-bottom: 12px"
+        />
+      </template>
 
       <el-form-item v-if="showContractDraftDownload" label="合同初稿下载">
         <div v-if="contractDraftFiles.length" class="contract-file-list">
@@ -174,7 +197,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
-import { decideReview, listReviewCandidates, listReviews, submitReview, withdrawLatestReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
+import { changeReviewAssignee, decideReview, listReviewCandidates, listReviews, submitReview, withdrawLatestReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
 import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import { useAuthStore } from '@/store/auth'
 import type { ProjectFlowData } from '@/api/projectFlow'
@@ -203,7 +226,9 @@ interface ReviewRow {
 const auth = useAuthStore()
 const reviewRound = ref<ReviewRound>('FIRST')
 const reviewerUserId = ref<number>()
+const changeReviewerUserId = ref<number>()
 const comment = ref('')
+const changeReviewerComment = ref('')
 const reviewComment = ref('')
 const signerOne = ref('')
 const signerTwo = ref('')
@@ -220,9 +245,21 @@ const currentUserId = computed(() => auth.user?.id)
 const isCurrentHandler = computed(() => Boolean(currentUserId.value && props.flowInfo?.current_handler_user_id === currentUserId.value))
 const isReviewSubmitter = computed(() => {
   const roleName = props.flowInfo?.user_role_in_project
-  return roleName === '项目负责人' || roleName === '创建人' || isCurrentHandler.value
+  return roleName === '项目负责人' || roleName === '项目组成员' || roleName === '创建人' || isCurrentHandler.value
 })
 const isReplyFlow = computed(() => ['FIRST_REVIEW_REJECTED', 'SECOND_REVIEW_REJECTED', 'THIRD_REVIEW_REJECTED'].includes(statusCode.value))
+const latestSubmitAt = computed(() => {
+  const latest = records.value
+    .filter(record => record.review_round === reviewRound.value && record.action === 'SUBMIT')
+    .sort((a, b) => new Date(b.acted_at).getTime() - new Date(a.acted_at).getTime())[0]
+  return latest ? new Date(latest.acted_at).getTime() : 0
+})
+const pendingReviewerChange = computed(() => records.value
+  .filter(record => record.review_round === reviewRound.value && record.action === 'CHANGE_REVIEWER')
+  .filter(record => new Date(record.acted_at).getTime() > latestSubmitAt.value)
+  .sort((a, b) => new Date(b.acted_at).getTime() - new Date(a.acted_at).getTime())[0])
+const hasChangedReviewer = computed(() => Boolean(pendingReviewerChange.value))
+const canChangeReviewer = computed(() => canSubmitReview.value && isReplyFlow.value)
 const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'FIRST') return props.flowInfo?.first_reviewer_id
   if (reviewRound.value === 'SECOND') return props.flowInfo?.second_reviewer_id
@@ -344,6 +381,7 @@ function roundFromStage(stage: string): ReviewRound | undefined {
 }
 
 function recordRoundLabel(record: ReviewRecordItem) {
+  if (record.action === 'CHANGE_REVIEWER') return `${roundLabel(record.review_round)}审核人变更`
   if (record.action === 'SUBMIT') return hasEarlierReject(record) ? `${roundLabel(record.review_round)}意见回复` : '报告送审'
   if (record.action === 'REJECT_RETURN') return `${roundLabel(record.review_round)}意见发出`
   if (record.action === 'APPROVE' && record.review_round === 'THIRD') return '报告审核通过待提交正式报告文件'
@@ -351,6 +389,7 @@ function recordRoundLabel(record: ReviewRecordItem) {
 }
 
 function recordCommentText(record: ReviewRecordItem) {
+  if (record.action === 'CHANGE_REVIEWER') return record.comment || '审核人已变更'
   if (record.action === 'APPROVE') return record.comment || '审核通过'
   return record.comment || '-'
 }
@@ -389,7 +428,7 @@ function formatFileSize(size?: number | null) {
 }
 
 async function loadCandidates() {
-  if (isReplyFlow.value) {
+  if (isReplyFlow.value && !canChangeReviewer.value) {
     reviewerUserId.value = currentRoundReviewerId.value || undefined
     userOptions.value = []
     return
@@ -399,6 +438,9 @@ async function loadCandidates() {
     return
   }
   userOptions.value = (await listReviewCandidates(props.workOrderId, reviewRound.value)).items
+  if (pendingReviewerChange.value) {
+    changeReviewerUserId.value = pendingReviewerChange.value.reviewer_user_id
+  }
 }
 
 async function loadFiles() {
@@ -485,13 +527,27 @@ async function onTransferPrintRoom() {
 }
 
 async function onSubmit() {
-  const targetReviewerId = isReplyFlow.value ? currentRoundReviewerId.value : reviewerUserId.value
+  const targetReviewerId = isReplyFlow.value ? (pendingReviewerChange.value?.reviewer_user_id || currentRoundReviewerId.value) : reviewerUserId.value
   if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
   if (!submitFiles.value.length) return ElMessage.warning(isReplyFlow.value ? '请先上传审核意见回复' : '请先上传待审报告')
   await submitReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, reviewer_user_id: targetReviewerId, comment: comment.value || undefined })
   ElMessage.success(isReplyFlow.value ? '审核意见回复已提交' : '提交审核成功')
   comment.value = ''
   await Promise.all([loadRecords(), loadFiles()])
+  emit('changed')
+}
+
+async function onChangeReviewer() {
+  if (!props.workOrderId || !changeReviewerUserId.value) return
+  await changeReviewAssignee({
+    work_order_id: props.workOrderId,
+    review_round: reviewRound.value,
+    reviewer_user_id: changeReviewerUserId.value,
+    comment: changeReviewerComment.value || undefined
+  })
+  ElMessage.success('审核人变更已保存，重新提交审核后生效')
+  changeReviewerComment.value = ''
+  await Promise.all([loadRecords(), loadCandidates()])
   emit('changed')
 }
 

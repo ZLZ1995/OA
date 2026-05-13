@@ -6,7 +6,7 @@ export interface ReviewRecordItem {
   review_round: 'FIRST' | 'SECOND' | 'THIRD'
   reviewer_user_id: number
   reviewer_name?: string
-  action: 'SUBMIT' | 'APPROVE' | 'REJECT_RETURN'
+  action: 'SUBMIT' | 'APPROVE' | 'REJECT_RETURN' | 'CHANGE_REVIEWER'
   comment?: string
   acted_at: string
 }
@@ -28,6 +28,16 @@ export async function decideReview(payload: {
   comment?: string
 }) {
   const { data } = await http.post('/reviews/decision', payload)
+  return data as ReviewRecordItem
+}
+
+export async function changeReviewAssignee(payload: {
+  work_order_id: number
+  review_round: 'FIRST' | 'SECOND' | 'THIRD'
+  reviewer_user_id: number
+  comment?: string
+}) {
+  const { data } = await http.post('/reviews/change-reviewer', payload)
   return data as ReviewRecordItem
 }
 
