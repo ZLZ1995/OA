@@ -51,11 +51,7 @@
         <el-upload :auto-upload="false" :on-change="onInvoiceFileSelected" :show-file-list="false">
           <el-button type="primary" :disabled="!currentInvoice">上传电子票</el-button>
         </el-upload>
-        <el-button
-          type="success"
-          :disabled="!currentInvoice || invoiceFiles.length === 0"
-          @click="onComplete"
-        >
+        <el-button type="success" :disabled="!currentInvoice || invoiceFiles.length === 0" @click="onComplete">
           确认完成
         </el-button>
       </div>
@@ -89,13 +85,13 @@ import type { ProjectFlowData } from '@/api/projectFlow'
 const props = defineProps<{ workOrderId?: number; canOperate: boolean; userRoles: string[]; flowInfo?: ProjectFlowData }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
-const loading = ref(false)
 const invoices = ref<InvoiceItem[]>([])
 const invoiceFiles = ref<WorkOrderFileItem[]>([])
 const invoiceInfo = ref('')
 const invoiceType = ref<'专票' | '普票'>('专票')
 const invoiceUnit = ref('中勤')
 const amount = ref(0)
+const replaceInputs = new Map<number, HTMLInputElement>()
 
 const canFinance = computed(() => props.userRoles.some(role => ['FINANCE', 'ADMIN'].includes(role)))
 const currentInvoice = computed(() => invoices.value.find(item => item.status === 'SUBMITTED' || item.status === 'REJECTED'))
@@ -103,51 +99,66 @@ const canSubmitInfo = computed(() => {
   if (!props.canOperate || canFinance.value) return false
   return !currentInvoice.value || currentInvoice.value.status === 'REJECTED'
 })
-const replaceInputs = new Map<number, HTMLInputElement>()
 
 async function load() {
   if (!props.workOrderId) return
-  loading.value = true
-  try {
-    invoices.value = (await listInvoices()).items.filter(item => item.work_order_id === props.workOrderId)
-    const current = currentInvoice.value
-    invoiceInfo.value = current?.invoice_info || ''
-    invoiceType.value = (current?.invoice_type as '专票' | '普票') || invoiceType.value
-    if (current?.invoice_info?.includes('开票单位：')) {
-      invoiceUnit.value = current.invoice_info.split('开票单位：')[1]?.split('\n')[0] || invoiceUnit.value
-    } else {
-      invoiceUnit.value = props.flowInfo?.project.undertaking_unit || invoiceUnit.value
-    }
-    amount.value = current?.amount ?? 0
-    invoiceFiles.value = (await listWorkOrderFiles(props.workOrderId)).items.filter(
-      file => file.file_category === 'INVOICE_FILE' || file.business_stage === 'INVOICE'
-    )
-  } finally {
-    loading.value = false
+  invoices.value = (await listInvoices()).items.filter(item => item.work_order_id === props.workOrderId)
+  const current = currentInvoice.value
+  invoiceInfo.value = current?.invoice_info || ''
+  invoiceType.value = (current?.invoice_type as '专票' | '普票') || '专票'
+  if (current?.invoice_info?.includes('开票单位：')) {
+    invoiceUnit.value = current.invoice_info.split('开票单位：')[1]?.split('\n')[0] || invoiceUnit.value
+  } else {
+    invoiceUnit.value = props.flowInfo?.project.undertaking_unit || invoiceUnit.value
   }
+  amount.value = current?.amount ?? 0
+  invoiceFiles.value = (await listWorkOrderFiles(props.workOrderId)).items.filter(
+    file => file.file_category === 'INVOICE_FILE' || file.business_stage === 'INVOICE'
+  )
 }
 
 async function onSubmitInfo() {
-  if (!props.workOrderId) return
-  if (!invoiceInfo.value) return ElMessage.warning('请填写开票信息')
-  if (!invoiceType.value) return ElMessage.warning('请选择发票类型')
-  if (amount.value === null || amount.value < 0) return ElMessage.warning('请填写有效的开票金额')
-  await createInvoice({
-    work_order_id: props.workOrderId,
-    invoice_info: `开票单位：${invoiceUnit.value}\n${invoiceInfo.value}`,
-    invoice_type: invoiceType.value,
-    amount: amount.value,
-    status: 'SUBMITTED'
-  })
-  ElMessage.success('开票信息已提交财务')
-  await load()
-  emit('changed')
+  if (!props.workOrderId) {
+    ElMessage.warning('当前项目暂无关联工单')
+    return
+  }
+  if (!invoiceInfo.value.trim()) {
+    ElMessage.warning('请填写开票信息')
+    return
+  }
+  if (!invoiceType.value) {
+    ElMessage.warning('请选择发票类型')
+    return
+  }
+  if (amount.value === null || amount.value < 0) {
+    ElMessage.warning('请填写有效的开票金额')
+    return
+  }
+  try {
+    await createInvoice({
+      work_order_id: props.workOrderId,
+      invoice_info: `开票单位：${invoiceUnit.value}\n${invoiceInfo.value.trim()}`,
+      invoice_type: invoiceType.value,
+      amount: amount.value,
+      status: 'SUBMITTED'
+    })
+    ElMessage.success('开票信息已提交财务')
+    await load()
+    emit('changed')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '提交开票信息失败')
+  }
 }
 
 async function onInvoiceFileSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
   try {
-    await uploadWorkOrderFile({ work_order_id: props.workOrderId, file_category: 'INVOICE_FILE', business_stage: 'INVOICE', file: file.raw })
+    await uploadWorkOrderFile({
+      work_order_id: props.workOrderId,
+      file_category: 'INVOICE_FILE',
+      business_stage: 'INVOICE',
+      file: file.raw
+    })
     ElMessage.success('电子票已上传')
     await load()
   } catch (error: any) {
@@ -156,7 +167,9 @@ async function onInvoiceFileSelected(file: UploadFile) {
 }
 
 function setReplaceInput(fileId: number, el: Element | ComponentPublicInstance | null) {
-  if (el instanceof HTMLInputElement) replaceInputs.set(fileId, el)
+  if (el instanceof HTMLInputElement) {
+    replaceInputs.set(fileId, el)
+  }
 }
 
 function triggerReplace(fileId: number) {
@@ -179,22 +192,34 @@ async function onReplaceInput(row: WorkOrderFileItem, event: Event) {
 
 async function onComplete() {
   if (!currentInvoice.value) return
-  await completeInvoice(currentInvoice.value.id)
-  ElMessage.success('开票流程已完成')
-  await load()
-  emit('changed')
+  try {
+    await completeInvoice(currentInvoice.value.id)
+    ElMessage.success('开票流程已完成')
+    await load()
+    emit('changed')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '确认完成失败')
+  }
 }
 
 async function onReject() {
   if (!currentInvoice.value) return
-  await rejectInvoice(currentInvoice.value.id, '开票信息有误或不全')
-  ElMessage.success('已退回上一级修改开票信息')
-  await load()
-  emit('changed')
+  try {
+    await rejectInvoice(currentInvoice.value.id, '开票信息有误或不全')
+    ElMessage.success('已退回上一级修改开票信息')
+    await load()
+    emit('changed')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '退回开票信息失败')
+  }
 }
 
 async function copyInfo() {
-  const text = `开票信息：${invoiceInfo.value}\n发票类型：${invoiceType.value}\n开票金额：${amount.value.toFixed(2)}`
+  const text = [
+    `开票信息：${invoiceInfo.value}`,
+    `发票类型：${invoiceType.value}`,
+    `开票金额：${amount.value.toFixed(2)}`
+  ].join('\n')
   try {
     if (!navigator.clipboard?.writeText) throw new Error('clipboard api unavailable')
     await navigator.clipboard.writeText(text)

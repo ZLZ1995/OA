@@ -23,6 +23,7 @@ class ProjectFlowProject(BaseModel):
     second_reviewer_name: str | None = None
     third_reviewer_name: str | None = None
     print_room_handler_name: str | None = None
+    mailing_handler_name: str | None = None
     invoice_handler_name: str | None = None
     archive_reviewer_name: str | None = None
     current_step: str
@@ -53,9 +54,11 @@ class ProjectFlowResponse(BaseModel):
     signer_two: str | None = None
     formal_report_count: int | None = None
     print_room_handler_id: int | None = None
+    mailing_handler_user_id: int | None = None
     archive_reviewer_id: int | None = None
     archive_submitter_id: int | None = None
     archive_submission_type: str | None = None
+    mailing_status: str | None = None
     user_role_in_project: str
     available_action: str
     can_operate: bool

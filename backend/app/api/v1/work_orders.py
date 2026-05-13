@@ -42,6 +42,8 @@ STATUS_LABEL_MAP = {
     WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "报告出具准备",
     WorkOrderStatus.PRINTROOM_PROCESSING.value: "报告出具",
     WorkOrderStatus.PAPER_REPORT_ISSUED.value: "报告出具完成",
+    WorkOrderStatus.REPORT_MAILING.value: "报告邮寄",
+    WorkOrderStatus.REPORT_MAILING_COMPLETED.value: "报告邮寄完成",
     WorkOrderStatus.WAIT_INVOICE_INFO.value: "开票信息",
     WorkOrderStatus.INVOICE_INFO_REJECTED.value: "开票信息退回",
     WorkOrderStatus.INVOICE_PROCESSING.value: "财务开票",
@@ -154,6 +156,7 @@ def update_work_order(
     data = payload.model_dump(exclude_unset=True)
     signer_keys = {"signer_one", "signer_two", "formal_report_count"}
     contract_keys = {"contract_reviewer_id"}
+    mailing_keys = {"mailing_handler_user_id", "mailing_status"}
 
     if signer_keys & set(data) and "ADMIN" not in role_codes:
         if set(data) - signer_keys:
@@ -169,8 +172,11 @@ def update_work_order(
             raise HTTPException(status_code=403, detail="合同审核人字段只能单独更新")
         if "PROJECT_LEADER" not in role_codes and "SALES" not in role_codes:
             raise HTTPException(status_code=403, detail="仅项目方可指定合同审核人")
+    elif mailing_keys & set(data) and "ADMIN" not in role_codes:
+        if set(data) - mailing_keys:
+            raise HTTPException(status_code=403, detail="邮寄相关字段只能单独更新")
     elif "ADMIN" not in role_codes and not ({"SALES", "PROJECT_LEADER"} & role_codes):
-        if not data or set(data) - signer_keys - contract_keys:
+        if not data or set(data) - signer_keys - contract_keys - mailing_keys:
             raise HTTPException(status_code=403, detail="无权修改该工单")
 
     for key, value in data.items():
