@@ -223,3 +223,56 @@ def test_rejected_invoice_prompts_project_party_without_changing_main_status() -
     assert [item.id for item in result.todo_projects] == [project.id]
     assert result.todo_projects[0].current_step == "发票开具"
     assert result.todo_projects[0].todo_action == "开票信息被退回，请修改后重新提交"
+
+
+def test_print_room_mailing_todo_clears_after_express_submitted() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db)
+    print_room = _seed_user(db, "printroom")
+    print_room_role = Role(code="PRINT_ROOM", name="文印室", description="", is_system_fixed=True)
+    db.add(print_room_role)
+    db.flush()
+    db.add(UserRole(user_id=print_room.id, role_id=print_room_role.id))
+    project, work_order = _seed_project(db, leader, project_code="P-MAIL-PRINTROOM")
+    work_order.current_status = "REPORT_MAILING"
+    work_order.current_handler_user_id = leader.id
+    work_order.print_room_handler_id = print_room.id
+    work_order.mailing_handler_user_id = print_room.id
+    work_order.mailing_status = "PROJECT_CONFIRMING"
+    db.commit()
+
+    result = get_workbench(db=db, current_user=print_room)
+
+    assert result.todo_projects == []
+
+
+def test_finance_todo_still_visible_during_report_mailing() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db)
+    finance = _seed_user(db, "finance")
+    finance_role = Role(code="FINANCE", name="财务", description="", is_system_fixed=True)
+    db.add(finance_role)
+    db.flush()
+    db.add(UserRole(user_id=finance.id, role_id=finance_role.id))
+    project, work_order = _seed_project(db, leader, project_code="P-MAIL-INVOICE")
+    work_order.current_status = "REPORT_MAILING"
+    work_order.current_handler_user_id = leader.id
+    work_order.mailing_status = "PROJECT_CONFIRMING"
+    db.add(Invoice(
+        work_order_id=work_order.id,
+        invoice_no="PENDING",
+        invoice_info="info",
+        invoice_type="专票",
+        amount=100,
+        status="SUBMITTED",
+    ))
+    db.commit()
+
+    result = get_workbench(db=db, current_user=finance)
+
+    assert [item.id for item in result.todo_projects] == [project.id]
+    assert result.todo_projects[0].current_step == "财务开票"

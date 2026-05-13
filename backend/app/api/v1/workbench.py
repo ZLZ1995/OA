@@ -92,8 +92,21 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
     if "CONTRACT_REVIEWER" in role_codes or "ADMIN" in role_codes:
         role_pool_filters.append(WorkOrder.contract_reviewer_id == current_user.id)
     if "PRINT_ROOM" in role_codes or "ADMIN" in role_codes:
-        role_pool_filters.append(WorkOrder.print_room_handler_id == current_user.id)
-        role_pool_filters.append(WorkOrder.mailing_handler_user_id == current_user.id)
+        role_pool_filters.append(
+            and_(
+                WorkOrder.print_room_handler_id == current_user.id,
+                or_(
+                    WorkOrder.current_status.notin_(["REPORT_MAILING", "REPORT_MAILING_COMPLETED"]),
+                    WorkOrder.mailing_status == "PRINT_ROOM_PENDING",
+                ),
+            )
+        )
+        role_pool_filters.append(
+            and_(
+                WorkOrder.mailing_handler_user_id == current_user.id,
+                WorkOrder.mailing_status == "PRINT_ROOM_PENDING",
+            )
+        )
     if "ADMIN" in role_codes:
         role_pool_filters.append(Project.termination_status == "PENDING")
         pending_delete_project_ids = db.query(ProjectDeleteRequest.project_id).filter(
@@ -140,8 +153,17 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             ("PRINT_ROOM" in role_codes or "ADMIN" in role_codes)
             and (
                 work_order.current_handler_user_id == current_user.id
-                or work_order.print_room_handler_id == current_user.id
-                or work_order.mailing_handler_user_id == current_user.id
+                or (
+                    work_order.print_room_handler_id == current_user.id
+                    and (
+                        work_order.current_status not in {"REPORT_MAILING", "REPORT_MAILING_COMPLETED"}
+                        or work_order.mailing_status == "PRINT_ROOM_PENDING"
+                    )
+                )
+                or (
+                    work_order.mailing_handler_user_id == current_user.id
+                    and work_order.mailing_status == "PRINT_ROOM_PENDING"
+                )
             )
         )
         if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id and not rejected_invoice:
@@ -163,6 +185,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             work_order.current_status in {"REPORT_MAILING", "REPORT_MAILING_COMPLETED"}
             and not is_project_party
             and not is_print_room_assignee
+            and not (pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes))
             and "ADMIN" not in role_codes
         ):
             continue
@@ -181,10 +204,10 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             step = "项目终止/废止审核"
         elif work_order.current_status == "CONTRACT_REVIEWING" and work_order.contract_reviewer_id == current_user.id:
             step = "合同初稿审核"
-        elif work_order.current_status == "REPORT_MAILING" or work_order.current_status == "REPORT_MAILING_COMPLETED":
-            step = "报告邮寄"
         elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
             step = "财务开票"
+        elif work_order.current_status == "REPORT_MAILING" or work_order.current_status == "REPORT_MAILING_COMPLETED":
+            step = "报告邮寄"
         elif rejected_invoice and is_project_party:
             step = "发票开具"
         elif work_order.archive_reviewer_id == current_user.id and work_order.archive_submission_type in {"ONLINE", "OFFLINE"}:
@@ -215,7 +238,11 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             else "请处理合同初稿审核"
             if step == "合同初稿审核" and work_order.contract_reviewer_id == current_user.id
             else "请填写快递单号"
-            if step == "报告邮寄" and work_order.mailing_handler_user_id == current_user.id
+            if (
+                step == "报告邮寄"
+                and work_order.mailing_handler_user_id == current_user.id
+                and work_order.mailing_status == "PRINT_ROOM_PENDING"
+            )
             else f"待处理：{step}"
         )
         todo_projects.append(
