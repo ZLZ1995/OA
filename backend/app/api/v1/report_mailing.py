@@ -255,13 +255,13 @@ def confirm_report_mailing(
     db.add(row)
 
     work_order.mailing_status = "COMPLETED"
-    work_order.current_status = WorkOrderStatus.REPORT_MAILING_COMPLETED.value
+    work_order.current_status = WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value
     work_order.current_handler_user_id = work_order.project_leader_id or work_order.initiator_user_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,
         from_status=WorkOrderStatus.REPORT_MAILING.value,
-        to_status=WorkOrderStatus.REPORT_MAILING_COMPLETED.value,
+        to_status=WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value,
         action_type="PROJECT_CONFIRM_MAILING",
         operator_user_id=current_user.id,
         remark=payload.remark,

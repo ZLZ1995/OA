@@ -201,6 +201,8 @@ def ensure_work_order_columns(db: Session) -> None:
         db.execute(text("ALTER TABLE invoices ADD COLUMN invoice_info TEXT NULL"))
     if "invoice_type" not in invoice_columns:
         db.execute(text("ALTER TABLE invoices ADD COLUMN invoice_type VARCHAR(16) NULL"))
+    if "finance_handler_id" not in invoice_columns:
+        db.execute(text("ALTER TABLE invoices ADD COLUMN finance_handler_id INTEGER NULL"))
     db.commit()
 
 

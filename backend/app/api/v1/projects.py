@@ -127,7 +127,7 @@ def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrd
         "third_reviewer_name": user_name(work_order.third_reviewer_id),
         "print_room_handler_name": user_name(work_order.print_room_handler_id),
         "mailing_handler_name": user_name(work_order.mailing_handler_user_id),
-        "invoice_handler_name": user_name(invoice.handled_by if invoice else None),
+        "invoice_handler_name": user_name((invoice.handled_by or invoice.finance_handler_id) if invoice else None),
         "archive_reviewer_name": user_name(work_order.archive_reviewer_id),
         "mailing_receiver_name": mailing_record.receiver_name if mailing_record else None,
         "mailing_receiver_phone": mailing_record.receiver_phone if mailing_record else None,

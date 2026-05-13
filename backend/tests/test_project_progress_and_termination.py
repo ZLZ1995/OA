@@ -23,6 +23,18 @@ def _seed_user(db: Session, username: str = "leader") -> User:
     return user
 
 
+def _seed_role_user(db: Session, username: str, role_code: str) -> User:
+    user = _seed_user(db, username)
+    role = db.query(Role).filter(Role.code == role_code).first()
+    if not role:
+        role = Role(code=role_code, name=role_code, description="", is_system_fixed=True)
+        db.add(role)
+        db.flush()
+    db.add(UserRole(user_id=user.id, role_id=role.id))
+    db.flush()
+    return user
+
+
 def _seed_project(
     db: Session,
     leader: User,
@@ -112,6 +124,7 @@ def test_invoice_submission_does_not_change_main_workflow_status() -> None:
 
     db = _build_session()
     leader = _seed_user(db)
+    finance = _seed_role_user(db, "finance_create", "FINANCE")
     project, work_order = _seed_project(db, leader, project_code="P-INVOICE")
     work_order.current_status = "FIRST_REVIEWING"
     work_order.current_handler_user_id = 999
@@ -123,6 +136,7 @@ def test_invoice_submission_does_not_change_main_workflow_status() -> None:
             invoice_info="开票单位：中勤\n测试开票信息",
             invoice_type="专票",
             amount=100,
+            finance_handler_id=finance.id,
         ),
         db=db,
         current_user=leader,
@@ -133,6 +147,7 @@ def test_invoice_submission_does_not_change_main_workflow_status() -> None:
     invoice = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).first()
     assert invoice is not None
     assert invoice.status == "SUBMITTED"
+    assert invoice.finance_handler_id == finance.id
     assert work_order.current_status == "FIRST_REVIEWING"
     assert work_order.current_handler_user_id == 999
 
@@ -143,6 +158,7 @@ def test_invoice_submission_can_start_new_round_after_issued_invoice() -> None:
 
     db = _build_session()
     leader = _seed_user(db)
+    finance = _seed_role_user(db, "finance_multi", "FINANCE")
     _, work_order = _seed_project(db, leader, project_code="P-INVOICE-MULTI")
     db.add(Invoice(
         work_order_id=work_order.id,
@@ -160,6 +176,7 @@ def test_invoice_submission_can_start_new_round_after_issued_invoice() -> None:
             invoice_info="开票单位：中勤\n第二轮开票信息",
             invoice_type="普票",
             amount=200,
+            finance_handler_id=finance.id,
         ),
         db=db,
         current_user=leader,
@@ -176,11 +193,7 @@ def test_finance_todo_comes_from_submitted_invoice() -> None:
 
     db = _build_session()
     leader = _seed_user(db)
-    finance = _seed_user(db, "finance")
-    finance_role = Role(code="FINANCE", name="财务", description="", is_system_fixed=True)
-    db.add(finance_role)
-    db.flush()
-    db.add(UserRole(user_id=finance.id, role_id=finance_role.id))
+    finance = _seed_role_user(db, "finance", "FINANCE")
     project, work_order = _seed_project(db, leader, project_code="P-FINANCE-TODO")
     work_order.current_status = "FIRST_REVIEWING"
     work_order.current_handler_user_id = leader.id
@@ -191,6 +204,7 @@ def test_finance_todo_comes_from_submitted_invoice() -> None:
         invoice_type="专票",
         amount=100,
         status="SUBMITTED",
+        finance_handler_id=finance.id,
     ))
     db.commit()
 
@@ -253,11 +267,7 @@ def test_finance_todo_still_visible_during_report_mailing() -> None:
 
     db = _build_session()
     leader = _seed_user(db)
-    finance = _seed_user(db, "finance")
-    finance_role = Role(code="FINANCE", name="财务", description="", is_system_fixed=True)
-    db.add(finance_role)
-    db.flush()
-    db.add(UserRole(user_id=finance.id, role_id=finance_role.id))
+    finance = _seed_role_user(db, "finance", "FINANCE")
     project, work_order = _seed_project(db, leader, project_code="P-MAIL-INVOICE")
     work_order.current_status = "REPORT_MAILING"
     work_order.current_handler_user_id = leader.id
@@ -269,6 +279,7 @@ def test_finance_todo_still_visible_during_report_mailing() -> None:
         invoice_type="专票",
         amount=100,
         status="SUBMITTED",
+        finance_handler_id=finance.id,
     ))
     db.commit()
 
@@ -276,3 +287,105 @@ def test_finance_todo_still_visible_during_report_mailing() -> None:
 
     assert [item.id for item in result.todo_projects] == [project.id]
     assert result.todo_projects[0].current_step == "财务开票"
+
+
+def test_submitted_invoice_todo_only_visible_to_selected_finance() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db)
+    selected_finance = _seed_role_user(db, "selected_finance", "FINANCE")
+    other_finance = _seed_role_user(db, "other_finance", "FINANCE")
+    project, work_order = _seed_project(db, leader, project_code="P-SELECTED-FINANCE")
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = leader.id
+    db.add(
+        Invoice(
+            work_order_id=work_order.id,
+            invoice_no="PENDING",
+            invoice_info="info",
+            invoice_type="专票",
+            amount=100,
+            status="SUBMITTED",
+            finance_handler_id=selected_finance.id,
+        )
+    )
+    db.commit()
+
+    selected_result = get_workbench(db=db, current_user=selected_finance)
+    other_result = get_workbench(db=db, current_user=other_finance)
+
+    assert [item.id for item in selected_result.todo_projects] == [project.id]
+    assert other_result.todo_projects == []
+
+
+def test_finance_completed_invoice_returns_to_project_party_for_confirmation() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db)
+    finance = _seed_role_user(db, "finance_confirm", "FINANCE")
+    project, work_order = _seed_project(db, leader, project_code="P-INVOICE-CONFIRM")
+    work_order.current_status = "REPORT_MAILING"
+    work_order.current_handler_user_id = 999
+    db.add(
+        Invoice(
+            work_order_id=work_order.id,
+            invoice_no="PENDING",
+            invoice_info="info",
+            invoice_type="专票",
+            amount=100,
+            status="FINANCE_COMPLETED",
+            finance_handler_id=finance.id,
+            handled_by=finance.id,
+        )
+    )
+    db.commit()
+
+    leader_result = get_workbench(db=db, current_user=leader)
+    finance_result = get_workbench(db=db, current_user=finance)
+
+    assert [item.id for item in leader_result.todo_projects] == [project.id]
+    assert leader_result.todo_projects[0].current_step == "发票开具"
+    assert finance_result.todo_projects == []
+
+
+def test_project_can_confirm_invoice_then_start_next_round() -> None:
+    from app.api.v1.finance import confirm_invoice, create_invoice
+    from app.schemas.invoice import InvoiceCreate
+
+    db = _build_session()
+    leader = _seed_user(db)
+    finance = _seed_role_user(db, "finance_next", "FINANCE")
+    _, work_order = _seed_project(db, leader, project_code="P-INVOICE-NEXT")
+    db.add(
+        Invoice(
+            work_order_id=work_order.id,
+            invoice_no="PENDING",
+            invoice_info="first",
+            invoice_type="专票",
+            amount=100,
+            status="FINANCE_COMPLETED",
+            finance_handler_id=finance.id,
+            handled_by=finance.id,
+        )
+    )
+    db.commit()
+
+    first = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).first()
+    confirm_invoice(first.id, db=db, current_user=leader, role_codes={"PROJECT_LEADER"})
+    create_invoice(
+        payload=InvoiceCreate(
+            work_order_id=work_order.id,
+            invoice_info="开票单位：中勤\n第二轮开票信息",
+            invoice_type="普票",
+            amount=200,
+            finance_handler_id=finance.id,
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    invoices = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.asc()).all()
+    assert [invoice.status for invoice in invoices] == ["ISSUED", "SUBMITTED"]

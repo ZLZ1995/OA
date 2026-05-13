@@ -38,8 +38,6 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             project.archived_at is not None,
             project.project_source,
         )
-        if latest_work_order and latest_work_order.current_status == "REPORT_MAILING_COMPLETED":
-            step = "报告邮寄"
         if project.termination_status == "DELETE_PENDING":
             step = "待确认删除"
         elif project.termination_status == "PENDING":
@@ -80,7 +78,9 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
 
     role_pool_filters = []
     if "FINANCE" in role_codes or "ADMIN" in role_codes:
-        pending_invoice_work_orders = db.query(Invoice.work_order_id).filter(Invoice.status == "SUBMITTED")
+        pending_invoice_work_orders = db.query(Invoice.work_order_id).filter(Invoice.status.in_(["SUBMITTED", "PROJECT_RETURNED"]))
+        if "ADMIN" not in role_codes:
+            pending_invoice_work_orders = pending_invoice_work_orders.filter(Invoice.finance_handler_id == current_user.id)
         role_pool_filters.append(WorkOrder.id.in_(pending_invoice_work_orders))
     if "ARCHIVE_MANAGER" in role_codes or "ADMIN" in role_codes:
         role_pool_filters.append(
@@ -141,7 +141,14 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         if project.id in seen:
             continue
         rejected_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "REJECTED").first()
-        pending_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "SUBMITTED").first()
+        pending_invoice_filters = [
+            Invoice.work_order_id == work_order.id,
+            Invoice.status.in_(["SUBMITTED", "PROJECT_RETURNED"]),
+        ]
+        if "ADMIN" not in role_codes:
+            pending_invoice_filters.append(Invoice.finance_handler_id == current_user.id)
+        pending_invoice = db.query(Invoice.id).filter(*pending_invoice_filters).first()
+        confirming_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "FINANCE_COMPLETED").first()
 
         is_project_party = (
             work_order.project_leader_id == current_user.id
@@ -166,7 +173,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
                 )
             )
         )
-        if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id and not rejected_invoice:
+        if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id and not rejected_invoice and not confirming_invoice:
             if work_order.current_status not in {"WAIT_CONTRACT_REVIEW_SUBMIT", "CONTRACT_REJECTED", "REPORT_MAILING", "REPORT_MAILING_COMPLETED"}:
                 continue
 
@@ -186,6 +193,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             and not is_project_party
             and not is_print_room_assignee
             and not (pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes))
+            and not (confirming_invoice and is_project_party)
             and "ADMIN" not in role_codes
         ):
             continue
@@ -206,6 +214,8 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             step = "合同初稿审核"
         elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
             step = "财务开票"
+        elif confirming_invoice and is_project_party:
+            step = "发票开具"
         elif work_order.current_status == "REPORT_MAILING" or work_order.current_status == "REPORT_MAILING_COMPLETED":
             step = "报告邮寄"
         elif rejected_invoice and is_project_party:
@@ -235,6 +245,8 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             if can_approve_termination
             else "开票信息被退回，请修改后重新提交"
             if rejected_invoice and is_project_party
+            else "财务已完成开票，请确认或退回修改"
+            if confirming_invoice and is_project_party
             else "请处理合同初稿审核"
             if step == "合同初稿审核" and work_order.contract_reviewer_id == current_user.id
             else "请填写快递单号"
