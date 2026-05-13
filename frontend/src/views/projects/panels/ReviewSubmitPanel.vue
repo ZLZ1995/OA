@@ -73,7 +73,7 @@
 
       <el-form-item :label="showReviewerChangePanel ? '重新上传文件' : (isReplyFlow ? '意见回复文件' : '待审报告包')">
         <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
-          <el-button :disabled="!canSubmitReview || reusePreviousFile">{{ isReplyFlow ? '上传审核意见回复' : '上传待审报告' }}</el-button>
+          <el-button :disabled="!canSubmitReview || reusePreviousFile">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
         </el-upload>
         <el-tag v-if="reusePreviousFile" type="info" effect="plain" style="margin-left: 12px">将沿用上轮已提交文件</el-tag>
         <div class="file-list" v-if="submitFiles.length">
