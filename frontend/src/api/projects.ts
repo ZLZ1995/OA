@@ -36,6 +36,7 @@ export interface ProjectUpdatePayload {
   report_type?: ReportType
   valuation_base_date?: string | null
   business_salesman?: string
+  project_amount?: number | null
   project_source?: ProjectSource
   external_project_leader_name?: string | null
 }

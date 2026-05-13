@@ -181,8 +181,8 @@ async function onReject() {
   emit('changed')
 }
 
-function download(file: Pick<WorkOrderFileItem, 'id'>) {
-  downloadWorkOrderFile(file.id)
+function download(file: Pick<WorkOrderFileItem, 'id' | 'origin_file_name'>) {
+  downloadWorkOrderFile(file.id, file.origin_file_name)
 }
 
 onMounted(load)

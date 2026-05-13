@@ -99,8 +99,8 @@ LOCAL_BOOTSTRAP_USERS: list[dict[str, object]] = [
         "role_codes": ["PRINT_ROOM"],
     },
     {
-        "username": "李姜",
-        "real_name": "李姜",
+        "username": "李彪",
+        "real_name": "李彪",
         "password_hash": "$2b$12$0FBZrb1JrGy98PS5EnPbnezbgVHEIWJv3ohfmd6yJP.MH2K9BVQNW",
         "role_codes": ["ARCHIVE_MANAGER"],
     },
@@ -108,13 +108,13 @@ LOCAL_BOOTSTRAP_USERS: list[dict[str, object]] = [
 
 
 def init_db() -> None:
-    """Create all tables and initialize fixed roles + admin account."""
     Base.metadata.create_all(bind=engine)
     with Session(engine) as db:
         ensure_project_columns(db)
         ensure_work_order_columns(db)
         ensure_work_order_file_columns(db)
         ensure_contract_review_table(db)
+        ensure_project_update_log_table(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
         sync_local_bootstrap_users(db)
@@ -133,6 +133,8 @@ def ensure_project_columns(db: Session) -> None:
         db.execute(text("ALTER TABLE projects ADD COLUMN valuation_base_date DATE NULL"))
     if "business_salesman" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN business_salesman VARCHAR(255) NULL"))
+    if "project_amount" not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN project_amount FLOAT NULL"))
     if "project_source" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN project_source VARCHAR(16) DEFAULT 'INTERNAL' NOT NULL"))
     if "external_project_leader_name" not in existing_columns:
@@ -200,9 +202,7 @@ def ensure_contract_review_table(db: Session) -> None:
     if engine.dialect.name != "sqlite":
         return
 
-    table_exists = db.execute(
-        text("SELECT name FROM sqlite_master WHERE type='table' AND name='contract_review_records'")
-    ).fetchone()
+    table_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='contract_review_records'")).fetchone()
     if not table_exists:
         db.execute(
             text(
@@ -217,6 +217,30 @@ def ensure_contract_review_table(db: Session) -> None:
                     comment TEXT NULL,
                     contract_file_id INTEGER NULL,
                     review_attachment_file_id INTEGER NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        )
+    db.commit()
+
+
+def ensure_project_update_log_table(db: Session) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    table_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_update_logs'")).fetchone()
+    if not table_exists:
+        db.execute(
+            text(
+                """
+                CREATE TABLE project_update_logs (
+                    id INTEGER PRIMARY KEY,
+                    project_id INTEGER NOT NULL,
+                    operator_user_id INTEGER NOT NULL,
+                    changed_fields TEXT NOT NULL,
+                    remark VARCHAR(255) NULL,
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
                 )

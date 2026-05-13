@@ -7,6 +7,22 @@
     show-icon
   />
   <template v-else>
+    <el-descriptions
+      v-if="showProjectSummary"
+      :column="2"
+      border
+      style="margin-bottom: 16px"
+    >
+      <el-descriptions-item label="项目名称">{{ flowInfo?.project.project_name || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="客户名称">{{ flowInfo?.project.client_name || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="报告类型">{{ flowInfo?.project.report_type || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="评估基准日">{{ flowInfo?.project.valuation_base_date || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="项目来源">{{ flowInfo?.project.project_source_display || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="项目负责人">{{ flowInfo?.project.project_leader_display_name || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="项目承接业务员">{{ flowInfo?.project.business_salesman || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="承接单位">{{ flowInfo?.project.undertaking_unit || '-' }}</el-descriptions-item>
+    </el-descriptions>
+
     <el-form label-width="120px">
       <el-form-item label="审核轮次">
         <el-select v-model="reviewRound" style="width: 180px" :disabled="!canSubmitReview" @change="reloadRoundData">
@@ -57,15 +73,6 @@
     <template v-if="canReview">
       <el-divider>审核处理</el-divider>
       <el-form label-width="120px">
-        <el-form-item label="合同初稿">
-          <div v-if="contractDraftFiles.length" class="contract-file-list">
-            <div v-for="file in contractDraftFiles" :key="file.id" class="contract-file-item">
-              <span>{{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）</span>
-              <el-button type="primary" plain @click="download(file)">下载合同初稿</el-button>
-            </div>
-          </div>
-          <span v-else>-</span>
-        </el-form-item>
         <el-form-item label="审核意见">
           <el-input v-model="reviewComment" type="textarea" :rows="3" placeholder="请输入审核意见" />
         </el-form-item>
@@ -242,6 +249,7 @@ const canUploadFormalReport = computed(() => {
 })
 const showFormalReportPanel = computed(() => canUploadFormalReport.value)
 const showContractDraftDownload = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].some(role => props.userRoles.includes(role)))
+const showProjectSummary = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER', 'ADMIN'].some(role => props.userRoles.includes(role)))
 
 const reviewPackageFiles = computed(() => files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.business_stage === reviewStage(reviewRound.value)))
 const replyFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_REPLY' && file.business_stage === reviewStage(reviewRound.value)))

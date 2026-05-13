@@ -14,6 +14,7 @@ class ProjectBase(BaseModel):
     report_type: str = Field(default="评估报告", min_length=1, max_length=32)
     valuation_base_date: date | None = None
     business_salesman: str = Field(default="", max_length=255)
+    project_amount: float | None = Field(default=None, ge=0)
     project_source: str = Field(default="INTERNAL", min_length=1, max_length=16)
     external_project_leader_name: str | None = Field(default=None, max_length=255)
     business_user_id: int
@@ -45,11 +46,13 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectUpdate(BaseModel):
+    undertaking_unit: str | None = Field(default=None, min_length=1, max_length=32)
     project_name: str | None = Field(default=None, min_length=1, max_length=255)
     client_name: str | None = Field(default=None, min_length=1, max_length=255)
     report_type: str | None = Field(default=None, min_length=1, max_length=32)
     valuation_base_date: date | None = None
     business_salesman: str | None = Field(default=None, min_length=1, max_length=255)
+    project_amount: float | None = Field(default=None, ge=0)
     project_source: str | None = Field(default=None, min_length=1, max_length=16)
     external_project_leader_name: str | None = Field(default=None, max_length=255)
     business_user_id: int | None = None
@@ -65,6 +68,8 @@ class ProjectResponse(ProjectBase):
     id: int
     project_source_display: str = "内部项目"
     project_leader_display_name: str | None = None
+    report_no: str | None = None
+    contract_no: str | None = None
     status_display: str = "项目创建"
     contract_review_status: str | None = None
     contract_review_status_display: str | None = None

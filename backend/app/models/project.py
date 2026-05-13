@@ -1,4 +1,4 @@
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -15,6 +15,7 @@ class Project(Base, TimestampMixin):
     report_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     valuation_base_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     business_salesman: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    project_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     project_source: Mapped[str] = mapped_column(String(16), nullable=False, default="INTERNAL")
     external_project_leader_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     business_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
