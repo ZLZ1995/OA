@@ -61,12 +61,6 @@
         </el-form-item>
       </template>
 
-      <el-form-item v-if="isReplyFlow && !showReviewerChangePanel" label="报告文件处理">
-        <el-radio-group v-model="replyFileMode" :disabled="!canSubmitReview">
-          <el-radio-button label="REUPLOAD">重新上传文件</el-radio-button>
-          <el-radio-button label="REUSE">沿用上轮文件</el-radio-button>
-        </el-radio-group>
-      </el-form-item>
       <el-form-item v-if="showContractDraftDownload" label="合同初稿下载">
         <div v-if="contractDraftFiles.length" class="contract-file-list">
           <div v-for="file in contractDraftFiles" :key="file.id" class="contract-file-item">
@@ -79,7 +73,7 @@
 
       <el-form-item :label="showReviewerChangePanel ? '重新上传文件' : (isReplyFlow ? '意见回复文件' : '待审报告包')">
         <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
-          <el-button :disabled="!canSubmitReview || reusePreviousFile">{{ isReplyFlow ? '上传审核意见回复' : '上传待审报告' }}</el-button>
+          <el-button :disabled="!canSubmitReview || reusePreviousFile">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
         </el-upload>
         <el-tag v-if="reusePreviousFile" type="info" effect="plain" style="margin-left: 12px">将沿用上轮已提交文件</el-tag>
         <div class="file-list" v-if="submitFiles.length">
