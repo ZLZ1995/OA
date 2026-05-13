@@ -117,6 +117,7 @@ def init_db() -> None:
         ensure_project_update_log_table(db)
         ensure_report_mailing_table(db)
         ensure_project_delete_request_table(db)
+        ensure_project_conflict_tables(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
         sync_local_bootstrap_users(db)
@@ -145,6 +146,10 @@ def ensure_project_columns(db: Session) -> None:
         db.execute(text("ALTER TABLE projects ADD COLUMN archived_at TIMESTAMPTZ NULL"))
     if "deleted_at" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMPTZ NULL"))
+    if "duplicate_delete_required" not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN duplicate_delete_required BOOLEAN DEFAULT 0 NOT NULL"))
+    if "duplicate_delete_reason" not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN duplicate_delete_reason TEXT NULL"))
     if "termination_status" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN termination_status VARCHAR(32) NULL"))
     if "termination_reason" not in existing_columns:
@@ -326,6 +331,64 @@ def ensure_project_delete_request_table(db: Session) -> None:
         db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN client_name VARCHAR(255) NOT NULL DEFAULT ''"))
     if "current_step" not in existing_columns:
         db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN current_step VARCHAR(64) NOT NULL DEFAULT ''"))
+    db.commit()
+
+
+def ensure_project_conflict_tables(db: Session) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    snapshot_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_conflict_snapshots'")).fetchone()
+    if not snapshot_exists:
+        db.execute(
+            text(
+                """
+                CREATE TABLE project_conflict_snapshots (
+                    id INTEGER PRIMARY KEY,
+                    project_id INTEGER NOT NULL UNIQUE,
+                    work_order_id INTEGER NOT NULL,
+                    project_no VARCHAR(64) NOT NULL,
+                    project_name VARCHAR(255) NOT NULL,
+                    client_name VARCHAR(255) NOT NULL,
+                    normalized_client_name VARCHAR(255) NOT NULL,
+                    project_amount FLOAT NOT NULL,
+                    valuation_base_date DATE NOT NULL,
+                    project_leader_display_name VARCHAR(255) NOT NULL,
+                    creator_user_id INTEGER NULL,
+                    creator_username VARCHAR(255) NULL,
+                    contract_uploaded_at TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        )
+
+    conflict_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_conflict_records'")).fetchone()
+    if not conflict_exists:
+        db.execute(
+            text(
+                """
+                CREATE TABLE project_conflict_records (
+                    id INTEGER PRIMARY KEY,
+                    project_a_id INTEGER NOT NULL,
+                    project_b_id INTEGER NOT NULL,
+                    snapshot_a_id INTEGER NOT NULL,
+                    snapshot_b_id INTEGER NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    decision VARCHAR(32) NULL,
+                    kept_project_id INTEGER NULL,
+                    delete_project_id INTEGER NULL,
+                    decided_by INTEGER NULL,
+                    decided_at TIMESTAMPTZ NULL,
+                    resolve_comment TEXT NULL,
+                    resolved_at TIMESTAMPTZ NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        )
     db.commit()
 
 

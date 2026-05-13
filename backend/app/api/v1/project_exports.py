@@ -138,9 +138,13 @@ def _collect_rows(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    include_deleted: bool = False,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    projects = db.query(Project).filter(Project.deleted_at.is_(None)).order_by(Project.id.desc()).all()
+    query = db.query(Project)
+    if not include_deleted:
+        query = query.filter(Project.deleted_at.is_(None))
+    projects = query.order_by(Project.id.desc()).all()
     for project in projects:
         work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project.id).order_by(WorkOrder.id.desc()).first()
         leader = db.query(User).filter(User.id == project.project_leader_id).first()
@@ -199,7 +203,7 @@ def _collect_rows(
                 "project_no": project.project_code,
                 "project_name": project.project_name,
                 "project_created_date": _format_date(project_created_date),
-                "project_progress": _project_progress(project, work_order),
+                "project_progress": "已删除" if project.deleted_at else ("重复项目待删除" if project.duplicate_delete_required else _project_progress(project, work_order)),
                 "report_no": record.paper_report_no if record else "",
                 "project_leader_name": leader_display_name,
                 "undertaking_unit": project.undertaking_unit,
@@ -241,6 +245,7 @@ def list_project_export_rows(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    include_deleted: bool = False,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> dict[str, list[dict[str, object]]]:
@@ -263,6 +268,7 @@ def list_project_export_rows(
             business_salesman,
             project_source,
             external_project_leader_name,
+            include_deleted,
         )
     }
 
@@ -285,6 +291,7 @@ def export_project_rows_excel(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    include_deleted: bool = False,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> Response:
@@ -306,6 +313,7 @@ def export_project_rows_excel(
         business_salesman,
         project_source,
         external_project_leader_name,
+        include_deleted,
     )
     data = [[
         "项目编号",

@@ -20,6 +20,7 @@ from app.models.project_update_log import ProjectUpdateLog
 from app.models.report_mailing_record import ReportMailingRecord
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.models.work_order_file import WorkOrderFile
 from app.schemas.contract_review import ContractReviewRecordResponse
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectResponse, ProjectUpdate
 from app.schemas.project_flow import ProjectFlowProject, ProjectFlowResponse, ProjectUpdateLogItem
@@ -34,6 +35,7 @@ from app.services.project_flow import (
 )
 from app.services.workflow_log_service import create_workflow_log
 from app.services.project_delete_service import can_project_owner_delete_direct, delete_project_related_data
+from app.services.project_conflicts import get_unresolved_conflicts, mark_project_duplicate_deleted, upsert_conflict_snapshot_and_detect
 from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/projects", tags=["项目"])
@@ -355,6 +357,21 @@ def update_project(
         "external_project_leader_name": row.external_project_leader_name,
     }
     _record_project_update_log(db, row, current_user, before, after)
+    work_order = _get_latest_work_order(db, row.id)
+    if work_order:
+        latest_contract_file = (
+            db.query(WorkOrderFile)
+            .filter(
+                WorkOrderFile.work_order_id == work_order.id,
+                WorkOrderFile.file_category == "CONTRACT_DRAFT",
+                WorkOrderFile.business_stage == "CONTRACT_DRAFT",
+                WorkOrderFile.is_current.is_(True),
+            )
+            .order_by(WorkOrderFile.uploaded_at.desc())
+            .first()
+        )
+        if latest_contract_file:
+            upsert_conflict_snapshot_and_detect(db, row, work_order, latest_contract_file.uploaded_at)
 
     db.commit()
     db.refresh(row)
@@ -381,6 +398,24 @@ def delete_project(
     if not can_project_owner_delete_direct(work_order):
         raise HTTPException(status_code=400, detail="报告出具后需管理员确认删除")
     delete_project_related_data(db, row)
+    db.commit()
+
+
+@router.post("/{project_id}/duplicate-delete", status_code=status.HTTP_204_NO_CONTENT)
+def delete_duplicate_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    is_member = db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
+    if row.project_leader_id != current_user.id and row.business_user_id != current_user.id and not is_member:
+        raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可删除该重复项目")
+    if not row.duplicate_delete_required:
+        raise HTTPException(status_code=400, detail="该项目未被管理员判定为重复项目待删除")
+    mark_project_duplicate_deleted(db, row)
     db.commit()
 
 
@@ -522,6 +557,14 @@ def get_project_flow(
     readonly_fields = _get_readonly_flow_fields(db, project, work_order)
     contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
     history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
+    unresolved_conflicts = get_unresolved_conflicts(db, project.id)
+    review_lock_reason = None
+    if project.duplicate_delete_required:
+        review_lock_reason = "该项目已被管理员判定为重复项目，请删除"
+    elif unresolved_conflicts:
+        review_lock_reason = "该项目存在未处理的重复项目提醒，请等待管理员确认"
+    elif project.project_amount is None or project.project_amount < 0 or project.valuation_base_date is None:
+        review_lock_reason = "请先在项目基本信息中填写项目金额和评估基准日"
 
     return ProjectFlowResponse(
         project=ProjectFlowProject(
@@ -597,4 +640,7 @@ def get_project_flow(
         flow_steps=get_flow_steps(project),
         contract_review_records=contract_review_records,
         project_update_logs=_serialize_project_update_logs(db, project.id),
+        review_submit_locked=review_lock_reason is not None,
+        review_submit_lock_reason=review_lock_reason,
+        duplicate_delete_required=project.duplicate_delete_required,
     )

@@ -23,6 +23,7 @@ from app.schemas.review import (
     ReviewRecordResponse,
     ReviewSubmitRequest,
 )
+from app.services.project_conflicts import assert_project_can_submit_review
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.guards import filter_candidates, validate_reviewer_avoidance
 from app.workflows.states import WorkOrderStatus
@@ -234,6 +235,7 @@ def submit_review(
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    assert_project_can_submit_review(db, project)
 
     pending_change = _latest_pending_reviewer_change(db, work_order.id, payload.review_round)
     target_reviewer_id = (

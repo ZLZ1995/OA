@@ -14,7 +14,9 @@ from app.models.project_member import ProjectMember
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
+from app.models.project import Project
 from app.schemas.file import WorkOrderFileListResponse, WorkOrderFileResponse
+from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
 from app.services.workflow_log_service import create_workflow_log
 from app.storage.local_storage import save_upload_file
 from app.workflows.states import WorkOrderStatus
@@ -174,6 +176,10 @@ def upload_file(
     }:
         work_order.current_status = WorkOrderStatus.CONTRACT_UPLOADED.value
         work_order.current_handler_user_id = work_order.project_leader_id
+    if file_category == CONTRACT_DRAFT_FILE_CATEGORY:
+        project = db.query(Project).filter(Project.id == work_order.project_id).first()
+        if project:
+            upsert_conflict_snapshot_and_detect(db, project, work_order, row.uploaded_at)
 
     db.commit()
     db.refresh(row)

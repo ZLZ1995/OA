@@ -65,3 +65,6 @@ class ProjectFlowResponse(BaseModel):
     flow_steps: list[str]
     contract_review_records: list[ContractReviewRecordResponse] = []
     project_update_logs: list[ProjectUpdateLogItem] = []
+    review_submit_locked: bool = False
+    review_submit_lock_reason: str | None = None
+    duplicate_delete_required: bool = False

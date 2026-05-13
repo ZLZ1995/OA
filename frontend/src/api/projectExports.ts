@@ -17,6 +17,7 @@ export interface ProjectExportFilters {
   business_salesman?: string
   project_source?: 'INTERNAL' | 'EXTERNAL'
   external_project_leader_name?: string
+  include_deleted?: boolean
 }
 
 export interface ProjectExportItem {
@@ -24,7 +25,7 @@ export interface ProjectExportItem {
   project_no: string
   project_name: string
   project_created_date: string
-  project_progress: '进行中' | '已归档' | '已作废'
+  project_progress: '进行中' | '已归档' | '已作废' | '已删除' | '重复项目待删除'
   report_no: string
   project_leader_name: string
   undertaking_unit: string

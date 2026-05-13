@@ -6,6 +6,7 @@ from app.models.invoice import Invoice
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
+from app.models.project_conflict import ProjectConflictRecord, ProjectConflictSnapshot
 from app.models.project_member import ProjectMember
 from app.models.project_update_log import ProjectUpdateLog
 from app.models.report_mailing_record import ReportMailingRecord
@@ -25,6 +26,8 @@ __all__ = [
     "Department",
     "Project",
     "ProjectDeleteRequest",
+    "ProjectConflictRecord",
+    "ProjectConflictSnapshot",
     "ProjectMember",
     "ProjectUpdateLog",
     "ReportMailingRecord",

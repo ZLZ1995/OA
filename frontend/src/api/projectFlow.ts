@@ -61,6 +61,9 @@ export interface ProjectFlowData {
   flow_steps: string[]
   contract_review_records: ContractReviewRecordItem[]
   project_update_logs: ProjectUpdateLogItem[]
+  review_submit_locked?: boolean
+  review_submit_lock_reason?: string | null
+  duplicate_delete_required?: boolean
 }
 
 export async function getProjectFlow(projectId: number | string) {

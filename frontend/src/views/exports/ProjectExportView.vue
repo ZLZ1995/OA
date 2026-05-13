@@ -44,6 +44,7 @@
         <el-col :span="6"><el-form-item label="立项结束日期"><el-date-picker v-model="filters.project_date_to" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="基准日开始"><el-date-picker v-model="filters.valuation_base_date_from" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="基准日结束"><el-date-picker v-model="filters.valuation_base_date_to" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
+        <el-col :span="6"><el-form-item label="已删除项目"><el-switch v-model="filters.include_deleted" /></el-form-item></el-col>
         <el-col :span="12">
           <el-form-item>
             <el-button type="primary" @click="load">筛选</el-button>

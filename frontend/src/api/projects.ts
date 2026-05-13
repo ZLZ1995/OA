@@ -74,6 +74,10 @@ export async function deleteProject(projectId: number) {
   await http.delete(`/projects/${projectId}`)
 }
 
+export async function deleteDuplicateProject(projectId: number) {
+  await http.post(`/projects/${projectId}/duplicate-delete`)
+}
+
 export async function archiveProject(projectId: number) {
   const { data } = await http.patch(`/projects/${projectId}/archive`)
   return data as ProjectItem

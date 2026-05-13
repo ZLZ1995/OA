@@ -9,5 +9,6 @@ export const APP_MENUS = [
   { key: 'finance', title: '财务管理', path: '/finance', adminOnly: false },
   { key: 'archives', title: '归档管理', path: '/archives', adminOnly: false },
   { key: 'project-exports', title: '项目清单导出', path: '/project-exports', adminOnly: true },
+  { key: 'project-conflicts', title: '项目冲突提醒', path: '/project-conflicts', adminOnly: true },
   { key: 'accounts', title: '账号管理', path: '/accounts', adminOnly: true }
 ]
