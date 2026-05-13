@@ -87,11 +87,13 @@ def submit_archive(
     work_order.archive_reviewer_id = payload.reviewer_user_id
     work_order.archive_submitter_id = current_user.id
     work_order.archive_submission_type = payload.submission_type
+    work_order.current_status = WorkOrderStatus.ARCHIVE_REVIEWING.value
+    work_order.current_handler_user_id = payload.reviewer_user_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,
         from_status=from_status.value,
-        to_status=from_status.value,
+        to_status=WorkOrderStatus.ARCHIVE_REVIEWING.value,
         action_type=f"ARCHIVE_SUBMIT_{payload.submission_type}",
         operator_user_id=current_user.id,
         remark=payload.remark,
@@ -116,12 +118,13 @@ def approve_archive(
         raise HTTPException(status_code=400, detail="当前无待审核底稿")
     from_status = WorkOrderStatus(work_order.current_status)
     work_order.archive_submission_type = "APPROVED"
+    work_order.current_status = WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value
     work_order.current_handler_user_id = work_order.archive_submitter_id or work_order.project_leader_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,
         from_status=from_status.value,
-        to_status=from_status.value,
+        to_status=WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value,
         action_type="ARCHIVE_APPROVE",
         operator_user_id=current_user.id,
         remark=payload.remark,
@@ -187,11 +190,13 @@ def reject_archive(
         raise HTTPException(status_code=400, detail="当前无待审核底稿")
     from_status = WorkOrderStatus(work_order.current_status)
     work_order.archive_submission_type = "REJECTED"
+    work_order.current_status = WorkOrderStatus.ARCHIVE_REJECTED.value
+    work_order.current_handler_user_id = work_order.archive_submitter_id or work_order.project_leader_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,
         from_status=from_status.value,
-        to_status=from_status.value,
+        to_status=WorkOrderStatus.ARCHIVE_REJECTED.value,
         action_type="ARCHIVE_REJECT",
         operator_user_id=current_user.id,
         remark=payload.remark,
