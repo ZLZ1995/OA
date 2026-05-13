@@ -174,7 +174,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             )
         )
         if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id and not rejected_invoice and not confirming_invoice:
-            if work_order.current_status not in {"WAIT_CONTRACT_REVIEW_SUBMIT", "CONTRACT_REJECTED", "REPORT_MAILING", "REPORT_MAILING_COMPLETED"}:
+            if work_order.current_status not in {"WAIT_CONTRACT_REVIEW_SUBMIT", "CONTRACT_REJECTED", "REPORT_MAILING", "REPORT_MAILING_COMPLETED", "WAIT_ARCHIVE_SUBMIT", "ARCHIVE_REJECTED"}:
                 continue
 
         if (
@@ -216,7 +216,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             step = "财务开票"
         elif confirming_invoice and is_project_party:
             step = "发票开具"
-        elif work_order.current_status == "REPORT_MAILING" or work_order.current_status == "REPORT_MAILING_COMPLETED":
+        elif work_order.current_status == "REPORT_MAILING":
             step = "报告邮寄"
         elif rejected_invoice and is_project_party:
             step = "发票开具"
