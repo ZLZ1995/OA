@@ -73,18 +73,58 @@
       <el-table-column prop="second_reviewer_name" label="二审人员姓名" min-width="120" />
       <el-table-column prop="third_reviewer_name" label="三审人员姓名" min-width="120" />
       <el-table-column prop="archive_date" label="归档日期" min-width="120" />
+      <el-table-column label="操作" width="120">
+        <template #default="{ row }">
+          <el-button v-if="row.can_admin_delete" link type="danger" @click="requestDelete(row)">删除</el-button>
+        </template>
+      </el-table-column>
     </el-table>
+
+    <el-dialog v-model="deleteDialogVisible" title="申请删除项目" width="520px">
+      <el-form label-width="120px">
+        <el-form-item label="共同认证管理员">
+          <el-select v-model="deleteDraft.approver_user_id" style="width: 100%">
+            <el-option
+              v-for="item in deleteAdminOptions"
+              :key="item.id"
+              :label="item.real_name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="删除原因">
+          <el-input v-model="deleteDraft.reason" type="textarea" :rows="3" placeholder="可选填写删除原因" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="deleteDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="deleteSubmitting" @click="submitDeleteRequest">提交删除申请</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { exportProjectRowsExcel, listProjectExportRows, type ProjectExportFilters, type ProjectExportItem } from '@/api/projectExports'
+import { createProjectDeleteRequest } from '@/api/projectDeleteRequests'
+import { listUserCandidates, type UserItem } from '@/api/users'
+import { useAuthStore } from '@/store/auth'
 
 const loading = ref(false)
+const auth = useAuthStore()
 const rows = ref<ProjectExportItem[]>([])
 const filters = reactive<ProjectExportFilters>({})
+const deleteDialogVisible = ref(false)
+const deleteSubmitting = ref(false)
+const deleteAdminOptions = ref<UserItem[]>([])
+const deleteTargetProjectId = ref<number>()
+const deleteTargetProjectName = ref('')
+const deleteDraft = reactive({
+  approver_user_id: undefined as number | undefined,
+  reason: ''
+})
 
 async function load() {
   loading.value = true
@@ -103,6 +143,46 @@ function reset() {
 async function onExport() {
   await exportProjectRowsExcel(filters)
   ElMessage.success('Excel已生成')
+}
+
+async function requestDelete(row: ProjectExportItem) {
+  const user = auth.user ?? await auth.ensureUserLoaded()
+  await ElMessageBox.confirm('确认申请删除该已归档项目吗？', '删除确认', {
+    confirmButtonText: '确认',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  const admins = (await listUserCandidates('ADMIN')).items.filter(item => item.id !== user?.id)
+  if (!admins.length) {
+    ElMessage.warning('暂无可选的共同认证管理员')
+    return
+  }
+  deleteAdminOptions.value = admins
+  deleteTargetProjectId.value = row.project_id
+  deleteTargetProjectName.value = row.project_name
+  deleteDraft.approver_user_id = admins[0].id
+  deleteDraft.reason = ''
+  deleteDialogVisible.value = true
+}
+
+async function submitDeleteRequest() {
+  if (!deleteTargetProjectId.value || !deleteDraft.approver_user_id) {
+    ElMessage.warning('请选择共同认证管理员')
+    return
+  }
+  deleteSubmitting.value = true
+  try {
+    const approver = deleteAdminOptions.value.find(item => item.id === deleteDraft.approver_user_id)
+    await createProjectDeleteRequest(deleteTargetProjectId.value, {
+      approver_user_id: deleteDraft.approver_user_id,
+      reason: deleteDraft.reason.trim() || undefined
+    })
+    deleteDialogVisible.value = false
+    ElMessage.success(`已提交项目「${deleteTargetProjectName.value}」删除申请，待管理员 ${approver?.real_name || ''} 确认`)
+    await load()
+  } finally {
+    deleteSubmitting.value = false
+  }
 }
 
 onMounted(load)

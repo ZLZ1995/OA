@@ -116,6 +116,7 @@ def init_db() -> None:
         ensure_contract_review_table(db)
         ensure_project_update_log_table(db)
         ensure_report_mailing_table(db)
+        ensure_project_delete_request_table(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
         sync_local_bootstrap_users(db)
@@ -283,6 +284,46 @@ def ensure_report_mailing_table(db: Session) -> None:
                 """
             )
         )
+    db.commit()
+
+
+def ensure_project_delete_request_table(db: Session) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    table_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_delete_requests'")).fetchone()
+    if not table_exists:
+        db.execute(
+            text(
+                """
+                CREATE TABLE project_delete_requests (
+                    id INTEGER PRIMARY KEY,
+                    project_id INTEGER NULL UNIQUE,
+                    project_no VARCHAR(64) NOT NULL DEFAULT '',
+                    project_name VARCHAR(255) NOT NULL DEFAULT '',
+                    client_name VARCHAR(255) NOT NULL DEFAULT '',
+                    current_step VARCHAR(64) NOT NULL DEFAULT '',
+                    requester_user_id INTEGER NOT NULL,
+                    approver_user_id INTEGER NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    reason TEXT NULL,
+                    requested_at TIMESTAMPTZ NOT NULL,
+                    reviewed_at TIMESTAMPTZ NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        )
+    existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('project_delete_requests')")).fetchall()}
+    if "project_no" not in existing_columns:
+        db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN project_no VARCHAR(64) NOT NULL DEFAULT ''"))
+    if "project_name" not in existing_columns:
+        db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN project_name VARCHAR(255) NOT NULL DEFAULT ''"))
+    if "client_name" not in existing_columns:
+        db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN client_name VARCHAR(255) NOT NULL DEFAULT ''"))
+    if "current_step" not in existing_columns:
+        db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN current_step VARCHAR(64) NOT NULL DEFAULT ''"))
     db.commit()
 
 

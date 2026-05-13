@@ -14,6 +14,7 @@ from app.models.contract_review_record import ContractReviewRecord
 from app.models.invoice import Invoice
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
+from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.project_member import ProjectMember
 from app.models.project_update_log import ProjectUpdateLog
 from app.models.report_mailing_record import ReportMailingRecord
@@ -32,6 +33,7 @@ from app.services.project_flow import (
     normalize_project_step,
 )
 from app.services.workflow_log_service import create_workflow_log
+from app.services.project_delete_service import can_project_owner_delete_direct, delete_project_related_data
 from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/projects", tags=["项目"])
@@ -368,13 +370,17 @@ def delete_project(
     row = db.query(Project).filter(Project.id == project_id, Project.deleted_at.is_(None)).first()
     if not row:
         raise HTTPException(status_code=404, detail="项目不存在")
-    if row.archived_at is not None:
-        raise HTTPException(status_code=400, detail="项目已归档，不可删除")
-    if row.termination_status == "PENDING":
-        raise HTTPException(status_code=400, detail="项目终止/废止审核中，不可删除")
-    if row.business_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="只有项目创建人可以删除项目")
-    row.deleted_at = datetime.now()
+    work_order = _get_latest_work_order(db, project_id)
+    is_member = db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
+    if row.termination_status in {"PENDING", "DELETE_PENDING"}:
+        raise HTTPException(status_code=400, detail="当前项目状态不允许删除")
+    if row.archived_at is not None or (work_order and work_order.current_status == WorkOrderStatus.ARCHIVED.value):
+        raise HTTPException(status_code=400, detail="已归档项目不可删除")
+    if row.project_leader_id != current_user.id and row.business_user_id != current_user.id and not is_member:
+        raise HTTPException(status_code=403, detail="仅项目负责人可删除该项目")
+    if not can_project_owner_delete_direct(work_order):
+        raise HTTPException(status_code=400, detail="报告出具后需管理员确认删除")
+    delete_project_related_data(db, row)
     db.commit()
 
 
@@ -505,8 +511,12 @@ def get_project_flow(
         raise HTTPException(status_code=403, detail="无权查看该项目")
 
     step = normalize_project_step(work_order.current_status if work_order else None, project.archived_at is not None, project.project_source)
-    is_termination_locked = project.termination_status in {"PENDING", "APPROVED"}
-    action = "项目终止/废止流程处理中，当前业务已锁定" if is_termination_locked else build_todo_action(step, role) or "当前暂无待办操作"
+    is_termination_locked = project.termination_status in {"PENDING", "APPROVED", "DELETE_PENDING"}
+    if project.termination_status == "DELETE_PENDING":
+        step = "待确认删除"
+        action = "待确认删除，当前业务已锁定"
+    else:
+        action = "项目终止/废止流程处理中，当前业务已锁定" if is_termination_locked else build_todo_action(step, role) or "当前暂无待办操作"
     leader_name = db.query(User.real_name).filter(User.id == project.project_leader_id).scalar()
     contract_reviewer_name = db.query(User.real_name).filter(User.id == work_order.contract_reviewer_id).scalar() if work_order and work_order.contract_reviewer_id else None
     readonly_fields = _get_readonly_flow_fields(db, project, work_order)

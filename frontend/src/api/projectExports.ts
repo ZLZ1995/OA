@@ -20,6 +20,7 @@ export interface ProjectExportFilters {
 }
 
 export interface ProjectExportItem {
+  project_id: number
   project_no: string
   project_name: string
   project_created_date: string
@@ -39,6 +40,8 @@ export interface ProjectExportItem {
   second_reviewer_name: string
   third_reviewer_name: string
   archive_date: string
+  delete_request_status?: string
+  can_admin_delete?: boolean
 }
 
 function cleanFilters(filters: ProjectExportFilters) {

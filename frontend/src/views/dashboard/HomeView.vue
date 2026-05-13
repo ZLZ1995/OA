@@ -73,9 +73,10 @@
           <el-table-column prop="transfer_user_name" label="转交人" width="82" show-overflow-tooltip />
           <el-table-column prop="current_step" label="当前步骤" width="96" show-overflow-tooltip />
           <el-table-column prop="todo_action" label="待办事项" min-width="116" show-overflow-tooltip />
-          <el-table-column label="操作" width="132">
+          <el-table-column label="操作" width="160">
             <template #default="{ row }">
-              <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
+              <el-button v-if="row.can_approve_delete" link type="danger" @click="goDeleteApprovals">处理删除审核</el-button>
+              <el-button v-else link type="primary" @click="goProject(row.id)">进入项目</el-button>
               <el-button v-if="row.can_approve_termination" link type="danger" @click="approveTermination(row)">允许终止/废止</el-button>
             </template>
           </el-table-column>
@@ -89,14 +90,14 @@
           <el-table-column prop="project_name" label="项目名称" min-width="130" show-overflow-tooltip />
           <el-table-column prop="client_name" label="客户名称" min-width="130" show-overflow-tooltip />
           <el-table-column prop="current_step" label="当前步骤" width="108" show-overflow-tooltip />
-          <el-table-column prop="status_display" label="状态" width="96" show-overflow-tooltip />
-          <el-table-column label="操作" width="318">
+          <el-table-column prop="status_display" label="状态" width="110" show-overflow-tooltip />
+          <el-table-column label="操作" width="340">
             <template #default="{ row }">
               <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
               <el-button link type="primary" :disabled="!row.can_edit" @click="editProject(row)">编辑</el-button>
               <el-button link type="warning" :disabled="!row.can_archive" @click="archive(row.id)">归档</el-button>
               <el-button link type="danger" :disabled="!row.can_request_termination" @click="requestTermination(row)">项目终止/废止</el-button>
-              <el-button link type="danger" :disabled="!row.can_delete" @click="remove(row.id)">删除</el-button>
+              <el-button link type="danger" @click="remove(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -153,6 +154,28 @@
         <el-button type="primary" :loading="editLoading" @click="saveProject">确认更改并保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="deleteDialogVisible" title="申请删除项目" width="520px">
+      <el-form label-width="120px">
+        <el-form-item label="共同认证管理员">
+          <el-select v-model="deleteDraft.approver_user_id" style="width: 100%">
+            <el-option
+              v-for="item in deleteAdminOptions"
+              :key="item.id"
+              :label="item.real_name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="删除原因">
+          <el-input v-model="deleteDraft.reason" type="textarea" :rows="3" placeholder="可选填写删除原因" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="deleteDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="deleteSubmitting" @click="submitDeleteRequest">提交删除申请</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -161,6 +184,8 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { getWorkbench, type WorkbenchProjectItem } from '@/api/workbench'
+import { createProjectDeleteRequest } from '@/api/projectDeleteRequests'
+import { listUserCandidates, type UserItem } from '@/api/users'
 import {
   archiveProject,
   approveProjectTermination,
@@ -183,6 +208,11 @@ const todoProjects = ref<WorkbenchProjectItem[]>([])
 const editVisible = ref(false)
 const editLoading = ref(false)
 const editingProjectId = ref<number>()
+const deleteDialogVisible = ref(false)
+const deleteSubmitting = ref(false)
+const deleteTargetProjectId = ref<number>()
+const deleteTargetProjectName = ref('')
+const deleteAdminOptions = ref<UserItem[]>([])
 
 const form = reactive({
   undertaking_unit: '中勤' as ProjectUndertakingUnit,
@@ -205,6 +235,11 @@ const editForm = reactive({
   business_salesman: '',
   project_source: 'INTERNAL' as ProjectSource,
   external_project_leader_name: ''
+})
+
+const deleteDraft = reactive({
+  approver_user_id: undefined as number | undefined,
+  reason: ''
 })
 
 async function load() {
@@ -287,10 +322,56 @@ async function approveTermination(row: WorkbenchProjectItem) {
   await load()
 }
 
-async function remove(id: number) {
-  await deleteProject(id)
+async function remove(row: WorkbenchProjectItem) {
+  if (row.status_display === '待确认删除') {
+    ElMessage.warning('已有待确认删除申请')
+    return
+  }
+  if (row.status_display === '已归档') {
+    ElMessage.warning('已归档项目不可删除')
+    return
+  }
+  if (['报告出具', '报告邮寄', '发票开具', '报告归档'].includes(row.current_step)) {
+    await openDeleteDialog(row.id, row.project_name)
+    return
+  }
+  await deleteProject(row.id)
   ElMessage.success('项目已删除')
   await load()
+}
+
+async function openDeleteDialog(projectId: number, projectName: string) {
+  const admins = (await listUserCandidates('ADMIN')).items.filter(item => item.id !== auth.user?.id)
+  if (!admins.length) {
+    ElMessage.warning('暂无可选的共同认证管理员')
+    return
+  }
+  deleteAdminOptions.value = admins
+  deleteTargetProjectId.value = projectId
+  deleteTargetProjectName.value = projectName
+  deleteDraft.approver_user_id = admins[0].id
+  deleteDraft.reason = ''
+  deleteDialogVisible.value = true
+}
+
+async function submitDeleteRequest() {
+  if (!deleteTargetProjectId.value || !deleteDraft.approver_user_id) {
+    ElMessage.warning('请选择共同认证管理员')
+    return
+  }
+  deleteSubmitting.value = true
+  try {
+    const approver = deleteAdminOptions.value.find(item => item.id === deleteDraft.approver_user_id)
+    await createProjectDeleteRequest(deleteTargetProjectId.value, {
+      approver_user_id: deleteDraft.approver_user_id,
+      reason: deleteDraft.reason.trim() || undefined
+    })
+    deleteDialogVisible.value = false
+    ElMessage.success(`已提交项目「${deleteTargetProjectName.value}」删除申请，待管理员 ${approver?.real_name || ''} 确认`)
+    await load()
+  } finally {
+    deleteSubmitting.value = false
+  }
 }
 
 function fillEditForm(project: ProjectItem) {
@@ -343,6 +424,10 @@ async function saveProject() {
 
 function goProject(id: number) {
   router.push(`/projects/${id}/flow`)
+}
+
+function goDeleteApprovals() {
+  router.push('/project-delete-approvals')
 }
 
 onMounted(load)

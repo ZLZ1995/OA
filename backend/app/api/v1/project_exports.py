@@ -13,6 +13,7 @@ from app.models.archive import Archive
 from app.models.invoice import Invoice
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
+from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.services.project_flow import get_project_leader_display_name, get_project_source_display
@@ -188,6 +189,11 @@ def _collect_rows(
         if not _contains(project.external_project_leader_name, external_project_leader_name):
             continue
 
+        delete_request = db.query(ProjectDeleteRequest).filter(ProjectDeleteRequest.project_id == project.id).first()
+        can_admin_delete = bool(
+            project.archived_at is not None
+            and (delete_request is None or delete_request.status in {"REJECTED", "APPROVED"})
+        )
         rows.append(
             {
                 "project_no": project.project_code,
@@ -209,6 +215,9 @@ def _collect_rows(
                 "second_reviewer_name": second_reviewer_name,
                 "third_reviewer_name": third_reviewer_name,
                 "archive_date": _format_date(archived_at),
+                "project_id": project.id,
+                "delete_request_status": delete_request.status if delete_request else "",
+                "can_admin_delete": can_admin_delete,
             }
         )
     return rows

@@ -11,6 +11,7 @@ from app.api.v1.print_room import router as print_room_router
 from app.api.v1.report_mailing import router as report_mailing_router
 from app.api.v1.project_exports import router as project_exports_router
 from app.api.v1.project_members import router as project_members_router
+from app.api.v1.project_delete_requests import router as project_delete_requests_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.report_versions import router as report_versions_router
 from app.api.v1.reviews import router as reviews_router
@@ -28,6 +29,7 @@ api_router.include_router(roles_router)
 api_router.include_router(projects_router)
 api_router.include_router(project_exports_router)
 api_router.include_router(project_members_router)
+api_router.include_router(project_delete_requests_router)
 api_router.include_router(work_orders_router)
 api_router.include_router(report_versions_router)
 api_router.include_router(files_router)
