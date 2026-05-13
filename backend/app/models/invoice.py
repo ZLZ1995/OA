@@ -15,4 +15,5 @@ class Invoice(Base, TimestampMixin):
     amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
     issued_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="PENDING", nullable=False)
+    finance_handler_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     handled_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

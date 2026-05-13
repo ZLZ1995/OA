@@ -8,7 +8,8 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
-from app.schemas.report_mailing import ReportMailingSubmitRequest
+from app.models.report_mailing_record import ReportMailingRecord
+from app.schemas.report_mailing import ReportMailingDecisionRequest, ReportMailingSubmitRequest
 from app.workflows.states import WorkOrderStatus
 
 
@@ -90,3 +91,68 @@ def test_submit_report_mailing_moves_to_print_room_pending() -> None:
     assert work_order.current_status == WorkOrderStatus.REPORT_MAILING.value
     assert work_order.mailing_status == "PRINT_ROOM_PENDING"
     assert work_order.current_handler_user_id == print_room.id
+
+
+def test_confirm_report_mailing_moves_to_archive_submit() -> None:
+    from app.api.v1.report_mailing import confirm_report_mailing
+
+    db = _build_session()
+    leader_role = _seed_role(db, "PROJECT_LEADER", "项目负责人")
+    print_room_role = _seed_role(db, "PRINT_ROOM", "文印室")
+    leader = _seed_user(db, "leader", [leader_role])
+    print_room = _seed_user(db, "printroom", [print_room_role])
+
+    project = Project(
+        project_code="P-MAIL-CONFIRM",
+        undertaking_unit="中勤",
+        project_name="Mail Confirm Demo",
+        client_name="Client",
+        report_type="评估报告",
+        business_salesman="Sales",
+        business_user_id=leader.id,
+        project_leader_id=leader.id,
+        project_source="INTERNAL",
+    )
+    db.add(project)
+    db.flush()
+    db.add(ProjectMember(project_id=project.id, user_id=leader.id))
+    work_order = WorkOrder(
+        work_order_no="WO-MAIL-CONFIRM",
+        project_id=project.id,
+        title="WO",
+        current_status=WorkOrderStatus.REPORT_MAILING.value,
+        current_handler_user_id=leader.id,
+        initiator_user_id=leader.id,
+        project_leader_id=leader.id,
+        print_room_handler_id=print_room.id,
+        mailing_handler_user_id=print_room.id,
+        mailing_status="PROJECT_CONFIRMING",
+    )
+    db.add(work_order)
+    db.flush()
+    db.add(
+        ReportMailingRecord(
+            work_order_id=work_order.id,
+            project_id=project.id,
+            action_type="PRINT_ROOM_SUBMIT_EXPRESS",
+            operator_user_id=print_room.id,
+            receiver_name="张三",
+            receiver_phone="13800138000",
+            receiver_address="测试地址",
+            express_no="SF123",
+            status="PRINT_ROOM_DONE",
+        )
+    )
+    db.commit()
+
+    confirm_report_mailing(
+        work_order_id=work_order.id,
+        payload=ReportMailingDecisionRequest(remark="确认无误"),
+        db=db,
+        current_user=leader,
+    )
+
+    db.refresh(work_order)
+    assert work_order.mailing_status == "COMPLETED"
+    assert work_order.current_status == WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value
+    assert work_order.current_handler_user_id == leader.id

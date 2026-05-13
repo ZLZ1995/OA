@@ -9,6 +9,7 @@ export interface InvoiceItem {
   amount: number
   issued_at?: string
   status: string
+  finance_handler_id?: number | null
   handled_by?: number
 }
 
@@ -23,6 +24,7 @@ export async function createInvoice(payload: {
   invoice_info?: string
   invoice_type?: string
   amount: number
+  finance_handler_id?: number
   issued_at?: string
   status?: string
 }) {
@@ -42,5 +44,20 @@ export async function rejectInvoice(invoiceId: number, remark?: string) {
 
 export async function completeInvoice(invoiceId: number) {
   const { data } = await http.post(`/finance/invoices/${invoiceId}/complete`)
+  return data as InvoiceItem
+}
+
+export async function confirmInvoice(invoiceId: number) {
+  const { data } = await http.post(`/finance/invoices/${invoiceId}/confirm`)
+  return data as InvoiceItem
+}
+
+export async function returnInvoice(invoiceId: number, remark?: string) {
+  const { data } = await http.post(`/finance/invoices/${invoiceId}/return`, { status: remark })
+  return data as InvoiceItem
+}
+
+export async function withdrawInvoice(invoiceId: number) {
+  const { data } = await http.post(`/finance/invoices/${invoiceId}/withdraw`)
   return data as InvoiceItem
 }

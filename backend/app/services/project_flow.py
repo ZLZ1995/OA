@@ -34,7 +34,7 @@ STATUS_TO_STEP = {
     "PRINTROOM_PROCESSING": "报告出具",
     "PAPER_REPORT_ISSUED": "发票开具",
     "REPORT_MAILING": "报告邮寄",
-    "REPORT_MAILING_COMPLETED": "报告邮寄",
+    "REPORT_MAILING_COMPLETED": "报告归档",
     "WAIT_INVOICE_INFO": "发票开具",
     "INVOICE_INFO_REJECTED": "发票开具",
     "INVOICE_PROCESSING": "发票开具",
