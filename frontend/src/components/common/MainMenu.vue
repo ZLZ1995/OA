@@ -201,15 +201,15 @@ onMounted(() => {
 .logout-zone {
   padding: 12px;
   border-top: 1px solid var(--zq-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .logout-btn,
 .feedback-btn {
   width: 100%;
-}
-
-.feedback-btn {
-  margin-bottom: 8px;
+  margin-left: 0;
 }
 
 .menu-badge {
