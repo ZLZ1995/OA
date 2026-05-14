@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,7 +19,7 @@ from app.schemas.issue_feedback import (
 )
 from app.services.notification_service import create_notification
 
-router = APIRouter(prefix="/issue-feedbacks", tags=["闂鍙嶉"])
+router = APIRouter(prefix="/issue-feedbacks", tags=["问题反馈"])
 
 
 def _admin_users(db: Session) -> list[User]:
@@ -74,7 +74,7 @@ def create_issue_feedback(
         status="PENDING",
     )
     if not row.project_no or not row.process_step or not row.detail:
-        raise HTTPException(status_code=400, detail="璇峰畬鏁村～鍐欓」鐩紪鍙枫€佹祦绋嬬幆鑺傚拰闂璇︾粏鎯呭喌")
+        raise HTTPException(status_code=400, detail="请完整填写项目编号、流程环节和问题详细情况")
     db.add(row)
     db.flush()
 
@@ -84,8 +84,8 @@ def create_issue_feedback(
             user_id=admin.id,
             biz_type="ISSUE_FEEDBACK",
             biz_id=row.id,
-            title="鏀跺埌鏂扮殑闂鍙嶉",
-            content=f"{current_user.real_name} 鎻愪氦浜嗛」鐩?{row.project_no} 鐨勯棶棰樺弽棣堬紝璇峰強鏃舵煡鐪嬨€?,
+            title="收到新的问题反馈",
+            content=f"{current_user.real_name} 提交了项目 {row.project_no} 的问题反馈，请及时查看。",
             link_type="ISSUE_FEEDBACK",
             link_target_id=row.id,
         )
@@ -111,7 +111,7 @@ def export_tech_support_excel(
     try:
         from openpyxl import Workbook
     except ModuleNotFoundError as exc:
-        raise HTTPException(status_code=500, detail="Excel瀵煎嚭渚濊禆 openpyxl 鏈畨瑁咃紝璇峰畨瑁呭悗閲嶈瘯") from exc
+        raise HTTPException(status_code=500, detail="Excel导出依赖 openpyxl 未安装，请安装后重试") from exc
 
     rows = (
         db.query(IssueFeedback)
@@ -121,8 +121,8 @@ def export_tech_support_excel(
     )
     wb = Workbook()
     ws = wb.active
-    ws.title = "闇€鎶€鏈敮鎸?
-    ws.append(["鎻愪氦浜?, "鎻愪氦璐﹀彿", "鎻愪氦鏃堕棿", "椤圭洰缂栧彿", "娴佺▼鐜妭", "闂璇︽儏", "澶勭悊浜?, "鎸傝捣鏃堕棿", "鎸傝捣璇存槑"])
+    ws.title = "需技术支持"
+    ws.append(["提交人", "提交账号", "提交时间", "项目编号", "流程环节", "问题详情", "处理人", "挂起时间", "挂起说明"])
     for row in rows:
         item = _serialize(db, row)
         ws.append([
@@ -154,7 +154,7 @@ def get_issue_feedback(
 ) -> IssueFeedbackItem:
     row = db.query(IssueFeedback).filter(IssueFeedback.id == feedback_id).first()
     if not row:
-        raise HTTPException(status_code=404, detail="闂鍙嶉涓嶅瓨鍦?)
+        raise HTTPException(status_code=404, detail="问题反馈不存在")
     return _serialize(db, row)
 
 
@@ -167,7 +167,7 @@ def resolve_issue_feedback(
 ) -> IssueFeedbackItem:
     row = db.query(IssueFeedback).filter(IssueFeedback.id == feedback_id).first()
     if not row:
-        raise HTTPException(status_code=404, detail="闂鍙嶉涓嶅瓨鍦?)
+        raise HTTPException(status_code=404, detail="问题反馈不存在")
     row.status = "RESOLVED"
     row.handled_by = current_user.id
     row.handled_at = datetime.now()
@@ -176,8 +176,8 @@ def resolve_issue_feedback(
         user_id=row.submitter_user_id,
         biz_type="ISSUE_FEEDBACK",
         biz_id=row.id,
-        title="闂鍙嶉宸插鐞?,
-        content="鎮ㄥ弽棣堢殑闂宸插鐞嗭紝璇锋煡鐪嬬郴缁熸渶鏂扮姸鎬併€?,
+        title="问题反馈已处理",
+        content="您反馈的问题已处理，请查看系统最新状态。",
         link_type="ISSUE_FEEDBACK",
         link_target_id=row.id,
     )
@@ -196,7 +196,7 @@ def suspend_issue_feedback(
 ) -> IssueFeedbackItem:
     row = db.query(IssueFeedback).filter(IssueFeedback.id == feedback_id).first()
     if not row:
-        raise HTTPException(status_code=404, detail="闂鍙嶉涓嶅瓨鍦?)
+        raise HTTPException(status_code=404, detail="问题反馈不存在")
     row.status = "TECH_SUPPORT"
     row.suspended_by = current_user.id
     row.suspended_at = datetime.now()
