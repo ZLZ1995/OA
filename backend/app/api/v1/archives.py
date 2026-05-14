@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.schemas.archive import ArchiveCreate, ArchiveDecisionRequest, ArchiveListResponse, ArchiveResponse, ArchiveSubmitRequest, ArchiveUpdate
+from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.states import WorkOrderStatus
 
@@ -98,6 +99,17 @@ def submit_archive(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=payload.reviewer_user_id,
+            action_name=f"ARCHIVE_SUBMIT_{payload.submission_type}",
+            comment=payload.remark,
+        )
     db.commit()
     return {"message": "已提交底稿，待审查"}
 
@@ -129,6 +141,18 @@ def approve_archive(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    receiver_user_id = work_order.archive_submitter_id or work_order.project_leader_id
+    if project and receiver_user_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=receiver_user_id,
+            action_name="ARCHIVE_APPROVE",
+            comment=payload.remark,
+        )
     db.commit()
     return {"message": "底稿审核通过，待项目人员确认归档"}
 
@@ -170,6 +194,16 @@ def finalize_archive(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=project.project_leader_id,
+            action_name="ARCHIVE_FINALIZE",
+            comment=payload.remark,
+        )
     db.commit()
     return {"message": "项目已归档"}
 
@@ -201,6 +235,18 @@ def reject_archive(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    receiver_user_id = work_order.archive_submitter_id or work_order.project_leader_id
+    if project and receiver_user_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=receiver_user_id,
+            action_name="ARCHIVE_REJECT",
+            comment=payload.remark,
+        )
     db.commit()
     return {"message": "审核未通过，已返回修改"}
 

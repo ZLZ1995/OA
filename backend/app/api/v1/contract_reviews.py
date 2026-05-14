@@ -18,6 +18,7 @@ from app.schemas.contract_review import (
     ContractReviewRecordResponse,
     ContractReviewSubmitRequest,
 )
+from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.states import WorkOrderStatus
 from app.workflows.transitions import can_transit
@@ -182,6 +183,18 @@ def submit_contract_review(
         operator_user_id=current_user.id,
         remark=payload.comment,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=payload.reviewer_user_id,
+            action_name="SUBMIT_CONTRACT_REVIEW",
+            comment=payload.comment,
+            biz_id=record.id,
+        )
     db.commit()
     db.refresh(record)
     return _serialize_record(db, record)
@@ -234,6 +247,18 @@ def approve_contract_review(
         operator_user_id=current_user.id,
         remark=payload.comment,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="APPROVE_CONTRACT_REVIEW",
+            comment=payload.comment,
+            biz_id=approve_record.id,
+        )
     db.commit()
     db.refresh(approve_record)
     return _serialize_record(db, approve_record)
@@ -286,6 +311,18 @@ def reject_contract_review(
         operator_user_id=current_user.id,
         remark=payload.comment,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="REJECT_CONTRACT_REVIEW",
+            comment=payload.comment,
+            biz_id=reject_record.id,
+        )
     db.commit()
     db.refresh(reject_record)
     return _serialize_record(db, reject_record)

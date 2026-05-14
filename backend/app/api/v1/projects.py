@@ -39,6 +39,7 @@ from app.services.project_delete_service import can_project_owner_delete_direct,
 from app.services.project_conflicts import get_unresolved_conflicts, mark_project_duplicate_deleted, upsert_conflict_snapshot_and_detect
 from app.api.v1.finance import calculate_project_invoice_total
 from app.services.reminder_policy import evaluate_reminder_eligibility
+from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/projects", tags=["项目"])
@@ -321,6 +322,15 @@ def create_project(
         project_leader_id=row.project_leader_id,
     )
     db.add(work_order)
+    db.flush()
+    send_workflow_notification(
+        db,
+        project=row,
+        work_order=work_order,
+        sender_user=current_user,
+        receiver_user_id=row.project_leader_id,
+        action_name="WAIT_CONTRACT_UPLOAD_ASSIGNED",
+    )
     db.commit()
     db.refresh(row)
     return _serialize_project(db, row)

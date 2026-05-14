@@ -15,6 +15,7 @@ from app.schemas.report_mailing import (
     ReportMailingRecordResponse,
     ReportMailingSubmitRequest,
 )
+from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.states import WorkOrderStatus
 
@@ -160,6 +161,18 @@ def submit_report_mailing(
         operator_user_id=current_user.id,
         remark=payload.receiver_address,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project and work_order.print_room_handler_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.print_room_handler_id,
+            action_name=action_type,
+            comment=payload.receiver_remark,
+            biz_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return _serialize_record(db, row)
@@ -213,6 +226,19 @@ def submit_report_mailing_express(
         operator_user_id=current_user.id,
         remark=payload.express_no,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    target_user_id = work_order.project_leader_id or work_order.initiator_user_id
+    if project and target_user_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=target_user_id,
+            action_name="PRINT_ROOM_SUBMIT_EXPRESS",
+            comment=payload.express_no,
+            biz_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return _serialize_record(db, row)
@@ -266,5 +292,18 @@ def confirm_report_mailing(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    target_user_id = work_order.project_leader_id or work_order.initiator_user_id
+    if project and target_user_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=target_user_id,
+            action_name="PROJECT_CONFIRM_MAILING",
+            comment=payload.remark,
+            biz_id=row.id,
+        )
     db.commit()
     return {"message": "报告邮寄已确认完成"}

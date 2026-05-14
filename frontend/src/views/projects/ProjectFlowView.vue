@@ -62,7 +62,6 @@ import { getProjectFlow, type ProjectFlowData } from '@/api/projectFlow'
 import { deleteDuplicateProject } from '@/api/projects'
 import { createWorkOrder, listWorkOrders } from '@/api/workorders'
 import { useAuthStore } from '@/store/auth'
-import ReminderCard from '@/components/reminders/ReminderCard.vue'
 import ProjectBasicPanel from './panels/ProjectBasicPanel.vue'
 import ProjectMembersPanel from './panels/ProjectMembersPanel.vue'
 import ContractUploadPanel from './panels/ContractUploadPanel.vue'
@@ -82,7 +81,7 @@ const baseFlowNodes = [
   { key: 'issue', label: '报告出具' },
   { key: 'mailing', label: '报告邮寄' },
   { key: 'invoice', label: '发票开具' },
-  { key: 'archive', label: '报告归档' }
+  { key: 'archive', label: '报告归档' },
 ]
 
 const panelMap: Record<string, any> = {
@@ -94,7 +93,7 @@ const panelMap: Record<string, any> = {
   issue: ReportIssuePanel,
   mailing: ReportMailingPanel,
   invoice: InvoicePanel,
-  archive: ArchivePanel
+  archive: ArchivePanel,
 }
 
 const route = useRoute()

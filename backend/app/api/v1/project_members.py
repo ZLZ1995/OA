@@ -14,6 +14,7 @@ from app.schemas.project_member import (
     ProjectMemberResponse,
     ProjectMemberUpdate,
 )
+from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/project-members", tags=["项目成员"])
@@ -137,6 +138,7 @@ def update_project_member(
 def complete_project_members(
     payload: ProjectMemberCompleteRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
 ) -> dict[str, str]:
     project = db.query(Project).filter(Project.id == payload.project_id).first()
@@ -177,6 +179,16 @@ def complete_project_members(
     work_order.current_handler_user_id = leader.user_id
     if work_order.current_status == WorkOrderStatus.WORK_ORDER_CREATED.value:
         work_order.current_status = WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value
+
+    sender_user = db.query(User).filter(User.id == current_user.id).first() or current_user
+    send_workflow_notification(
+        db,
+        project=project,
+        work_order=work_order,
+        sender_user=sender_user,
+        receiver_user_id=leader.user_id,
+        action_name="WAIT_CONTRACT_UPLOAD_ASSIGNED",
+    )
 
     db.commit()
     return {"status": "ok"}

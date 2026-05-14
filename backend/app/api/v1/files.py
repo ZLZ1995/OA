@@ -17,6 +17,7 @@ from app.models.work_order_file import WorkOrderFile
 from app.models.project import Project
 from app.schemas.file import WorkOrderFileListResponse, WorkOrderFileResponse
 from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
+from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.storage.local_storage import save_upload_file
 from app.workflows.states import WorkOrderStatus
@@ -304,6 +305,16 @@ def complete_contract_upload(
         operator_user_id=current_user.id,
         remark="合同初稿上传完成，待提交合同初稿审核",
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="CONTRACT_UPLOAD_COMPLETED",
+        )
     db.commit()
     return {"status": "ok"}
 
