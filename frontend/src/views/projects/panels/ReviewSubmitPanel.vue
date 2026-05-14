@@ -80,14 +80,21 @@
       </el-form-item>
 
       <el-form-item :label="showReviewerChangePanel ? '重新上传文件' : (isReplyFlow ? '意见回复文件' : '待审报告包')">
-        <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
-          <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
-        </el-upload>
-        <el-tag v-if="reusePreviousFile" type="info" effect="plain" style="margin-left: 12px">将沿用上轮已提交文件</el-tag>
-        <div class="file-list" v-if="submitFiles.length">
-          <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
-            {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
-          </el-tag>
+        <div class="review-upload-block">
+          <div class="review-upload-main">
+            <div class="review-upload-actions">
+              <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
+                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
+              </el-upload>
+              <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
+            </div>
+            <div class="file-list" v-if="submitFiles.length">
+              <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
+                {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
+              </el-tag>
+            </div>
+          </div>
+          <ReviewUploadRequirementBox v-if="showReviewRequirementBox" />
         </div>
       </el-form-item>
       <el-form-item label="送审备注" v-if="canSubmitReview && !showReviewerChangePanel">
@@ -223,6 +230,7 @@ import type { ProjectFlowData } from '@/api/projectFlow'
 import { updateWorkOrder } from '@/api/workorders'
 import { transferPrintRoom } from '@/api/printRoom'
 import { listUserCandidates, type UserItem } from '@/api/users'
+import ReviewUploadRequirementBox from '@/components/common/ReviewUploadRequirementBox.vue'
 
 const props = defineProps<{ workOrderId?: number; canEdit: boolean; userRoles: string[]; flowInfo?: ProjectFlowData }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
@@ -324,6 +332,7 @@ const opinionFiles = computed(() => files.value.filter(file => file.file_categor
 const formalReportFiles = computed(() => files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.business_stage === 'FORMAL_REPORT'))
 const contractDraftFiles = computed(() => files.value.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.business_stage === 'CONTRACT_DRAFT' && file.is_current))
 const finalContractFiles = computed(() => files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.business_stage === 'FINAL_CONTRACT_SCAN' && file.is_current))
+const showReviewRequirementBox = computed(() => !isReplyFlow.value && !showReviewerChangePanel.value)
 
 const reviewStatusText = computed(() => {
   if (isReplyFlow.value) return `${roundLabel(reviewRound.value)}意见已返回等待回复`
@@ -671,7 +680,28 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-left: 12px;
+}
+
+.review-upload-block {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.review-upload-main {
+  flex: 1;
+  min-width: 260px;
+  display: grid;
+  gap: 12px;
+}
+
+.review-upload-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .attachment-list {
@@ -710,5 +740,16 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .review-upload-block {
+    flex-direction: column;
+  }
+
+  .review-upload-main {
+    width: 100%;
+    min-width: 100%;
+  }
 }
 </style>
