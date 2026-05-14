@@ -9,7 +9,7 @@
         <p>{{ item.content }}</p>
 
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="消息类型">{{ item.message_type === 'REMINDER' ? '催办消息' : '系统通知' }}</el-descriptions-item>
+          <el-descriptions-item label="消息类型">{{ messageTypeText(item.message_type) }}</el-descriptions-item>
           <el-descriptions-item label="优先级">{{ priorityText(item.priority) }}</el-descriptions-item>
           <el-descriptions-item label="发起人">{{ item.sender_user_name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="接收人">{{ item.receiver_user_name || '-' }}</el-descriptions-item>
@@ -50,6 +50,12 @@ defineEmits<{
 
 function formatDate(value: string) {
   return value ? new Date(value).toLocaleString() : ''
+}
+
+function messageTypeText(messageType: string) {
+  if (messageType === 'REMINDER') return '催办消息'
+  if (messageType === 'WORKFLOW') return '流程消息'
+  return '系统通知'
 }
 
 function priorityText(priority: string) {

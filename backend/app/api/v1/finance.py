@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.schemas.invoice import InvoiceCreate, InvoiceListResponse, InvoiceResponse, InvoiceUpdate
+from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 
 router = APIRouter(prefix="/finance", tags=["财务"])
@@ -138,6 +139,17 @@ def create_invoice(
     row.handled_by = None
     row.finance_handler_id = payload.finance_handler_id
     _log_invoice_action(db, work_order, "SUBMIT_INVOICE_INFO", current_user.id, payload.invoice_info)
+    finance_handler = _assert_finance_handler(db, payload.finance_handler_id)
+    send_workflow_notification(
+        db,
+        project=project,
+        work_order=work_order,
+        sender_user=current_user,
+        receiver_user_id=finance_handler.id,
+        action_name="SUBMIT_INVOICE_INFO",
+        comment=payload.invoice_info,
+        biz_id=row.id,
+    )
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row, from_attributes=True)
@@ -185,6 +197,18 @@ def reject_invoice_info(
     row.status = "REJECTED"
     row.handled_by = current_user.id
     _log_invoice_action(db, work_order, "REJECT_INVOICE_INFO", current_user.id, payload.status)
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="REJECT_INVOICE_INFO",
+            comment=payload.status,
+            biz_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row, from_attributes=True)
@@ -210,6 +234,17 @@ def complete_invoice(
     row.handled_by = current_user.id
     row.issued_at = datetime.now(timezone.utc)
     _log_invoice_action(db, work_order, "FINANCE_COMPLETE_INVOICE", current_user.id)
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="FINANCE_COMPLETE_INVOICE",
+            biz_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row, from_attributes=True)
@@ -233,6 +268,17 @@ def confirm_invoice(
         raise HTTPException(status_code=400, detail="当前开票业务尚未进入项目方确认")
     row.status = "ISSUED"
     _log_invoice_action(db, work_order, "PROJECT_CONFIRM_INVOICE", current_user.id)
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="PROJECT_CONFIRM_INVOICE",
+            biz_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row, from_attributes=True)
@@ -257,6 +303,18 @@ def return_invoice_to_finance(
         raise HTTPException(status_code=400, detail="当前开票业务不可退回财务修改")
     row.status = "PROJECT_RETURNED"
     _log_invoice_action(db, work_order, "PROJECT_RETURN_INVOICE", current_user.id, payload.status)
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project and row.finance_handler_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=row.finance_handler_id,
+            action_name="PROJECT_RETURN_INVOICE",
+            comment=payload.status,
+            biz_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row, from_attributes=True)
@@ -280,6 +338,17 @@ def withdraw_invoice(
         raise HTTPException(status_code=400, detail="财务已处理，不能撤回开票信息")
     row.status = "REJECTED"
     _log_invoice_action(db, work_order, "WITHDRAW_INVOICE_INFO", current_user.id)
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="WITHDRAW_INVOICE_INFO",
+            biz_id=row.id,
+        )
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row, from_attributes=True)

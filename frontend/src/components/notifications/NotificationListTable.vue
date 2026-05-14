@@ -5,8 +5,8 @@
     <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
     <el-table-column label="类型" width="120">
       <template #default="{ row }">
-        <el-tag size="small" :type="row.message_type === 'REMINDER' ? 'warning' : 'info'">
-          {{ row.message_type === 'REMINDER' ? '催办消息' : '系统通知' }}
+        <el-tag size="small" :type="messageTypeTagType(row.message_type)">
+          {{ messageTypeText(row.message_type) }}
         </el-tag>
       </template>
     </el-table-column>
@@ -71,6 +71,18 @@ const emit = defineEmits<{
 
 function formatDate(value: string) {
   return value ? new Date(value).toLocaleString() : ''
+}
+
+function messageTypeText(messageType: string) {
+  if (messageType === 'REMINDER') return '催办消息'
+  if (messageType === 'WORKFLOW') return '流程消息'
+  return '系统通知'
+}
+
+function messageTypeTagType(messageType: string) {
+  if (messageType === 'REMINDER') return 'warning'
+  if (messageType === 'WORKFLOW') return 'success'
+  return 'info'
 }
 
 function priorityText(priority: string) {

@@ -73,10 +73,13 @@
           <el-table-column prop="transfer_user_name" label="转交人" width="82" show-overflow-tooltip />
           <el-table-column prop="current_step" label="当前步骤" width="96" show-overflow-tooltip />
           <el-table-column prop="todo_action" label="待办事项" min-width="116" show-overflow-tooltip />
-          <el-table-column label="操作" width="160">
+          <el-table-column label="操作" width="200">
             <template #default="{ row }">
               <el-button v-if="row.can_approve_delete" link type="danger" @click="goDeleteApprovals">处理删除审核</el-button>
-              <el-button v-else link type="primary" @click="goProject(row.id)">进入项目</el-button>
+              <template v-else>
+                <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
+                <el-button link type="success" @click="goNotifications(row.id)">相关消息</el-button>
+              </template>
               <el-button v-if="row.can_approve_termination" link type="danger" @click="approveTermination(row)">允许终止/废止</el-button>
             </template>
           </el-table-column>
@@ -91,9 +94,10 @@
           <el-table-column prop="client_name" label="客户名称" min-width="130" show-overflow-tooltip />
           <el-table-column prop="current_step" label="当前步骤" width="108" show-overflow-tooltip />
           <el-table-column prop="status_display" label="状态" width="110" show-overflow-tooltip />
-          <el-table-column label="操作" width="340">
+          <el-table-column label="操作" width="420">
             <template #default="{ row }">
               <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
+              <el-button link type="success" @click="goNotifications(row.id)">相关消息</el-button>
               <el-button link type="primary" :disabled="!row.can_edit" @click="editProject(row)">编辑</el-button>
               <el-button link type="warning" :disabled="!row.can_archive" @click="archive(row.id)">归档</el-button>
               <el-button link type="danger" :disabled="!row.can_request_termination" @click="requestTermination(row)">项目终止/废止</el-button>
@@ -197,7 +201,7 @@ import {
   type ProjectItem,
   type ProjectUndertakingUnit,
   type ReportType,
-  type ProjectSource
+  type ProjectSource,
 } from '@/api/projects'
 import { useAuthStore } from '@/store/auth'
 
@@ -223,7 +227,7 @@ const form = reactive({
   valuation_base_date: '',
   business_salesman: '',
   project_source: 'INTERNAL' as ProjectSource,
-  external_project_leader_name: ''
+  external_project_leader_name: '',
 })
 
 const editForm = reactive({
@@ -234,12 +238,12 @@ const editForm = reactive({
   valuation_base_date: '',
   business_salesman: '',
   project_source: 'INTERNAL' as ProjectSource,
-  external_project_leader_name: ''
+  external_project_leader_name: '',
 })
 
 const deleteDraft = reactive({
   approver_user_id: undefined as number | undefined,
-  reason: ''
+  reason: '',
 })
 
 async function load() {
@@ -270,7 +274,7 @@ async function onCreate() {
     project_source: form.project_source,
     external_project_leader_name: form.project_source === 'EXTERNAL' ? form.external_project_leader_name.trim() : undefined,
     business_user_id: user.id,
-    project_leader_id: user.id
+    project_leader_id: user.id,
   })
   form.project_code = created.project_code
   form.project_name = ''
@@ -305,8 +309,8 @@ async function requestTermination(row: WorkbenchProjectItem) {
       cancelButtonText: '取消',
       inputType: 'textarea',
       inputPlaceholder: '请输入终止/废止原因',
-      inputValidator: value => Boolean(value?.trim()) || '请填写项目终止/废止原因'
-    }
+      inputValidator: value => Boolean(value?.trim()) || '请填写项目终止/废止原因',
+    },
   )
   await requestProjectTermination(row.id, value.trim())
   ElMessage.success('终止/废止申请已发送给管理员')
@@ -315,7 +319,7 @@ async function requestTermination(row: WorkbenchProjectItem) {
 
 async function approveTermination(row: WorkbenchProjectItem) {
   await ElMessageBox.alert(row.termination_reason || '未填写原因', '项目终止/废止原因', {
-    confirmButtonText: '允许终止/废止'
+    confirmButtonText: '允许终止/废止',
   })
   await approveProjectTermination(row.id)
   ElMessage.success('已允许终止/废止，项目方现在可以归档')
@@ -364,7 +368,7 @@ async function submitDeleteRequest() {
     const approver = deleteAdminOptions.value.find(item => item.id === deleteDraft.approver_user_id)
     await createProjectDeleteRequest(deleteTargetProjectId.value, {
       approver_user_id: deleteDraft.approver_user_id,
-      reason: deleteDraft.reason.trim() || undefined
+      reason: deleteDraft.reason.trim() || undefined,
     })
     deleteDialogVisible.value = false
     ElMessage.success(`已提交项目「${deleteTargetProjectName.value}」删除申请，待管理员 ${approver?.real_name || ''} 确认`)
@@ -412,7 +416,7 @@ async function saveProject() {
       project_source: editForm.project_source,
       external_project_leader_name: editForm.project_source === 'EXTERNAL'
         ? editForm.external_project_leader_name.trim()
-        : null
+        : null,
     })
     ElMessage.success('项目已更新')
     editVisible.value = false

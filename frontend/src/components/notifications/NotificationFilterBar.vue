@@ -17,6 +17,7 @@
         @update:model-value="update('message_type', $event)"
       >
         <el-option label="催办消息" value="REMINDER" />
+        <el-option label="流程消息" value="WORKFLOW" />
         <el-option label="系统通知" value="SYSTEM" />
       </el-select>
     </el-form-item>

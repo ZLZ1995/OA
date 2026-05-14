@@ -45,6 +45,8 @@ def _derive_process_status(db: Session, row: UserNotification) -> str:
             if latest_log and latest_log.created_at > row.created_at:
                 return "PROCESSED"
         return base_status
+    if row.message_type == "WORKFLOW":
+        return "READ" if row.is_read else "PENDING"
     return "READ" if row.is_read else row.process_status
 
 
@@ -156,6 +158,12 @@ def get_notification_stats(
     today_new_count = query.filter(UserNotification.created_at >= start_of_day).count()
     today_reminder_count = query.filter(UserNotification.created_at >= start_of_day, UserNotification.message_type == "REMINDER").count()
     read_count = query.filter(UserNotification.is_read.is_(True)).count()
+    latest_row = (
+        query.order_by(UserNotification.created_at.desc(), UserNotification.id.desc())
+        .with_entities(UserNotification.id)
+        .first()
+    )
+    latest_notification_id = latest_row[0] if latest_row else None
     read_rate = round((read_count / total) * 100, 2) if total else 0.0
     return NotificationStatsResponse(
         today_new_count=today_new_count,
@@ -163,6 +171,8 @@ def get_notification_stats(
         today_reminder_count=today_reminder_count,
         read_rate=read_rate,
         avg_process_duration_seconds=0,
+        latest_notification_id=latest_notification_id,
+        server_time=now,
     )
 
 
@@ -253,6 +263,20 @@ def get_notification_timeline(
                         remark=receipt.receiver_type,
                     )
                 )
+    elif row.message_type == "WORKFLOW":
+        event = db.query(WorkflowLog).filter(WorkflowLog.id == row.biz_id).first()
+        if event:
+            operator_name = db.query(User.real_name).filter(User.id == event.operator_user_id).scalar()
+            items.append(
+                NotificationTimelineItem(
+                    event_type="WORKFLOW_CREATED",
+                    title=event.action_type,
+                    operator_user_name=operator_name,
+                    status=event.to_status,
+                    created_at=event.created_at,
+                    remark=event.remark,
+                )
+            )
     if row.work_order_id:
         logs = (
             db.query(WorkflowLog)
