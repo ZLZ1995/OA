@@ -47,6 +47,8 @@ class NotificationStatsResponse(BaseModel):
     today_reminder_count: int
     read_rate: float
     avg_process_duration_seconds: int
+    latest_notification_id: int | None = None
+    server_time: datetime
 
 
 class NotificationBatchReadRequest(BaseModel):

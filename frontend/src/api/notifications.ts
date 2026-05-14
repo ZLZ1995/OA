@@ -75,6 +75,8 @@ export async function getNotificationStats() {
     today_reminder_count: number
     read_rate: number
     avg_process_duration_seconds: number
+    latest_notification_id: number | null
+    server_time: string
   }
 }
 
@@ -91,6 +93,6 @@ export async function getNotificationTimeline(id: number) {
 }
 
 export async function getUnreadNotificationCount() {
-  const result = await listMyNotifications()
-  return result.items.filter(item => !item.is_read).length
+  const result = await getNotificationStats()
+  return result.unread_count
 }

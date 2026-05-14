@@ -45,12 +45,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
-import { getUnreadNotificationCount } from '@/api/notifications'
 import { createIssueFeedback } from '@/api/issueFeedbacks'
+import { useNotificationStore } from '@/store/notification'
 
 const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/workbench' }]
 const SHARED_MENUS = [{ key: 'notifications', title: '消息中心', path: '/notifications' }]
@@ -68,23 +68,18 @@ defineProps<{ compact?: boolean }>()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const notifications = useNotificationStore()
 const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
 const visibleMenus = computed(() => (isAdmin.value ? [...SHARED_MENUS, ...ADMIN_MENUS] : [...BUSINESS_MENUS, ...SHARED_MENUS]))
 const active = computed(() => route.path)
-const unreadCount = ref(0)
+const unreadCount = computed(() => notifications.unreadCount)
 const feedbackVisible = ref(false)
 const feedbackSubmitting = ref(false)
 const feedbackForm = reactive({ project_no: '', process_step: '', detail: '' })
 
-async function loadUnreadCount() {
-  try {
-    unreadCount.value = await getUnreadNotificationCount()
-  } catch {
-    unreadCount.value = 0
-  }
-}
-
 function onLogout() {
+  notifications.disconnectSocket()
+  notifications.stopPolling()
   auth.clearAuth()
   router.push('/login')
 }
@@ -110,14 +105,6 @@ async function submitFeedback() {
     feedbackSubmitting.value = false
   }
 }
-
-watch(() => route.fullPath, () => {
-  void loadUnreadCount()
-})
-
-onMounted(() => {
-  void loadUnreadCount()
-})
 </script>
 
 <style scoped>
