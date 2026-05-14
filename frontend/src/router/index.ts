@@ -34,6 +34,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'project-exports', component: () => import('@/views/exports/ProjectExportView.vue') },
       { path: 'project-delete-approvals', component: () => import('@/views/admin/ProjectDeleteApprovalView.vue') },
       { path: 'project-conflicts', component: () => import('@/views/admin/ProjectConflictView.vue') },
+      { path: 'issue-feedbacks', component: () => import('@/views/admin/IssueFeedbackView.vue') },
       { path: 'termination-approvals', component: () => import('@/views/admin/TerminationApprovalView.vue') },
       { path: 'notifications', component: () => import('@/views/notifications/NotificationCenterView.vue') },
       { path: 'accounts', component: () => import('@/views/accounts/AccountManageView.vue') }
@@ -64,7 +65,7 @@ router.beforeEach(async (to) => {
       return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
     const isAdmin = (profile.roles || []).includes('ADMIN')
-    const adminOnlyPaths = ['/accounts', '/project-exports', '/termination-approvals', '/project-delete-approvals', '/project-conflicts']
+    const adminOnlyPaths = ['/accounts', '/project-exports', '/termination-approvals', '/project-delete-approvals', '/project-conflicts', '/issue-feedbacks']
     if (adminOnlyPaths.includes(to.path) && !isAdmin) return '/workbench'
     return true
   } catch {
