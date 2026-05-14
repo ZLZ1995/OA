@@ -1,19 +1,19 @@
 <template>
   <div class="notification-center-page">
     <div class="header-bar">
-      <h1>消息中心</h1>
-      <el-button :disabled="!selectedIds.length" @click="batchRead">批量已读</el-button>
+      <h1>娑堟伅涓績</h1>
+      <el-button :disabled="!selectedIds.length" @click="batchRead">鎵归噺宸茶</el-button>
     </div>
 
     <NotificationStatsCards :stats="stats" />
 
     <el-card shadow="never">
       <el-tabs v-model="activeTab" @tab-change="load">
-        <el-tab-pane label="未读" name="unread" />
-        <el-tab-pane label="已读" name="read" />
-        <el-tab-pane label="我发起的" name="initiated" />
-        <el-tab-pane label="抄送我的" name="cc" />
-        <el-tab-pane label="全部" name="all" />
+        <el-tab-pane label="鏈" name="unread" />
+        <el-tab-pane label="宸茶" name="read" />
+        <el-tab-pane label="鎴戝彂璧风殑" name="initiated" />
+        <el-tab-pane label="鎶勯€佹垜鐨?" name="cc" />
+        <el-tab-pane label="鍏ㄩ儴" name="all" />
       </el-tabs>
 
       <NotificationFilterBar
@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import NotificationDetailDrawer from '@/components/notifications/NotificationDetailDrawer.vue'
@@ -57,9 +57,11 @@ import {
   type NotificationItem,
   type NotificationTimelineItem,
 } from '@/api/notifications'
+import { useNotificationStore } from '@/store/notification'
 
 const router = useRouter()
 const route = useRoute()
+const notifications = useNotificationStore()
 const activeTab = ref<'all' | 'unread' | 'read' | 'initiated' | 'cc'>('unread')
 const items = ref<NotificationItem[]>([])
 const selectedIds = ref<number[]>([])
@@ -78,7 +80,11 @@ const stats = reactive({
   today_reminder_count: 0,
   read_rate: 0,
   avg_process_duration_seconds: 0,
+  latest_notification_id: null as number | null,
+  server_time: '',
 })
+
+let stopRefreshWatch: (() => void) | null = null
 
 async function load() {
   const [listResult, statsResult] = await Promise.all([
@@ -100,6 +106,7 @@ async function load() {
 async function openNotification(item: NotificationItem) {
   if (!item.is_read) {
     await markNotificationRead(item.id)
+    notifications.applyReadState([item.id])
   }
   const [detail, timeline] = await Promise.all([
     getNotificationDetail(item.id),
@@ -113,8 +120,10 @@ async function openNotification(item: NotificationItem) {
 
 async function batchRead() {
   if (!selectedIds.value.length) return
-  await batchMarkNotificationRead(selectedIds.value)
-  ElMessage.success('已批量标记为已读')
+  const readIds = [...selectedIds.value]
+  await batchMarkNotificationRead(readIds)
+  notifications.applyReadState(readIds)
+  ElMessage.success('宸叉壒閲忔爣璁颁负宸茶')
   selectedIds.value = []
   await load()
 }
@@ -136,10 +145,30 @@ function gotoTarget(item: NotificationItem) {
     router.push(`/workorders/${item.link_target_id}`)
     return
   }
-  ElMessage.info('该消息暂无可跳转目标')
+  ElMessage.info('璇ユ秷鎭殏鏃犲彲璺宠浆鐩爣')
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  stopRefreshWatch = watch(
+    () => notifications.listRefreshToken,
+    async () => {
+      await load()
+    },
+  )
+})
+
+watch(
+  () => notifications.stats,
+  (value) => {
+    Object.assign(stats, value)
+  },
+  { deep: true },
+)
+
+onUnmounted(() => {
+  stopRefreshWatch?.()
+})
 </script>
 
 <style scoped>
