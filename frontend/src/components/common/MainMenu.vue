@@ -22,10 +22,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 
 const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/workbench' }]
+const SHARED_MENUS = [{ key: 'notifications', title: '????', path: '/notifications' }]
 const ADMIN_MENUS = [
   { key: 'accounts', title: '账号管理', path: '/accounts' },
   { key: 'termination-approvals', title: '终止/废止审核', path: '/termination-approvals' },
   { key: 'project-delete-approvals', title: '项目删除审核', path: '/project-delete-approvals' },
+  { key: 'project-conflicts', title: '项目冲突提醒', path: '/project-conflicts' },
   { key: 'project-exports', title: '项目清单导出', path: '/project-exports' }
 ]
 
@@ -34,7 +36,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
-const visibleMenus = computed(() => (isAdmin.value ? ADMIN_MENUS : BUSINESS_MENUS))
+const visibleMenus = computed(() => (isAdmin.value ? [...SHARED_MENUS, ...ADMIN_MENUS] : [...BUSINESS_MENUS, ...SHARED_MENUS]))
 const active = computed(() => route.path)
 
 function onLogout() {
@@ -118,6 +120,12 @@ function onLogout() {
   background: var(--zq-primary);
 }
 
-.logout-zone { padding: 12px; border-top: 1px solid var(--zq-border-soft); }
-.logout-btn { width: 100%; }
+.logout-zone {
+  padding: 12px;
+  border-top: 1px solid var(--zq-border-soft);
+}
+
+.logout-btn {
+  width: 100%;
+}
 </style>

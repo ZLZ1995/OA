@@ -26,6 +26,9 @@ export interface WorkbenchProjectItem {
   can_approve_termination: boolean
   can_approve_delete?: boolean
   can_enter: boolean
+  is_reminded?: boolean
+  remind_count_today?: number
+  latest_remind_at?: string | null
 }
 
 export async function getWorkbench() {

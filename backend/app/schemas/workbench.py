@@ -27,6 +27,9 @@ class WorkbenchProjectItem(BaseModel):
     can_approve_termination: bool = False
     can_approve_delete: bool = False
     can_enter: bool
+    is_reminded: bool = False
+    remind_count_today: int = 0
+    latest_remind_at: str | None = None
 
 
 class WorkbenchResponse(BaseModel):

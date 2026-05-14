@@ -18,6 +18,16 @@
           </div>
         </template>
         <el-empty v-if="!flow" description="暂无项目数据" />
+        <template v-else-if="flow.duplicate_delete_required">
+          <el-alert
+            type="error"
+            :closable="false"
+            show-icon
+            title="该项目已被管理员判定为重复项目，请删除。"
+            style="margin-bottom: 16px"
+          />
+          <el-button type="danger" :loading="duplicateDeleting" @click="deleteDuplicate">删除重复项目</el-button>
+        </template>
         <component
           v-else
           :is="activePanel"
@@ -49,8 +59,10 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getProjectFlow, type ProjectFlowData } from '@/api/projectFlow'
+import { deleteDuplicateProject } from '@/api/projects'
 import { createWorkOrder, listWorkOrders } from '@/api/workorders'
 import { useAuthStore } from '@/store/auth'
+import ReminderCard from '@/components/reminders/ReminderCard.vue'
 import ProjectBasicPanel from './panels/ProjectBasicPanel.vue'
 import ProjectMembersPanel from './panels/ProjectMembersPanel.vue'
 import ContractUploadPanel from './panels/ContractUploadPanel.vue'
@@ -93,6 +105,7 @@ const flow = ref<ProjectFlowData | null>(null)
 const workOrderId = ref<number>()
 const activeNode = ref('basic')
 const userRoles = computed(() => auth.user?.roles || [])
+const duplicateDeleting = ref(false)
 const canProjectOperate = computed(() => Boolean(flow.value?.can_operate))
 const activePanel = computed(() => panelMap[activeNode.value] || ProjectBasicPanel)
 
@@ -143,6 +156,10 @@ function ensureVisibleActiveNode() {
 }
 
 function onSelectNode(key: string) {
+  if (key === 'invoice' && flow.value?.project.project_amount == null) {
+    ElMessage.warning('请先在项目基本信息模块中录入项目金额')
+    return
+  }
   activeNode.value = key
 }
 
@@ -198,7 +215,22 @@ async function onPanelChanged() {
 }
 
 function onPanelNavigate(key: string) {
+  if (key === 'invoice' && flow.value?.project.project_amount == null) {
+    ElMessage.warning('请先在项目基本信息模块中录入项目金额')
+    return
+  }
   activeNode.value = key
+}
+
+async function deleteDuplicate() {
+  duplicateDeleting.value = true
+  try {
+    await deleteDuplicateProject(projectId)
+    ElMessage.success('重复项目已删除')
+    router.push('/dashboard')
+  } finally {
+    duplicateDeleting.value = false
+  }
 }
 
 watch(visibleFlowNodes, ensureVisibleActiveNode)

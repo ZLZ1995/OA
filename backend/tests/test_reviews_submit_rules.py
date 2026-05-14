@@ -1,4 +1,5 @@
 import pytest
+from datetime import date
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -38,6 +39,8 @@ def _seed_basic(db: Session) -> tuple[User, User, Project, WorkOrder]:
         project_code="P-1",
         project_name="Demo",
         client_name="Client",
+        project_amount=0,
+        valuation_base_date=date(2026, 5, 14),
         business_user_id=business.id,
         project_leader_id=leader.id,
     )
@@ -76,6 +79,34 @@ def test_submit_review_rejects_reviewer_without_round_role() -> None:
 
     assert exc_info.value.status_code == 400
     assert "不具备FIRST轮审核角色" in str(exc_info.value.detail)
+
+
+def test_submit_review_requires_amount_and_valuation_base_date() -> None:
+    from app.api.v1.reviews import submit_review
+
+    db = _build_session()
+    leader, reviewer, project, work_order = _seed_basic(db)
+    first_role = db.query(Role).filter(Role.code == "FIRST_REVIEWER").first()
+    assert first_role is not None
+    db.add(UserRole(user_id=reviewer.id, role_id=first_role.id))
+    project.project_amount = None
+    project.valuation_base_date = None
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        submit_review(
+            payload=ReviewSubmitRequest(
+                work_order_id=work_order.id,
+                review_round="FIRST",
+                reviewer_user_id=reviewer.id,
+            ),
+            db=db,
+            current_user=leader,
+            role_codes={"PROJECT_LEADER"},
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "项目金额和评估基准日" in str(exc_info.value.detail)
 
 
 def test_submit_review_accepts_reviewer_with_round_role() -> None:

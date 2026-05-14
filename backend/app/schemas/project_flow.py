@@ -13,6 +13,7 @@ class ProjectFlowProject(BaseModel):
     valuation_base_date: str | None = None
     business_salesman: str | None = None
     project_amount: float | None = None
+    invoiced_amount: float = 0
     project_source: str = "INTERNAL"
     project_source_display: str = "内部项目"
     external_project_leader_name: str | None = None
@@ -65,3 +66,8 @@ class ProjectFlowResponse(BaseModel):
     flow_steps: list[str]
     contract_review_records: list[ContractReviewRecordResponse] = []
     project_update_logs: list[ProjectUpdateLogItem] = []
+    review_submit_locked: bool = False
+    review_submit_lock_reason: str | None = None
+    duplicate_delete_required: bool = False
+    can_remind_current_handler: bool = False
+    reminder_summary: dict[str, str | int | bool | None] | None = None

@@ -117,6 +117,8 @@ def init_db() -> None:
         ensure_project_update_log_table(db)
         ensure_report_mailing_table(db)
         ensure_project_delete_request_table(db)
+        ensure_project_conflict_tables(db)
+        ensure_reminder_tables(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
         sync_local_bootstrap_users(db)
@@ -145,6 +147,10 @@ def ensure_project_columns(db: Session) -> None:
         db.execute(text("ALTER TABLE projects ADD COLUMN archived_at TIMESTAMPTZ NULL"))
     if "deleted_at" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMPTZ NULL"))
+    if "duplicate_delete_required" not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN duplicate_delete_required BOOLEAN DEFAULT 0 NOT NULL"))
+    if "duplicate_delete_reason" not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN duplicate_delete_reason TEXT NULL"))
     if "termination_status" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN termination_status VARCHAR(32) NULL"))
     if "termination_reason" not in existing_columns:
@@ -326,6 +332,143 @@ def ensure_project_delete_request_table(db: Session) -> None:
         db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN client_name VARCHAR(255) NOT NULL DEFAULT ''"))
     if "current_step" not in existing_columns:
         db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN current_step VARCHAR(64) NOT NULL DEFAULT ''"))
+    db.commit()
+
+
+def ensure_project_conflict_tables(db: Session) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    snapshot_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_conflict_snapshots'")).fetchone()
+    if not snapshot_exists:
+        db.execute(
+            text(
+                """
+                CREATE TABLE project_conflict_snapshots (
+                    id INTEGER PRIMARY KEY,
+                    project_id INTEGER NOT NULL UNIQUE,
+                    work_order_id INTEGER NOT NULL,
+                    project_no VARCHAR(64) NOT NULL,
+                    project_name VARCHAR(255) NOT NULL,
+                    client_name VARCHAR(255) NOT NULL,
+                    normalized_client_name VARCHAR(255) NOT NULL,
+                    project_amount FLOAT NOT NULL,
+                    valuation_base_date DATE NOT NULL,
+                    project_leader_display_name VARCHAR(255) NOT NULL,
+                    creator_user_id INTEGER NULL,
+                    creator_username VARCHAR(255) NULL,
+                    contract_uploaded_at TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        )
+
+    conflict_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_conflict_records'")).fetchone()
+    if not conflict_exists:
+        db.execute(
+            text(
+                """
+                CREATE TABLE project_conflict_records (
+                    id INTEGER PRIMARY KEY,
+                    project_a_id INTEGER NOT NULL,
+                    project_b_id INTEGER NOT NULL,
+                    snapshot_a_id INTEGER NOT NULL,
+                    snapshot_b_id INTEGER NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    decision VARCHAR(32) NULL,
+                    kept_project_id INTEGER NULL,
+                    delete_project_id INTEGER NULL,
+                    decided_by INTEGER NULL,
+                    decided_at TIMESTAMPTZ NULL,
+                    resolve_comment TEXT NULL,
+                    resolved_at TIMESTAMPTZ NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        )
+    db.commit()
+
+
+def ensure_reminder_tables(db: Session) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS reminder_events (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                work_order_id INTEGER NOT NULL,
+                current_handler_user_id INTEGER NOT NULL,
+                initiator_user_id INTEGER NOT NULL,
+                initiator_role_type VARCHAR(32) NOT NULL,
+                trigger_type VARCHAR(16) NOT NULL DEFAULT 'MANUAL',
+                current_status VARCHAR(64) NOT NULL,
+                overdue_seconds INTEGER NOT NULL DEFAULT 0,
+                comment TEXT NULL,
+                day_remind_seq INTEGER NOT NULL DEFAULT 1,
+                handler_cycle_key VARCHAR(128) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_project_id ON reminder_events (project_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_work_order_id ON reminder_events (work_order_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_current_handler_user_id ON reminder_events (current_handler_user_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_initiator_user_id ON reminder_events (initiator_user_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_handler_cycle_key ON reminder_events (handler_cycle_key)"))
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS reminder_receipts (
+                id INTEGER PRIMARY KEY,
+                reminder_event_id INTEGER NOT NULL,
+                receiver_user_id INTEGER NOT NULL,
+                receiver_type VARCHAR(16) NOT NULL,
+                channel VARCHAR(16) NOT NULL DEFAULT 'IN_APP',
+                delivery_status VARCHAR(16) NOT NULL DEFAULT 'SENT',
+                read_status VARCHAR(16) NOT NULL DEFAULT 'UNREAD',
+                delivery_error TEXT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_receipts_reminder_event_id ON reminder_receipts (reminder_event_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_receipts_receiver_user_id ON reminder_receipts (receiver_user_id)"))
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS user_notifications (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                biz_type VARCHAR(32) NOT NULL,
+                biz_id INTEGER NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                link_type VARCHAR(32) NULL,
+                link_target_id INTEGER NULL,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                popup_flag BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_user_id ON user_notifications (user_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_biz_type ON user_notifications (biz_type)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_biz_id ON user_notifications (biz_id)"))
     db.commit()
 
 

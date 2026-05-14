@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.invoice import Invoice
+from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.role import Role
 from app.models.user import User
@@ -17,6 +18,7 @@ from app.services.workflow_log_service import create_workflow_log
 router = APIRouter(prefix="/finance", tags=["财务"])
 
 ACTIVE_INVOICE_STATUSES = {"SUBMITTED", "FINANCE_COMPLETED", "PROJECT_RETURNED"}
+COUNTED_INVOICE_STATUSES = {"SUBMITTED", "FINANCE_COMPLETED", "PROJECT_RETURNED", "ISSUED"}
 
 
 def _user_has_role(user: User, role_code: str) -> bool:
@@ -58,6 +60,16 @@ def _latest_invoice(db: Session, work_order_id: int) -> Invoice | None:
     return db.query(Invoice).filter(Invoice.work_order_id == work_order_id).order_by(Invoice.id.desc()).first()
 
 
+def calculate_project_invoice_total(db: Session, project_id: int) -> float:
+    rows = (
+        db.query(Invoice)
+        .join(WorkOrder, WorkOrder.id == Invoice.work_order_id)
+        .filter(WorkOrder.project_id == project_id, Invoice.status.in_(COUNTED_INVOICE_STATUSES))
+        .all()
+    )
+    return sum(float(row.amount or 0) for row in rows)
+
+
 def _log_invoice_action(
     db: Session,
     work_order: WorkOrder,
@@ -96,6 +108,11 @@ def create_invoice(
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     _assert_project_party(db, work_order, current_user, role_codes)
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    if project.project_amount is None:
+        raise HTTPException(status_code=400, detail="请先在项目基本信息模块中录入项目金额")
 
     if not payload.invoice_info or not payload.invoice_type:
         raise HTTPException(status_code=400, detail="请填写开票信息和发票类型")
@@ -104,6 +121,9 @@ def create_invoice(
     row = _latest_invoice(db, payload.work_order_id)
     if row and row.status in ACTIVE_INVOICE_STATUSES:
         raise HTTPException(status_code=400, detail="已有未完成的开票业务，请完成后再提交新申请")
+
+    if calculate_project_invoice_total(db, work_order.project_id) + float(payload.amount or 0) > float(project.project_amount):
+        raise HTTPException(status_code=400, detail="累计开票金额已超过项目金额，请核对后再提交")
 
     data = payload.model_dump()
     data["invoice_no"] = payload.invoice_no or f"PENDING-{payload.work_order_id}"

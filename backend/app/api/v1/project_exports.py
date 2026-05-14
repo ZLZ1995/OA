@@ -10,13 +10,15 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.archive import Archive
-from app.models.invoice import Invoice
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.models.work_order_file import WorkOrderFile
 from app.services.project_flow import get_project_leader_display_name, get_project_source_display
+from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
+from app.api.v1.finance import calculate_project_invoice_total
 
 router = APIRouter(prefix="/project-exports", tags=["项目清单导出"])
 
@@ -138,17 +140,36 @@ def _collect_rows(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    include_deleted: bool = False,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    projects = db.query(Project).filter(Project.deleted_at.is_(None)).order_by(Project.id.desc()).all()
+    query = db.query(Project)
+    if not include_deleted:
+        query = query.filter(Project.deleted_at.is_(None))
+    projects = query.order_by(Project.id.desc()).all()
     for project in projects:
         work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project.id).order_by(WorkOrder.id.desc()).first()
         leader = db.query(User).filter(User.id == project.project_leader_id).first()
         record = db.query(PrintRoomRecord).filter(PrintRoomRecord.work_order_id == work_order.id).first() if work_order else None
-        invoice = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.desc()).first() if work_order else None
         archive = db.query(Archive).filter(Archive.work_order_id == work_order.id).first() if work_order else None
+        latest_contract_file = (
+            db.query(WorkOrderFile)
+            .filter(
+                WorkOrderFile.work_order_id == work_order.id,
+                WorkOrderFile.file_category == "CONTRACT_DRAFT",
+                WorkOrderFile.business_stage == "CONTRACT_DRAFT",
+                WorkOrderFile.is_current.is_(True),
+            )
+            .order_by(WorkOrderFile.uploaded_at.desc())
+            .first()
+            if work_order
+            else None
+        )
+        if work_order and latest_contract_file:
+            upsert_conflict_snapshot_and_detect(db, project, work_order, latest_contract_file.uploaded_at)
         archived_at = project.archived_at or (archive.archive_at if archive else None)
-        amount = float(invoice.amount) if invoice else None
+        amount = float(project.project_amount) if project.project_amount is not None else None
+        invoiced_amount = calculate_project_invoice_total(db, project.id)
         signers = "、".join(item for item in [work_order.signer_one if work_order else None, work_order.signer_two if work_order else None] if item)
         first_reviewer_name = _user_name(db, work_order.first_reviewer_id) if work_order else ""
         second_reviewer_name = _user_name(db, work_order.second_reviewer_id) if work_order else ""
@@ -199,7 +220,7 @@ def _collect_rows(
                 "project_no": project.project_code,
                 "project_name": project.project_name,
                 "project_created_date": _format_date(project_created_date),
-                "project_progress": _project_progress(project, work_order),
+                "project_progress": "已删除" if project.deleted_at else ("重复项目待删除" if project.duplicate_delete_required else _project_progress(project, work_order)),
                 "report_no": record.paper_report_no if record else "",
                 "project_leader_name": leader_display_name,
                 "undertaking_unit": project.undertaking_unit,
@@ -210,6 +231,7 @@ def _collect_rows(
                 "project_source_display": get_project_source_display(project.project_source),
                 "external_project_leader_name": project.external_project_leader_name or "",
                 "amount": amount if amount is not None else "",
+                "invoiced_amount": invoiced_amount,
                 "signer_names": signers,
                 "first_reviewer_name": first_reviewer_name,
                 "second_reviewer_name": second_reviewer_name,
@@ -241,6 +263,7 @@ def list_project_export_rows(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    include_deleted: bool = False,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> dict[str, list[dict[str, object]]]:
@@ -263,6 +286,7 @@ def list_project_export_rows(
             business_salesman,
             project_source,
             external_project_leader_name,
+            include_deleted,
         )
     }
 
@@ -285,6 +309,7 @@ def export_project_rows_excel(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    include_deleted: bool = False,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> Response:
@@ -306,6 +331,7 @@ def export_project_rows_excel(
         business_salesman,
         project_source,
         external_project_leader_name,
+        include_deleted,
     )
     data = [[
         "项目编号",
@@ -343,6 +369,7 @@ def export_project_rows_excel(
                 row["project_source_display"],
                 row["external_project_leader_name"],
                 row["amount"],
+                row["invoiced_amount"],
                 row["signer_names"],
                 row["first_reviewer_name"],
                 row["second_reviewer_name"],

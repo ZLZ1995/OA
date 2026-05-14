@@ -7,6 +7,14 @@
     show-icon
   />
   <template v-else>
+    <el-alert
+      v-if="flowInfo?.review_submit_locked"
+      type="warning"
+      :closable="false"
+      show-icon
+      :title="flowInfo?.review_submit_lock_reason || '报告送审暂不可办理'"
+      style="margin-bottom: 12px"
+    />
     <el-descriptions
       v-if="showProjectSummary"
       :column="2"
@@ -25,7 +33,7 @@
 
     <el-form label-width="120px">
       <el-form-item label="审核轮次">
-        <el-select v-model="reviewRound" style="width: 180px" :disabled="!canSubmitReview" @change="reloadRoundData">
+        <el-select v-model="reviewRound" style="width: 180px" :disabled="!canSubmitReview || isReviewLocked" @change="reloadRoundData">
           <el-option label="一审" value="FIRST" />
           <el-option label="二审" value="SECOND" />
           <el-option label="三审" value="THIRD" />
@@ -73,7 +81,7 @@
 
       <el-form-item :label="showReviewerChangePanel ? '重新上传文件' : (isReplyFlow ? '意见回复文件' : '待审报告包')">
         <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
-          <el-button :disabled="!canSubmitReview || reusePreviousFile">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
+          <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
         </el-upload>
         <el-tag v-if="reusePreviousFile" type="info" effect="plain" style="margin-left: 12px">将沿用上轮已提交文件</el-tag>
         <div class="file-list" v-if="submitFiles.length">
@@ -272,7 +280,8 @@ const pendingReviewerChange = computed(() => records.value
   .filter(record => new Date(record.acted_at).getTime() > latestSubmitAt.value)
   .sort((a, b) => new Date(b.acted_at).getTime() - new Date(a.acted_at).getTime())[0])
 const hasChangedReviewer = computed(() => Boolean(pendingReviewerChange.value))
-const canChangeReviewer = computed(() => canSubmitReview.value && isReplyFlow.value)
+const isReviewLocked = computed(() => Boolean(props.flowInfo?.review_submit_locked))
+const canChangeReviewer = computed(() => canSubmitReview.value && isReplyFlow.value && !isReviewLocked.value)
 const reusePreviousFile = computed(() => isReplyFlow.value && replyFileMode.value === 'REUSE')
 const showReviewerChangePanel = computed(() => canChangeReviewer.value && isReviewerChangePanelOpen.value)
 const canSubmitReviewerChange = computed(() =>
@@ -285,7 +294,7 @@ const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'SECOND') return props.flowInfo?.second_reviewer_id
   return props.flowInfo?.third_reviewer_id
 })
-const canSubmitReview = computed(() => props.canEdit && isReviewSubmitter.value && isSubmitStatus(statusCode.value))
+const canSubmitReview = computed(() => props.canEdit && !isReviewLocked.value && isReviewSubmitter.value && isSubmitStatus(statusCode.value))
 const canReview = computed(() => {
   if (!currentUserId.value || props.flowInfo?.current_handler_user_id !== currentUserId.value) return false
   if (props.userRoles.includes('ADMIN')) return true
@@ -490,6 +499,7 @@ async function reloadRoundData() {
 
 async function onReportSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
+  if (isReviewLocked.value) return ElMessage.warning(props.flowInfo?.review_submit_lock_reason || '报告送审暂不可办理')
   await uploadWorkOrderFile({
     work_order_id: props.workOrderId,
     file_category: isReplyFlow.value ? 'REVIEW_REPLY' : 'REPORT_ZIP',

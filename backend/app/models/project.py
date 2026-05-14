@@ -33,3 +33,5 @@ class Project(Base, TimestampMixin):
     termination_approved_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duplicate_delete_required: Mapped[bool] = mapped_column(default=False, nullable=False)
+    duplicate_delete_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -10,6 +10,14 @@
 
   <template v-else>
     <el-alert
+      v-if="projectAmount == null"
+      type="warning"
+      :closable="false"
+      title="请先在项目基本信息模块中录入项目金额"
+      show-icon
+      style="margin-bottom: 12px"
+    />
+    <el-alert
       v-if="currentInvoice"
       :type="statusAlertType"
       :closable="false"
@@ -17,6 +25,12 @@
       show-icon
       style="margin-bottom: 12px"
     />
+
+    <template v-else>
+      <el-descriptions :column="2" border class="invoice-summary">
+        <el-descriptions-item label="项目金额">{{ formatAmount(projectAmount) }}</el-descriptions-item>
+        <el-descriptions-item label="累计开票金额">{{ formatAmount(cumulativeAmount) }}</el-descriptions-item>
+      </el-descriptions>
 
     <el-form label-width="112px">
       <el-form-item label="开票信息">
@@ -102,6 +116,7 @@
       </el-table-column>
       <el-table-column prop="updated_at" label="更新时间" />
     </el-table>
+    </template>
   </template>
 </template>
 
@@ -135,9 +150,14 @@ const amount = ref(0)
 const financeHandlerId = ref<number>()
 const replaceInputs = new Map<number, HTMLInputElement>()
 
+const projectAmount = computed(() => props.flowInfo?.project.project_amount ?? null)
 const canFinance = computed(() => props.userRoles.some(role => ['FINANCE', 'ADMIN'].includes(role)))
 const activeStatuses = ['SUBMITTED', 'FINANCE_COMPLETED', 'PROJECT_RETURNED', 'REJECTED']
+const countedStatuses = ['SUBMITTED', 'FINANCE_COMPLETED', 'PROJECT_RETURNED', 'ISSUED']
 const currentInvoice = computed(() => invoices.value.find(item => activeStatuses.includes(item.status)))
+const cumulativeAmount = computed(() => props.flowInfo?.project.invoiced_amount ?? invoices.value
+  .filter(item => countedStatuses.includes(item.status))
+  .reduce((sum, item) => sum + Number(item.amount || 0), 0))
 const canFinanceProcess = computed(() => {
   if (!canFinance.value || !currentInvoice.value) return false
   return ['SUBMITTED', 'PROJECT_RETURNED'].includes(currentInvoice.value.status)
@@ -205,6 +225,14 @@ async function onSubmitInfo() {
   }
   if (amount.value === null || amount.value < 0) {
     ElMessage.warning('请填写有效的开票金额')
+    return
+  }
+  if (projectAmount.value == null) {
+    ElMessage.warning('请先在项目基本信息模块中录入项目金额')
+    return
+  }
+  if (cumulativeAmount.value + amount.value > projectAmount.value) {
+    ElMessage.warning('累计开票金额已超过项目金额，请核对后再提交')
     return
   }
   try {
@@ -368,6 +396,11 @@ function userName(userId?: number | null) {
   return financeUsers.value.find(user => user.id === userId)?.real_name || `用户${userId}`
 }
 
+function formatAmount(value?: number | null) {
+  if (value == null) return '-'
+  return Number(value).toFixed(2)
+}
+
 onMounted(async () => {
   await loadFinanceUsers()
   await load()
@@ -396,5 +429,9 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
 
 .hidden-file-input {
   display: none;
+}
+
+.invoice-summary {
+  margin-bottom: 12px;
 }
 </style>
