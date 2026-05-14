@@ -22,3 +22,8 @@ export async function markNotificationRead(id: number) {
   const { data } = await http.post(`/notifications/${id}/read`)
   return data as { message: string }
 }
+
+export async function getUnreadNotificationCount() {
+  const result = await listMyNotifications()
+  return result.items.filter(item => !item.is_read).length
+}

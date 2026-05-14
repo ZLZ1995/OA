@@ -151,7 +151,35 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
     contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
     history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
 
-    data = ProjectResponse.model_validate(project, from_attributes=True).model_dump()
+    project_payload = {
+        "id": project.id,
+        "project_code": project.project_code,
+        "undertaking_unit": project.undertaking_unit,
+        "project_name": project.project_name,
+        "client_name": project.client_name,
+        "report_type": project.report_type or "评估报告",
+        "valuation_base_date": project.valuation_base_date,
+        "business_salesman": project.business_salesman or "",
+        "project_amount": project.project_amount,
+        "project_source": project.project_source or "INTERNAL",
+        "external_project_leader_name": project.external_project_leader_name,
+        "business_user_id": project.business_user_id,
+        "project_leader_id": project.project_leader_id,
+        "department_id": project.department_id,
+        "start_date": project.start_date,
+        "due_date": project.due_date,
+        "status": project.status,
+        "description": project.description,
+        "termination_status": project.termination_status,
+        "termination_reason": project.termination_reason,
+        "termination_requested_by": project.termination_requested_by,
+        "termination_requested_at": project.termination_requested_at,
+        "termination_approved_by": project.termination_approved_by,
+        "termination_approved_at": project.termination_approved_at,
+        "archived_at": project.archived_at,
+        "deleted_at": project.deleted_at,
+    }
+    data = ProjectResponse.model_validate(project_payload).model_dump()
     for key in ["status", "status_display", "project_source_display", "project_leader_display_name", "contract_review_status", "contract_review_status_display", "contract_no", "report_no"]:
         data.pop(key, None)
 
@@ -544,6 +572,8 @@ def get_project_flow(
     work_order = _get_latest_work_order(db, project_id)
     is_member = db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
 
+    can_remind_current_handler = False
+    reminder_summary = None
     role = get_user_role_in_project(project, work_order, current_user, is_member)
     if role == "无权限":
         raise HTTPException(status_code=403, detail="无权查看该项目")
