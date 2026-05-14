@@ -24,6 +24,7 @@ from app.schemas.review import (
     ReviewSubmitRequest,
 )
 from app.services.project_conflicts import assert_project_can_submit_review
+from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.guards import filter_candidates, validate_reviewer_avoidance
 from app.workflows.states import WorkOrderStatus
@@ -299,6 +300,17 @@ def submit_review(
         operator_user_id=current_user.id,
         remark=payload.comment,
     )
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=target_reviewer_id,
+            action_name=f"SUBMIT_{payload.review_round}",
+            comment=payload.comment,
+            biz_id=record.id,
+        )
     db.commit()
     db.refresh(record)
     return _to_review_record_response(db, record)
@@ -429,6 +441,23 @@ def decide_review(
         operator_user_id=current_user.id,
         remark=payload.comment,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        workflow_action = (
+            f"{payload.review_round}_APPROVE"
+            if payload.action == "APPROVE"
+            else f"{payload.review_round}_REJECT_RETURN"
+        )
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=next_handler,
+            action_name=workflow_action,
+            comment=payload.comment,
+            biz_id=record.id,
+        )
     db.commit()
     db.refresh(record)
     return _to_review_record_response(db, record)

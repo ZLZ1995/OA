@@ -20,6 +20,7 @@ from app.schemas.print_room import (
     PrintRoomRollbackRequest,
     TransferPrintRoomRequest,
 )
+from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.states import WorkOrderStatus
 from app.workflows.transitions import can_transit
@@ -105,6 +106,17 @@ def transfer_to_print_room(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=payload.handler_user_id,
+            action_name="TRANSFER_PRINTROOM",
+            comment=payload.remark,
+        )
     db.commit()
     return {"message": "已转发文印室"}
 
@@ -136,6 +148,17 @@ def rollback_to_third(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project and work_order.third_reviewer_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.third_reviewer_id,
+            action_name="ROLLBACK_THIRD",
+            comment=payload.remark,
+        )
     db.commit()
     return {"message": "已撤回至三审"}
 
@@ -167,6 +190,17 @@ def mark_contract_error(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="CONTRACT_ERROR",
+            comment=payload.remark,
+        )
     db.commit()
     return {"message": "已退回合同重新审核"}
 
@@ -198,6 +232,17 @@ def report_error_to_print_room(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project and work_order.print_room_handler_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.print_room_handler_id,
+            action_name="REPORT_ERROR",
+            comment=payload.remark,
+        )
     db.commit()
     return {"message": "已退回文印室"}
 
@@ -289,6 +334,17 @@ def issue_paper_report(
         operator_user_id=current_user.id,
         remark=payload.remark,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="ISSUE_PAPER_REPORT",
+            comment=payload.remark,
+        )
 
     db.commit()
     db.refresh(row)

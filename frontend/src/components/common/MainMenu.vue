@@ -60,7 +60,7 @@ const ADMIN_MENUS = [
   { key: 'project-delete-approvals', title: '项目删除审核', path: '/project-delete-approvals' },
   { key: 'project-conflicts', title: '项目冲突提醒', path: '/project-conflicts' },
   { key: 'issue-feedbacks', title: '问题反馈', path: '/issue-feedbacks' },
-  { key: 'project-exports', title: '项目清单导出', path: '/project-exports' }
+  { key: 'project-exports', title: '项目清单导出', path: '/project-exports' },
 ]
 const processSteps = ['项目创建', '项目组成员', '合同初稿上传', '合同初稿审核', '报告送审', '一审', '二审', '三审', '报告出具', '报告邮寄', '发票开具', '报告归档', '已归档', '其他']
 
@@ -94,7 +94,7 @@ async function submitFeedback() {
     await createIssueFeedback({
       project_no: feedbackForm.project_no.trim(),
       process_step: feedbackForm.process_step,
-      detail: feedbackForm.detail.trim()
+      detail: feedbackForm.detail.trim(),
     })
     feedbackForm.project_no = ''
     feedbackForm.process_step = ''
