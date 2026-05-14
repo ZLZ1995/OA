@@ -8,7 +8,15 @@
       </div>
     </div>
     <el-menu :default-active="active" class="menu" router>
-      <el-menu-item v-for="item in visibleMenus" :key="item.key" :index="item.path">{{ item.title }}</el-menu-item>
+      <el-menu-item v-for="item in visibleMenus" :key="item.key" :index="item.path">
+        <span>{{ item.title }}</span>
+        <el-badge
+          v-if="item.key === 'notifications' && unreadCount > 0"
+          :value="unreadCount"
+          :max="99"
+          class="menu-badge"
+        />
+      </el-menu-item>
     </el-menu>
     <div class="logout-zone">
       <el-button type="danger" plain class="logout-btn" @click="onLogout">退出登录</el-button>
@@ -17,12 +25,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
+import { getUnreadNotificationCount } from '@/api/notifications'
 
 const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/workbench' }]
-const SHARED_MENUS = [{ key: 'notifications', title: '????', path: '/notifications' }]
+const SHARED_MENUS = [{ key: 'notifications', title: '消息中心', path: '/notifications' }]
 const ADMIN_MENUS = [
   { key: 'accounts', title: '账号管理', path: '/accounts' },
   { key: 'termination-approvals', title: '终止/废止审核', path: '/termination-approvals' },
@@ -38,11 +47,28 @@ const auth = useAuthStore()
 const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
 const visibleMenus = computed(() => (isAdmin.value ? [...SHARED_MENUS, ...ADMIN_MENUS] : [...BUSINESS_MENUS, ...SHARED_MENUS]))
 const active = computed(() => route.path)
+const unreadCount = ref(0)
+
+async function loadUnreadCount() {
+  try {
+    unreadCount.value = await getUnreadNotificationCount()
+  } catch {
+    unreadCount.value = 0
+  }
+}
 
 function onLogout() {
   auth.clearAuth()
   router.push('/login')
 }
+
+watch(() => route.fullPath, () => {
+  void loadUnreadCount()
+})
+
+onMounted(() => {
+  void loadUnreadCount()
+})
 </script>
 
 <style scoped>
@@ -103,6 +129,9 @@ function onLogout() {
   border-radius: 6px;
   color: #475569;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .menu :deep(.el-menu-item.is-active) {
@@ -127,5 +156,9 @@ function onLogout() {
 
 .logout-btn {
   width: 100%;
+}
+
+.menu-badge {
+  margin-left: 10px;
 }
 </style>
