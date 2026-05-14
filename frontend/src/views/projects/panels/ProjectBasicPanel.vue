@@ -125,6 +125,7 @@
       </el-descriptions>
 
       <div class="panel-actions" v-if="canEditBasicInfo">
+        <el-button type="success" plain @click="openQuoteCalculator">报价计算器</el-button>
         <el-button type="primary" @click="startEdit">编辑</el-button>
       </div>
     </template>
@@ -195,6 +196,10 @@ function startEdit() {
 
 function cancelEdit() {
   editing.value = false
+}
+
+function openQuoteCalculator() {
+  window.open('https://zqbjxt.zeabur.app/', '_blank', 'noopener,noreferrer')
 }
 
 function formatAmount(value?: number | null) {
