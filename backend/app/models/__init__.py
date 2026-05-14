@@ -8,11 +8,14 @@ from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.project_conflict import ProjectConflictRecord, ProjectConflictSnapshot
 from app.models.project_member import ProjectMember
+from app.models.reminder_event import ReminderEvent
+from app.models.reminder_receipt import ReminderReceipt
 from app.models.project_update_log import ProjectUpdateLog
 from app.models.report_mailing_record import ReportMailingRecord
 from app.models.report_version import ReportVersion
 from app.models.review_record import ReviewRecord
 from app.models.role import Role
+from app.models.user_notification import UserNotification
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
@@ -29,6 +32,8 @@ __all__ = [
     "ProjectConflictRecord",
     "ProjectConflictSnapshot",
     "ProjectMember",
+    "ReminderEvent",
+    "ReminderReceipt",
     "ProjectUpdateLog",
     "ReportMailingRecord",
     "WorkOrder",
@@ -41,4 +46,5 @@ __all__ = [
     "PrintRoomRecord",
     "Invoice",
     "Archive",
+    "UserNotification",
 ]

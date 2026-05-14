@@ -3,7 +3,6 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
@@ -140,6 +139,11 @@ def export_project_conflicts_excel(
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
 ):
+    try:
+        from openpyxl import Workbook
+    except ModuleNotFoundError as exc:
+        raise HTTPException(status_code=500, detail="Excel导出依赖 openpyxl 未安装，请安装后重试") from exc
+
     rows = [_record_item(db, row) for row in _query_conflicts(db, status)]
     wb = Workbook()
     ws = wb.active

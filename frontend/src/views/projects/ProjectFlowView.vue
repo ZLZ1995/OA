@@ -62,6 +62,7 @@ import { getProjectFlow, type ProjectFlowData } from '@/api/projectFlow'
 import { deleteDuplicateProject } from '@/api/projects'
 import { createWorkOrder, listWorkOrders } from '@/api/workorders'
 import { useAuthStore } from '@/store/auth'
+import ReminderCard from '@/components/reminders/ReminderCard.vue'
 import ProjectBasicPanel from './panels/ProjectBasicPanel.vue'
 import ProjectMembersPanel from './panels/ProjectMembersPanel.vue'
 import ContractUploadPanel from './panels/ContractUploadPanel.vue'
@@ -155,6 +156,10 @@ function ensureVisibleActiveNode() {
 }
 
 function onSelectNode(key: string) {
+  if (key === 'invoice' && flow.value?.project.project_amount == null) {
+    ElMessage.warning('请先在项目基本信息模块中录入项目金额')
+    return
+  }
   activeNode.value = key
 }
 
@@ -210,6 +215,10 @@ async function onPanelChanged() {
 }
 
 function onPanelNavigate(key: string) {
+  if (key === 'invoice' && flow.value?.project.project_amount == null) {
+    ElMessage.warning('请先在项目基本信息模块中录入项目金额')
+    return
+  }
   activeNode.value = key
 }
 

@@ -17,6 +17,7 @@ from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.project_member import ProjectMember
 from app.models.project_update_log import ProjectUpdateLog
+from app.models.reminder_event import ReminderEvent
 from app.models.report_mailing_record import ReportMailingRecord
 from app.models.user import User
 from app.models.work_order import WorkOrder
@@ -36,6 +37,8 @@ from app.services.project_flow import (
 from app.services.workflow_log_service import create_workflow_log
 from app.services.project_delete_service import can_project_owner_delete_direct, delete_project_related_data
 from app.services.project_conflicts import get_unresolved_conflicts, mark_project_duplicate_deleted, upsert_conflict_snapshot_and_detect
+from app.api.v1.finance import calculate_project_invoice_total
+from app.services.reminder_policy import evaluate_reminder_eligibility
 from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/projects", tags=["项目"])
@@ -557,6 +560,21 @@ def get_project_flow(
     readonly_fields = _get_readonly_flow_fields(db, project, work_order)
     contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
     history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
+    if work_order:
+        latest_contract_file = (
+            db.query(WorkOrderFile)
+            .filter(
+                WorkOrderFile.work_order_id == work_order.id,
+                WorkOrderFile.file_category == "CONTRACT_DRAFT",
+                WorkOrderFile.business_stage == "CONTRACT_DRAFT",
+                WorkOrderFile.is_current.is_(True),
+            )
+            .order_by(WorkOrderFile.uploaded_at.desc())
+            .first()
+        )
+        if latest_contract_file:
+            upsert_conflict_snapshot_and_detect(db, project, work_order, latest_contract_file.uploaded_at)
+            db.flush()
     unresolved_conflicts = get_unresolved_conflicts(db, project.id)
     review_lock_reason = None
     if project.duplicate_delete_required:
@@ -577,6 +595,7 @@ def get_project_flow(
             valuation_base_date=project.valuation_base_date.strftime("%Y-%m-%d") if project.valuation_base_date else None,
             business_salesman=project.business_salesman,
             project_amount=project.project_amount,
+            invoiced_amount=calculate_project_invoice_total(db, project.id),
             project_source=project.project_source,
             project_source_display=get_project_source_display(project.project_source),
             external_project_leader_name=project.external_project_leader_name,
@@ -643,4 +662,6 @@ def get_project_flow(
         review_submit_locked=review_lock_reason is not None,
         review_submit_lock_reason=review_lock_reason,
         duplicate_delete_required=project.duplicate_delete_required,
+        can_remind_current_handler=can_remind_current_handler,
+        reminder_summary=reminder_summary,
     )

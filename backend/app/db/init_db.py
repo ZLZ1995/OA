@@ -118,6 +118,7 @@ def init_db() -> None:
         ensure_report_mailing_table(db)
         ensure_project_delete_request_table(db)
         ensure_project_conflict_tables(db)
+        ensure_reminder_tables(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
         sync_local_bootstrap_users(db)
@@ -389,6 +390,85 @@ def ensure_project_conflict_tables(db: Session) -> None:
                 """
             )
         )
+    db.commit()
+
+
+def ensure_reminder_tables(db: Session) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS reminder_events (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                work_order_id INTEGER NOT NULL,
+                current_handler_user_id INTEGER NOT NULL,
+                initiator_user_id INTEGER NOT NULL,
+                initiator_role_type VARCHAR(32) NOT NULL,
+                trigger_type VARCHAR(16) NOT NULL DEFAULT 'MANUAL',
+                current_status VARCHAR(64) NOT NULL,
+                overdue_seconds INTEGER NOT NULL DEFAULT 0,
+                comment TEXT NULL,
+                day_remind_seq INTEGER NOT NULL DEFAULT 1,
+                handler_cycle_key VARCHAR(128) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_project_id ON reminder_events (project_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_work_order_id ON reminder_events (work_order_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_current_handler_user_id ON reminder_events (current_handler_user_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_initiator_user_id ON reminder_events (initiator_user_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_handler_cycle_key ON reminder_events (handler_cycle_key)"))
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS reminder_receipts (
+                id INTEGER PRIMARY KEY,
+                reminder_event_id INTEGER NOT NULL,
+                receiver_user_id INTEGER NOT NULL,
+                receiver_type VARCHAR(16) NOT NULL,
+                channel VARCHAR(16) NOT NULL DEFAULT 'IN_APP',
+                delivery_status VARCHAR(16) NOT NULL DEFAULT 'SENT',
+                read_status VARCHAR(16) NOT NULL DEFAULT 'UNREAD',
+                delivery_error TEXT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_receipts_reminder_event_id ON reminder_receipts (reminder_event_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_receipts_receiver_user_id ON reminder_receipts (receiver_user_id)"))
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS user_notifications (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                biz_type VARCHAR(32) NOT NULL,
+                biz_id INTEGER NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                link_type VARCHAR(32) NULL,
+                link_target_id INTEGER NULL,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                popup_flag BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_user_id ON user_notifications (user_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_biz_type ON user_notifications (biz_type)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_biz_id ON user_notifications (biz_id)"))
     db.commit()
 
 

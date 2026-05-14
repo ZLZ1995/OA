@@ -48,6 +48,7 @@ def _seed_project(
         client_name="Client",
         business_user_id=leader.id,
         project_leader_id=leader.id,
+        project_amount=1000,
         termination_status=termination_status,
         termination_reason="reason" if termination_status else None,
     )
@@ -186,6 +187,46 @@ def test_invoice_submission_can_start_new_round_after_issued_invoice() -> None:
     invoices = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.asc()).all()
     assert [invoice.status for invoice in invoices] == ["ISSUED", "SUBMITTED"]
     assert invoices[1].amount == 200
+
+
+def test_invoice_submission_rejects_when_total_exceeds_project_amount() -> None:
+    from fastapi import HTTPException
+    from app.api.v1.finance import create_invoice
+    from app.schemas.invoice import InvoiceCreate
+
+    db = _build_session()
+    leader = _seed_user(db)
+    finance = _seed_role_user(db, "finance_over_limit", "FINANCE")
+    project, work_order = _seed_project(db, leader, project_code="P-INVOICE-LIMIT")
+    project.project_amount = 250
+    db.add(Invoice(
+        work_order_id=work_order.id,
+        invoice_no="INV-OLD",
+        invoice_info="old info",
+        invoice_type="专票",
+        amount=200,
+        status="ISSUED",
+    ))
+    db.commit()
+
+    try:
+        create_invoice(
+            payload=InvoiceCreate(
+                work_order_id=work_order.id,
+                invoice_info="开票单位：中勤\n超额开票信息",
+                invoice_type="普票",
+                amount=100,
+                finance_handler_id=finance.id,
+            ),
+            db=db,
+            current_user=leader,
+            role_codes={"PROJECT_LEADER"},
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "累计开票金额已超过项目金额" in exc.detail
+    else:
+        raise AssertionError("expected invoice amount limit to reject submission")
 
 
 def test_finance_todo_comes_from_submitted_invoice() -> None:

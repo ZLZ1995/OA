@@ -56,8 +56,8 @@
     </el-form>
 
     <el-table :data="rows" size="small" v-loading="loading" class="wide-table">
-      <el-table-column prop="project_no" label="项目编号" min-width="140" />
-      <el-table-column prop="project_name" label="项目名称" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="project_no" label="项目编号" min-width="140" fixed="left" />
+      <el-table-column prop="project_name" label="项目名称" min-width="180" fixed="left" show-overflow-tooltip />
       <el-table-column prop="project_created_date" label="项目立项日期" min-width="120" />
       <el-table-column prop="project_progress" label="项目进度" min-width="100" />
       <el-table-column prop="report_no" label="报告编号" min-width="140" />
@@ -69,12 +69,13 @@
       <el-table-column prop="project_source_display" label="项目来源" min-width="100" />
       <el-table-column prop="external_project_leader_name" label="外部项目负责人" min-width="140" />
       <el-table-column prop="amount" label="收费金额" min-width="110" />
+      <el-table-column prop="invoiced_amount" label="累计开票金额" min-width="130" />
       <el-table-column prop="signer_names" label="签字评估师姓名" min-width="160" show-overflow-tooltip />
       <el-table-column prop="first_reviewer_name" label="一审人员姓名" min-width="120" />
       <el-table-column prop="second_reviewer_name" label="二审人员姓名" min-width="120" />
       <el-table-column prop="third_reviewer_name" label="三审人员姓名" min-width="120" />
       <el-table-column prop="archive_date" label="归档日期" min-width="120" />
-      <el-table-column label="操作" width="120">
+      <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
           <el-button v-if="row.can_admin_delete" link type="danger" @click="requestDelete(row)">删除</el-button>
         </template>

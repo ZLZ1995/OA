@@ -36,6 +36,7 @@ export interface ProjectExportItem {
   project_source_display: string
   external_project_leader_name: string
   amount: number | string
+  invoiced_amount: number | string
   signer_names: string
   first_reviewer_name: string
   second_reviewer_name: string

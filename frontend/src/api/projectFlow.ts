@@ -20,6 +20,7 @@ export interface ProjectFlowData {
     valuation_base_date?: string | null
     business_salesman?: string | null
     project_amount?: number | null
+    invoiced_amount?: number
     project_source: 'INTERNAL' | 'EXTERNAL'
     project_source_display: string
     external_project_leader_name?: string | null
@@ -64,6 +65,12 @@ export interface ProjectFlowData {
   review_submit_locked?: boolean
   review_submit_lock_reason?: string | null
   duplicate_delete_required?: boolean
+  can_remind_current_handler?: boolean
+  reminder_summary?: {
+    is_reminded?: boolean
+    remind_count_today?: number
+    latest_remind_at?: string | null
+  } | null
 }
 
 export async function getProjectFlow(projectId: number | string) {

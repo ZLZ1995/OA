@@ -10,13 +10,15 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.archive import Archive
-from app.models.invoice import Invoice
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.models.work_order_file import WorkOrderFile
 from app.services.project_flow import get_project_leader_display_name, get_project_source_display
+from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
+from app.api.v1.finance import calculate_project_invoice_total
 
 router = APIRouter(prefix="/project-exports", tags=["项目清单导出"])
 
@@ -149,10 +151,25 @@ def _collect_rows(
         work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project.id).order_by(WorkOrder.id.desc()).first()
         leader = db.query(User).filter(User.id == project.project_leader_id).first()
         record = db.query(PrintRoomRecord).filter(PrintRoomRecord.work_order_id == work_order.id).first() if work_order else None
-        invoice = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.desc()).first() if work_order else None
         archive = db.query(Archive).filter(Archive.work_order_id == work_order.id).first() if work_order else None
+        latest_contract_file = (
+            db.query(WorkOrderFile)
+            .filter(
+                WorkOrderFile.work_order_id == work_order.id,
+                WorkOrderFile.file_category == "CONTRACT_DRAFT",
+                WorkOrderFile.business_stage == "CONTRACT_DRAFT",
+                WorkOrderFile.is_current.is_(True),
+            )
+            .order_by(WorkOrderFile.uploaded_at.desc())
+            .first()
+            if work_order
+            else None
+        )
+        if work_order and latest_contract_file:
+            upsert_conflict_snapshot_and_detect(db, project, work_order, latest_contract_file.uploaded_at)
         archived_at = project.archived_at or (archive.archive_at if archive else None)
-        amount = float(invoice.amount) if invoice else None
+        amount = float(project.project_amount) if project.project_amount is not None else None
+        invoiced_amount = calculate_project_invoice_total(db, project.id)
         signers = "、".join(item for item in [work_order.signer_one if work_order else None, work_order.signer_two if work_order else None] if item)
         first_reviewer_name = _user_name(db, work_order.first_reviewer_id) if work_order else ""
         second_reviewer_name = _user_name(db, work_order.second_reviewer_id) if work_order else ""
@@ -214,6 +231,7 @@ def _collect_rows(
                 "project_source_display": get_project_source_display(project.project_source),
                 "external_project_leader_name": project.external_project_leader_name or "",
                 "amount": amount if amount is not None else "",
+                "invoiced_amount": invoiced_amount,
                 "signer_names": signers,
                 "first_reviewer_name": first_reviewer_name,
                 "second_reviewer_name": second_reviewer_name,
@@ -351,6 +369,7 @@ def export_project_rows_excel(
                 row["project_source_display"],
                 row["external_project_leader_name"],
                 row["amount"],
+                row["invoiced_amount"],
                 row["signer_names"],
                 row["first_reviewer_name"],
                 row["second_reviewer_name"],

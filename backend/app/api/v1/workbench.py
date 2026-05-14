@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -8,6 +9,7 @@ from app.models.invoice import Invoice
 from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.project_member import ProjectMember
+from app.models.reminder_event import ReminderEvent
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.workflow_log import WorkflowLog
@@ -48,6 +50,24 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         leader = db.query(User).filter(User.id == project.project_leader_id).first()
         approver_name = db.query(User.real_name).filter(User.id == delete_request.approver_user_id).scalar() if delete_request else None
         requester_name = db.query(User.real_name).filter(User.id == delete_request.requester_user_id).scalar() if delete_request else None
+        latest_reminder = (
+            db.query(ReminderEvent)
+            .filter(ReminderEvent.project_id == project.id)
+            .order_by(ReminderEvent.created_at.desc(), ReminderEvent.id.desc())
+            .first()
+        )
+        remind_count_today = 0
+        if latest_work_order and latest_work_order.current_handler_user_id:
+            start_of_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            remind_count_today = (
+                db.query(ReminderEvent)
+                .filter(
+                    ReminderEvent.work_order_id == latest_work_order.id,
+                    ReminderEvent.current_handler_user_id == latest_work_order.current_handler_user_id,
+                    ReminderEvent.created_at >= start_of_day,
+                )
+                .count()
+            )
         my_projects.append(
             WorkbenchProjectItem(
                 id=project.id,
@@ -73,6 +93,9 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
                 can_request_termination=project.archived_at is None and project.termination_status not in {"PENDING", "APPROVED", "DELETE_PENDING"},
                 can_approve_delete=False,
                 can_enter=True,
+                is_reminded=latest_reminder is not None,
+                remind_count_today=remind_count_today,
+                latest_remind_at=latest_reminder.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_reminder else None,
             )
         )
 
@@ -231,6 +254,24 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         leader = db.query(User).filter(User.id == project.project_leader_id).first()
         approver_name = db.query(User.real_name).filter(User.id == delete_request.approver_user_id).scalar() if delete_request else None
         requester_name = db.query(User.real_name).filter(User.id == delete_request.requester_user_id).scalar() if delete_request else None
+        latest_reminder = (
+            db.query(ReminderEvent)
+            .filter(ReminderEvent.project_id == project.id)
+            .order_by(ReminderEvent.created_at.desc(), ReminderEvent.id.desc())
+            .first()
+        )
+        remind_count_today = 0
+        if work_order.current_handler_user_id:
+            start_of_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            remind_count_today = (
+                db.query(ReminderEvent)
+                .filter(
+                    ReminderEvent.work_order_id == work_order.id,
+                    ReminderEvent.current_handler_user_id == work_order.current_handler_user_id,
+                    ReminderEvent.created_at >= start_of_day,
+                )
+                .count()
+            )
         latest_log = (
             db.query(WorkflowLog, User)
             .join(User, User.id == WorkflowLog.operator_user_id)
@@ -283,6 +324,9 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
                 can_enter=True,
                 can_approve_termination=can_approve_termination,
                 can_approve_delete=can_approve_delete,
+                is_reminded=latest_reminder is not None,
+                remind_count_today=remind_count_today,
+                latest_remind_at=latest_reminder.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_reminder else None,
             )
         )
 

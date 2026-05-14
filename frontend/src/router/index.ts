@@ -35,6 +35,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'project-delete-approvals', component: () => import('@/views/admin/ProjectDeleteApprovalView.vue') },
       { path: 'project-conflicts', component: () => import('@/views/admin/ProjectConflictView.vue') },
       { path: 'termination-approvals', component: () => import('@/views/admin/TerminationApprovalView.vue') },
+      { path: 'notifications', component: () => import('@/views/notifications/NotificationCenterView.vue') },
       { path: 'accounts', component: () => import('@/views/accounts/AccountManageView.vue') }
     ]
   },

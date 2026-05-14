@@ -33,10 +33,13 @@ def normalize_client_name(name: str | None) -> str:
     text = (name or "").strip()
     for suffix in COMPANY_SUFFIXES:
         text = text.replace(suffix, "")
-    return "".join(ch for ch in text if not ch.isspace() and ch not in "（）()【】[]-—_·.,，。")
+    ignored = set("（）()【】[]-—·.,，。、 ")
+    return "".join(ch for ch in text if not ch.isspace() and ch not in ignored)
 
 
 def has_four_shared_chars(left: str, right: str) -> bool:
+    if left and left == right:
+        return True
     left_chars = set(left)
     right_chars = set(right)
     return len(left_chars & right_chars) >= 4
@@ -108,7 +111,7 @@ def upsert_conflict_snapshot_and_detect(db: Session, project: Project, work_orde
         .all()
     )
     for other in existing_snapshots:
-        if other.project_leader_display_name == snapshot.project_leader_display_name:
+        if other.creator_user_id == snapshot.creator_user_id:
             continue
         if not has_four_shared_chars(snapshot.normalized_client_name, other.normalized_client_name):
             continue
@@ -133,6 +136,7 @@ def upsert_conflict_snapshot_and_detect(db: Session, project: Project, work_orde
                 status="PENDING",
             )
         )
+        db.flush()
 
 
 def mark_project_duplicate_deleted(db: Session, project: Project) -> None:
