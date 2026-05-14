@@ -456,6 +456,14 @@ def ensure_reminder_tables(db: Session) -> None:
                 biz_id INTEGER NOT NULL,
                 title VARCHAR(255) NOT NULL,
                 content TEXT NOT NULL,
+                message_type VARCHAR(32) NOT NULL DEFAULT 'SYSTEM',
+                priority VARCHAR(16) NOT NULL DEFAULT 'NORMAL',
+                sender_user_id INTEGER NULL,
+                project_id INTEGER NULL,
+                work_order_id INTEGER NULL,
+                process_status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+                cc_flag BOOLEAN NOT NULL DEFAULT 0,
+                group_key VARCHAR(64) NULL,
                 link_type VARCHAR(32) NULL,
                 link_target_id INTEGER NULL,
                 is_read BOOLEAN NOT NULL DEFAULT 0,
@@ -466,9 +474,27 @@ def ensure_reminder_tables(db: Session) -> None:
             """
         )
     )
+    existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('user_notifications')")).fetchall()}
+    if "message_type" not in existing_columns:
+        db.execute(text("ALTER TABLE user_notifications ADD COLUMN message_type VARCHAR(32) NOT NULL DEFAULT 'SYSTEM'"))
+    if "priority" not in existing_columns:
+        db.execute(text("ALTER TABLE user_notifications ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'NORMAL'"))
+    if "sender_user_id" not in existing_columns:
+        db.execute(text("ALTER TABLE user_notifications ADD COLUMN sender_user_id INTEGER NULL"))
+    if "project_id" not in existing_columns:
+        db.execute(text("ALTER TABLE user_notifications ADD COLUMN project_id INTEGER NULL"))
+    if "work_order_id" not in existing_columns:
+        db.execute(text("ALTER TABLE user_notifications ADD COLUMN work_order_id INTEGER NULL"))
+    if "process_status" not in existing_columns:
+        db.execute(text("ALTER TABLE user_notifications ADD COLUMN process_status VARCHAR(16) NOT NULL DEFAULT 'PENDING'"))
+    if "cc_flag" not in existing_columns:
+        db.execute(text("ALTER TABLE user_notifications ADD COLUMN cc_flag BOOLEAN NOT NULL DEFAULT 0"))
+    if "group_key" not in existing_columns:
+        db.execute(text("ALTER TABLE user_notifications ADD COLUMN group_key VARCHAR(64) NULL"))
     db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_user_id ON user_notifications (user_id)"))
     db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_biz_type ON user_notifications (biz_type)"))
     db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_biz_id ON user_notifications (biz_id)"))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_message_type ON user_notifications (message_type)"))
     db.commit()
 
 

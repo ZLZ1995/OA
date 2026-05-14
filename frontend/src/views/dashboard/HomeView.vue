@@ -430,6 +430,14 @@ function goDeleteApprovals() {
   router.push('/project-delete-approvals')
 }
 
+function goNotifications(projectId?: number) {
+  if (projectId) {
+    router.push({ path: '/notifications', query: { project_id: String(projectId), message_type: 'REMINDER' } })
+    return
+  }
+  router.push('/notifications')
+}
+
 onMounted(load)
 </script>
 

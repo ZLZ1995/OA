@@ -1,45 +1,133 @@
 <template>
-  <el-card class="page-card" shadow="never">
-    <template #header>消息中心</template>
-    <el-empty v-if="!items.length" description="暂无消息" />
-    <div v-else class="notification-list">
-      <div v-for="item in items" :key="item.id" class="notification-item" :class="{ unread: !item.is_read }">
-        <div class="notification-head">
-          <strong>{{ item.title }}</strong>
-          <span>{{ formatDate(item.created_at) }}</span>
-        </div>
-        <p>{{ item.content }}</p>
-        <div class="notification-actions">
-          <el-tag size="small" :type="item.is_read ? 'info' : 'danger'">{{ item.is_read ? '已读' : '未读' }}</el-tag>
-          <el-button link type="primary" @click="openNotification(item)">查看</el-button>
-        </div>
-      </div>
+  <div class="notification-center-page">
+    <div class="header-bar">
+      <h1>消息中心</h1>
+      <el-button :disabled="!selectedIds.length" @click="batchRead">批量已读</el-button>
     </div>
-  </el-card>
+
+    <NotificationStatsCards :stats="stats" />
+
+    <el-card shadow="never">
+      <el-tabs v-model="activeTab" @tab-change="load">
+        <el-tab-pane label="未读" name="unread" />
+        <el-tab-pane label="已读" name="read" />
+        <el-tab-pane label="我发起的" name="initiated" />
+        <el-tab-pane label="抄送我的" name="cc" />
+        <el-tab-pane label="全部" name="all" />
+      </el-tabs>
+
+      <NotificationFilterBar
+        :filters="filters"
+        @update:filters="Object.assign(filters, $event)"
+        @search="load"
+        @reset="resetFilters"
+      />
+
+      <NotificationListTable
+        :items="items"
+        @selection-change="selectedIds = $event"
+        @open="openNotification"
+      />
+    </el-card>
+
+    <NotificationDetailDrawer
+      v-model:visible="detailVisible"
+      :item="currentItem"
+      :timeline-items="timelineItems"
+      @goto-target="gotoTarget"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { listMyNotifications, markNotificationRead, type NotificationItem } from '@/api/notifications'
+import NotificationDetailDrawer from '@/components/notifications/NotificationDetailDrawer.vue'
+import NotificationFilterBar from '@/components/notifications/NotificationFilterBar.vue'
+import NotificationListTable from '@/components/notifications/NotificationListTable.vue'
+import NotificationStatsCards from '@/components/notifications/NotificationStatsCards.vue'
+import {
+  batchMarkNotificationRead,
+  getNotificationDetail,
+  getNotificationStats,
+  getNotificationTimeline,
+  listMyNotifications,
+  markNotificationRead,
+  type NotificationItem,
+  type NotificationTimelineItem,
+} from '@/api/notifications'
 
 const router = useRouter()
+const route = useRoute()
+const activeTab = ref<'all' | 'unread' | 'read' | 'initiated' | 'cc'>('unread')
 const items = ref<NotificationItem[]>([])
-
-function formatDate(value: string) {
-  return value ? new Date(value).toLocaleString() : ''
-}
+const selectedIds = ref<number[]>([])
+const detailVisible = ref(false)
+const currentItem = ref<NotificationItem | null>(null)
+const timelineItems = ref<NotificationTimelineItem[]>([])
+const filters = reactive({
+  keyword: '',
+  message_type: typeof route.query.message_type === 'string' ? route.query.message_type : '',
+  priority: '',
+  project_id: typeof route.query.project_id === 'string' ? Number(route.query.project_id) : undefined as number | undefined,
+})
+const stats = reactive({
+  today_new_count: 0,
+  unread_count: 0,
+  today_reminder_count: 0,
+  read_rate: 0,
+  avg_process_duration_seconds: 0,
+})
 
 async function load() {
-  items.value = (await listMyNotifications()).items
+  const [listResult, statsResult] = await Promise.all([
+    listMyNotifications({
+      tab: activeTab.value,
+      keyword: filters.keyword || undefined,
+      message_type: filters.message_type || undefined,
+      priority: filters.priority || undefined,
+      project_id: filters.project_id,
+      page: 1,
+      page_size: 50,
+    }),
+    getNotificationStats(),
+  ])
+  items.value = listResult.items
+  Object.assign(stats, statsResult)
 }
 
 async function openNotification(item: NotificationItem) {
   if (!item.is_read) {
     await markNotificationRead(item.id)
   }
+  const [detail, timeline] = await Promise.all([
+    getNotificationDetail(item.id),
+    getNotificationTimeline(item.id),
+    load(),
+  ])
+  currentItem.value = { ...detail, is_read: true }
+  timelineItems.value = timeline.items
+  detailVisible.value = true
+}
+
+async function batchRead() {
+  if (!selectedIds.value.length) return
+  await batchMarkNotificationRead(selectedIds.value)
+  ElMessage.success('已批量标记为已读')
+  selectedIds.value = []
   await load()
+}
+
+async function resetFilters() {
+  filters.keyword = ''
+  filters.message_type = ''
+  filters.priority = ''
+  filters.project_id = undefined
+  await load()
+}
+
+function gotoTarget(item: NotificationItem) {
   if (item.link_type === 'PROJECT' && item.link_target_id) {
     router.push(`/projects/${item.link_target_id}/flow`)
     return
@@ -55,33 +143,14 @@ onMounted(load)
 </script>
 
 <style scoped>
-.notification-list {
+.notification-center-page {
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
-.notification-item {
-  padding: 14px;
-  border: 1px solid var(--zq-border);
-  border-radius: 10px;
-  background: #fff;
-}
-
-.notification-item.unread {
-  border-color: #f59e0b;
-  background: #fffaf0;
-}
-
-.notification-head,
-.notification-actions {
+.header-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.notification-item p {
-  margin: 10px 0;
-  white-space: pre-wrap;
-  color: #475569;
 }
 </style>
