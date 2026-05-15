@@ -3,10 +3,14 @@ from fastapi import HTTPException
 from app.models.project import Project
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.services.project_field_normalizer import (
+    normalize_external_project_leader_name,
+    normalize_project_source,
+)
 
 PROJECT_SOURCE_LABELS = {
-    "INTERNAL": "内部项目",
-    "EXTERNAL": "外部项目",
+    "INTERNAL": "评估一部",
+    "EXTERNAL": "评估二部",
 }
 
 STATUS_TO_STEP = {
@@ -82,22 +86,26 @@ def is_system_admin(user: User) -> bool:
 
 
 def get_project_source_display(project_source: str | None) -> str:
-    return PROJECT_SOURCE_LABELS.get(project_source or "INTERNAL", "内部项目")
+    project_source = normalize_project_source(project_source)
+    return PROJECT_SOURCE_LABELS.get(project_source or "INTERNAL", "评估一部")
 
 
 def get_project_leader_display_name(project: Project, leader_name: str | None = None) -> str | None:
-    if project.project_source == "EXTERNAL" and project.external_project_leader_name:
-        return project.external_project_leader_name
+    project_source = normalize_project_source(project.project_source)
+    external_leader = normalize_external_project_leader_name(project.external_project_leader_name)
+    if project_source == "EXTERNAL" and external_leader:
+        return external_leader
     return leader_name
 
 
 def get_flow_steps(project: Project) -> list[str]:
-    return EXTERNAL_FLOW_STEPS if project.project_source == "EXTERNAL" else FLOW_STEPS
+    return EXTERNAL_FLOW_STEPS if normalize_project_source(project.project_source) == "EXTERNAL" else FLOW_STEPS
 
 
 def normalize_project_step(status: str | None, archived: bool, project_source: str = "INTERNAL") -> str:
     if archived:
         return "已归档"
+    project_source = normalize_project_source(project_source)
     step = STATUS_TO_STEP.get(status or "", "项目创建")
     if project_source == "EXTERNAL" and step == "项目组成员":
         return "合同初稿上传"
@@ -112,7 +120,7 @@ def assert_project_creator(project: Project, current_user: User) -> None:
     if project.deleted_at is not None:
         raise HTTPException(status_code=400, detail="项目已删除，不能重复操作")
     if project.business_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="只有项目创建人可以执行该操作")
+        raise HTTPException(status_code=403, detail="只有项目创建人才可以执行该操作")
     if project.archived_at is not None:
         raise HTTPException(status_code=400, detail="项目已归档，不能继续操作")
 

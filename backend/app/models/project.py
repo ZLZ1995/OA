@@ -12,6 +12,7 @@ class Project(Base, TimestampMixin):
     undertaking_unit: Mapped[str] = mapped_column(String(32), nullable=False, default="中勤")
     project_name: Mapped[str] = mapped_column(String(255), nullable=False)
     client_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    evaluation_business_nature: Mapped[str | None] = mapped_column(String(64), nullable=True)
     report_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     valuation_base_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     business_salesman: Mapped[str | None] = mapped_column(String(255), nullable=True)

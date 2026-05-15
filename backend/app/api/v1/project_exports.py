@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
+from app.api.v1.finance import calculate_project_invoice_total
 from app.db.session import get_db
 from app.models.archive import Archive
 from app.models.print_room_record import PrintRoomRecord
@@ -16,9 +17,15 @@ from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
-from app.services.project_flow import get_project_leader_display_name, get_project_source_display
 from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
-from app.api.v1.finance import calculate_project_invoice_total
+from app.services.project_field_normalizer import (
+    normalize_evaluation_business_nature,
+    normalize_external_project_leader_name,
+    normalize_project_source,
+    normalize_report_type,
+    normalize_undertaking_unit,
+)
+from app.services.project_flow import get_project_source_display
 
 router = APIRouter(prefix="/project-exports", tags=["项目清单导出"])
 
@@ -54,6 +61,14 @@ def _project_created_date(project: Project) -> date:
     if isinstance(value, datetime):
         return value.date()
     return value
+
+
+def _display_project_leader_name(project: Project, leader_name: str | None = None) -> str:
+    project_source = normalize_project_source(project.project_source)
+    external_leader = normalize_external_project_leader_name(project.external_project_leader_name)
+    if project_source == "EXTERNAL" and external_leader:
+        return external_leader
+    return leader_name or ""
 
 
 def _col_name(index: int) -> str:
@@ -140,6 +155,7 @@ def _collect_rows(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    evaluation_business_nature: str | None = None,
     include_deleted: bool = False,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
@@ -175,7 +191,12 @@ def _collect_rows(
         second_reviewer_name = _user_name(db, work_order.second_reviewer_id) if work_order else ""
         third_reviewer_name = _user_name(db, work_order.third_reviewer_id) if work_order else ""
         project_created_date = _project_created_date(project)
-        leader_display_name = get_project_leader_display_name(project, leader.real_name if leader else None) or ""
+        leader_display_name = _display_project_leader_name(project, leader.real_name if leader else None)
+        undertaking_unit_value = normalize_undertaking_unit(project.undertaking_unit)
+        report_type_value = normalize_report_type(project.report_type)
+        project_source_value = normalize_project_source(project.project_source)
+        external_leader_value = normalize_external_project_leader_name(project.external_project_leader_name) or ""
+        evaluation_business_nature_value = normalize_evaluation_business_nature(project.evaluation_business_nature) or ""
 
         if not _contains(project.project_code, project_no):
             continue
@@ -185,7 +206,7 @@ def _collect_rows(
             continue
         if not _contains(leader_display_name, project_leader_name):
             continue
-        if undertaking_unit and project.undertaking_unit != undertaking_unit:
+        if undertaking_unit and undertaking_unit_value != normalize_undertaking_unit(undertaking_unit):
             continue
         if signer_name and signer_name.lower() not in signers.lower():
             continue
@@ -197,7 +218,7 @@ def _collect_rows(
             continue
         if project_date_to and project_created_date > project_date_to:
             continue
-        if report_type and project.report_type != report_type:
+        if report_type and report_type_value != normalize_report_type(report_type):
             continue
         if valuation_base_date_from and (project.valuation_base_date is None or project.valuation_base_date < valuation_base_date_from):
             continue
@@ -205,9 +226,11 @@ def _collect_rows(
             continue
         if not _contains(project.business_salesman, business_salesman):
             continue
-        if project_source and project.project_source != project_source:
+        if project_source and project_source_value != normalize_project_source(project_source):
             continue
-        if not _contains(project.external_project_leader_name, external_project_leader_name):
+        if not _contains(external_leader_value, external_project_leader_name):
+            continue
+        if evaluation_business_nature and evaluation_business_nature_value != normalize_evaluation_business_nature(evaluation_business_nature):
             continue
 
         delete_request = db.query(ProjectDeleteRequest).filter(ProjectDeleteRequest.project_id == project.id).first()
@@ -223,13 +246,14 @@ def _collect_rows(
                 "project_progress": "已删除" if project.deleted_at else ("重复项目待删除" if project.duplicate_delete_required else _project_progress(project, work_order)),
                 "report_no": record.paper_report_no if record else "",
                 "project_leader_name": leader_display_name,
-                "undertaking_unit": project.undertaking_unit,
-                "report_type": project.report_type or "",
+                "undertaking_unit": undertaking_unit_value,
+                "evaluation_business_nature": evaluation_business_nature_value,
+                "report_type": report_type_value,
                 "valuation_base_date": _format_date(project.valuation_base_date),
                 "business_salesman": project.business_salesman or "",
-                "project_source": project.project_source,
-                "project_source_display": get_project_source_display(project.project_source),
-                "external_project_leader_name": project.external_project_leader_name or "",
+                "project_source": project_source_value,
+                "project_source_display": get_project_source_display(project_source_value),
+                "external_project_leader_name": external_leader_value,
                 "amount": amount if amount is not None else "",
                 "invoiced_amount": invoiced_amount,
                 "signer_names": signers,
@@ -263,6 +287,7 @@ def list_project_export_rows(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    evaluation_business_nature: str | None = None,
     include_deleted: bool = False,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
@@ -286,6 +311,7 @@ def list_project_export_rows(
             business_salesman,
             project_source,
             external_project_leader_name,
+            evaluation_business_nature,
             include_deleted,
         )
     }
@@ -309,6 +335,7 @@ def export_project_rows_excel(
     business_salesman: str | None = None,
     project_source: str | None = None,
     external_project_leader_name: str | None = None,
+    evaluation_business_nature: str | None = None,
     include_deleted: bool = False,
     db: Session = Depends(get_db),
     _: set[str] = Depends(require_roles("ADMIN")),
@@ -331,6 +358,7 @@ def export_project_rows_excel(
         business_salesman,
         project_source,
         external_project_leader_name,
+        evaluation_business_nature,
         include_deleted,
     )
     data = [[
@@ -341,12 +369,14 @@ def export_project_rows_excel(
         "报告编号",
         "项目负责人姓名",
         "承接单位",
+        "评估业务性质",
         "报告类型",
         "评估基准日",
         "项目承接业务员",
         "项目来源",
-        "外部项目负责人姓名",
+        "文本项目负责人",
         "收费金额",
+        "累计开票金额",
         "签字评估师姓名",
         "一审人员姓名",
         "二审人员姓名",
@@ -363,6 +393,7 @@ def export_project_rows_excel(
                 row["report_no"],
                 row["project_leader_name"],
                 row["undertaking_unit"],
+                row["evaluation_business_nature"],
                 row["report_type"],
                 row["valuation_base_date"],
                 row["business_salesman"],

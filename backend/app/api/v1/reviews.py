@@ -644,7 +644,13 @@ def decide_review(
         operator_user_id=current_user.id,
         remark=payload.comment,
     )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if project:
+        workflow_action = (
+            f"{payload.review_round}_APPROVE"
+            if payload.action == "APPROVE"
+            else f"{payload.review_round}_REJECT_RETURN"
+        )
         send_workflow_notification(
             db,
             project=project,

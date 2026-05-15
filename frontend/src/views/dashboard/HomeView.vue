@@ -11,7 +11,7 @@
     <div class="workbench-grid">
       <el-card class="create-card" shadow="never">
         <template #header>项目创建区</template>
-        <el-form label-width="100px">
+        <el-form label-width="110px">
           <el-form-item label="承接单位">
             <el-select v-model="form.undertaking_unit">
               <el-option label="中勤" value="中勤" />
@@ -29,11 +29,14 @@
           <el-form-item label="客户名称">
             <el-input v-model="form.client_name" />
           </el-form-item>
+          <el-form-item label="评估业务性质">
+            <el-select v-model="form.evaluation_business_nature" style="width: 100%">
+              <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="报告类型">
             <el-select v-model="form.report_type">
-              <el-option label="评估报告" value="评估报告" />
-              <el-option label="估值报告" value="估值报告" />
-              <el-option label="咨询报告" value="咨询报告" />
+              <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
           <el-form-item label="评估基准日">
@@ -50,12 +53,17 @@
           </el-form-item>
           <el-form-item label="项目来源">
             <el-radio-group v-model="form.project_source">
-              <el-radio-button label="INTERNAL">内部</el-radio-button>
-              <el-radio-button label="EXTERNAL">外部</el-radio-button>
+              <el-radio-button label="INTERNAL">评估一部</el-radio-button>
+              <el-radio-button label="EXTERNAL">评估二部</el-radio-button>
             </el-radio-group>
           </el-form-item>
-          <el-form-item v-if="form.project_source === 'EXTERNAL'" label="外部负责人">
-            <el-input v-model="form.external_project_leader_name" />
+          <el-form-item label="项目负责人">
+            <el-input
+              v-if="form.project_source === 'EXTERNAL'"
+              v-model="form.external_project_leader_name"
+              placeholder="请输入项目负责人姓名"
+            />
+            <el-input v-else :model-value="currentUserDisplayName" disabled />
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="onCreate">创建项目</el-button>
@@ -108,7 +116,7 @@
       </el-card>
     </div>
 
-    <el-dialog v-model="editVisible" title="编辑项目" width="520px">
+    <el-dialog v-model="editVisible" title="编辑项目" width="560px">
       <el-form label-width="120px">
         <el-form-item label="承接单位">
           <el-select v-model="editForm.undertaking_unit" style="width: 100%">
@@ -124,11 +132,14 @@
         <el-form-item label="客户名称">
           <el-input v-model="editForm.client_name" />
         </el-form-item>
+        <el-form-item label="评估业务性质">
+          <el-select v-model="editForm.evaluation_business_nature" style="width: 100%">
+            <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="报告类型">
           <el-select v-model="editForm.report_type" style="width: 100%">
-            <el-option label="评估报告" value="评估报告" />
-            <el-option label="估值报告" value="估值报告" />
-            <el-option label="咨询报告" value="咨询报告" />
+            <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
           </el-select>
         </el-form-item>
         <el-form-item label="评估基准日">
@@ -145,12 +156,17 @@
         </el-form-item>
         <el-form-item label="项目来源">
           <el-radio-group v-model="editForm.project_source">
-            <el-radio-button label="INTERNAL">内部</el-radio-button>
-            <el-radio-button label="EXTERNAL">外部</el-radio-button>
+            <el-radio-button label="INTERNAL">评估一部</el-radio-button>
+            <el-radio-button label="EXTERNAL">评估二部</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="editForm.project_source === 'EXTERNAL'" label="外部负责人">
-          <el-input v-model="editForm.external_project_leader_name" />
+        <el-form-item label="项目负责人">
+          <el-input
+            v-if="editForm.project_source === 'EXTERNAL'"
+            v-model="editForm.external_project_leader_name"
+            placeholder="请输入项目负责人姓名"
+          />
+          <el-input v-else :model-value="currentUserDisplayName" disabled />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -198,12 +214,25 @@ import {
   getProject,
   requestProjectTermination,
   updateProject,
+  type EvaluationBusinessNature,
   type ProjectItem,
+  type ProjectSource,
   type ProjectUndertakingUnit,
   type ReportType,
-  type ProjectSource,
 } from '@/api/projects'
 import { useAuthStore } from '@/store/auth'
+
+const evaluationBusinessOptions: EvaluationBusinessNature[] = [
+  '国有资产评估业务',
+  '境外资产评估业务',
+  '证券期货评估业务',
+  '司法评估业务',
+  '金融资产评估业务',
+  '珠宝首饰评估业务',
+  '其他',
+]
+
+const reportTypeOptions: ReportType[] = ['评估报告', '估值报告', '咨询报告', '复核报告', '追溯性报告']
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -218,11 +247,14 @@ const deleteTargetProjectId = ref<number>()
 const deleteTargetProjectName = ref('')
 const deleteAdminOptions = ref<UserItem[]>([])
 
+const currentUserDisplayName = auth.user?.real_name || auth.user?.username || '当前创建人'
+
 const form = reactive({
   undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_code: '',
   project_name: '',
   client_name: '',
+  evaluation_business_nature: '国有资产评估业务' as EvaluationBusinessNature,
   report_type: '评估报告' as ReportType,
   valuation_base_date: '',
   business_salesman: '',
@@ -234,6 +266,7 @@ const editForm = reactive({
   undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_name: '',
   client_name: '',
+  evaluation_business_nature: '国有资产评估业务' as EvaluationBusinessNature,
   report_type: '评估报告' as ReportType,
   valuation_base_date: '',
   business_salesman: '',
@@ -260,7 +293,7 @@ async function onCreate() {
     return
   }
   if (form.project_source === 'EXTERNAL' && !form.external_project_leader_name.trim()) {
-    ElMessage.warning('外部项目必须填写外部项目负责人姓名')
+    ElMessage.warning('评估二部项目必须填写项目负责人')
     return
   }
 
@@ -268,6 +301,7 @@ async function onCreate() {
     undertaking_unit: form.undertaking_unit,
     project_name: form.project_name,
     client_name: form.client_name,
+    evaluation_business_nature: form.evaluation_business_nature,
     report_type: form.report_type,
     valuation_base_date: form.valuation_base_date || undefined,
     business_salesman: form.business_salesman.trim(),
@@ -279,6 +313,7 @@ async function onCreate() {
   form.project_code = created.project_code
   form.project_name = ''
   form.client_name = ''
+  form.evaluation_business_nature = '国有资产评估业务'
   form.business_salesman = ''
   form.valuation_base_date = ''
   form.project_source = 'INTERNAL'
@@ -335,10 +370,6 @@ async function remove(row: WorkbenchProjectItem) {
     ElMessage.warning('已归档项目不可删除')
     return
   }
-  if (['报告出具', '报告邮寄', '发票开具', '报告归档'].includes(row.current_step)) {
-    await openDeleteDialog(row.id, row.project_name)
-    return
-  }
   await deleteProject(row.id)
   ElMessage.success('项目已删除')
   await load()
@@ -382,6 +413,7 @@ function fillEditForm(project: ProjectItem) {
   editForm.undertaking_unit = project.undertaking_unit
   editForm.project_name = project.project_name
   editForm.client_name = project.client_name
+  editForm.evaluation_business_nature = (project.evaluation_business_nature || '国有资产评估业务') as EvaluationBusinessNature
   editForm.report_type = project.report_type
   editForm.valuation_base_date = project.valuation_base_date || ''
   editForm.business_salesman = project.business_salesman || ''
@@ -400,7 +432,7 @@ async function saveProject() {
     return
   }
   if (editForm.project_source === 'EXTERNAL' && !editForm.external_project_leader_name.trim()) {
-    ElMessage.warning('外部项目必须填写外部项目负责人姓名')
+    ElMessage.warning('评估二部项目必须填写项目负责人')
     return
   }
 
@@ -410,13 +442,12 @@ async function saveProject() {
       undertaking_unit: editForm.undertaking_unit,
       project_name: editForm.project_name.trim(),
       client_name: editForm.client_name.trim(),
+      evaluation_business_nature: editForm.evaluation_business_nature,
       report_type: editForm.report_type,
       valuation_base_date: editForm.valuation_base_date || undefined,
       business_salesman: editForm.business_salesman.trim(),
       project_source: editForm.project_source,
-      external_project_leader_name: editForm.project_source === 'EXTERNAL'
-        ? editForm.external_project_leader_name.trim()
-        : null,
+      external_project_leader_name: editForm.project_source === 'EXTERNAL' ? editForm.external_project_leader_name.trim() : null,
     })
     ElMessage.success('项目已更新')
     editVisible.value = false

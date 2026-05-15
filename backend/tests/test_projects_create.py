@@ -74,6 +74,7 @@ def test_complete_project_members_requires_leader_and_advances_work_order() -> N
     complete_project_members(
         payload=ProjectMemberCompleteRequest(project_id=project.id),
         db=db,
+        current_user=user,
         _={"PROJECT_LEADER"},
     )
 

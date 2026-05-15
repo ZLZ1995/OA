@@ -87,13 +87,6 @@
                 <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
               </el-upload>
               <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
-              <el-tag
-                v-if="records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT' && item.auto_carried_from_previous)"
-                type="success"
-                effect="plain"
-              >
-                来源于上一轮自动流转
-              </el-tag>
             </div>
             <div class="file-list" v-if="submitFiles.length">
               <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
@@ -766,21 +759,6 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.previous-review-card {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid var(--zq-border-soft);
-  border-radius: 8px;
-  background: #f8fbff;
-  color: #334155;
-}
-
-.previous-review-meta {
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: #64748b;
 }
 
 @media (max-width: 900px) {

@@ -1,4 +1,5 @@
 import http from './http'
+import type { EvaluationBusinessNature } from './projects'
 
 export interface ProjectExportFilters {
   project_no?: string
@@ -17,6 +18,7 @@ export interface ProjectExportFilters {
   business_salesman?: string
   project_source?: 'INTERNAL' | 'EXTERNAL'
   external_project_leader_name?: string
+  evaluation_business_nature?: EvaluationBusinessNature
   include_deleted?: boolean
 }
 
@@ -29,6 +31,7 @@ export interface ProjectExportItem {
   report_no: string
   project_leader_name: string
   undertaking_unit: string
+  evaluation_business_nature: string
   report_type: string
   valuation_base_date: string
   business_salesman: string
@@ -60,7 +63,7 @@ export async function listProjectExportRows(filters: ProjectExportFilters) {
 export async function exportProjectRowsExcel(filters: ProjectExportFilters) {
   const { data } = await http.get('/project-exports/excel', {
     params: cleanFilters(filters),
-    responseType: 'blob'
+    responseType: 'blob',
   })
   const url = window.URL.createObjectURL(data)
   const link = document.createElement('a')
