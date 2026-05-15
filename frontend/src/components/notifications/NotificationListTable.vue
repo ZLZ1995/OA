@@ -51,9 +51,12 @@
         </el-tag>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="120">
+    <el-table-column label="操作" width="180">
       <template #default="{ row }">
         <el-button link type="primary" @click="$emit('open', row)">查看</el-button>
+        <el-button v-if="canEnterHandle(row)" link type="success" @click="$emit('enter-handle', row)">
+          进入办理
+        </el-button>
       </template>
     </el-table-column>
   </el-table>
@@ -67,6 +70,7 @@ defineProps<{ items: NotificationItem[] }>()
 const emit = defineEmits<{
   (event: 'selection-change', value: number[]): void
   (event: 'open', value: NotificationItem): void
+  (event: 'enter-handle', value: NotificationItem): void
 }>()
 
 function formatDate(value: string) {
@@ -107,6 +111,10 @@ function processTagType(processStatus: string, isRead: boolean) {
   if (processStatus === 'PROCESSED') return 'success'
   if (processStatus === 'READ' || isRead) return 'warning'
   return 'danger'
+}
+
+function canEnterHandle(row: NotificationItem) {
+  return Boolean(row.project_id) && row.process_status !== 'PROCESSED'
 }
 
 function onSelectionChange(rows: NotificationItem[]) {
