@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import NotificationDetailDrawer from '@/components/notifications/NotificationDetailDrawer.vue'
@@ -57,9 +57,11 @@ import {
   type NotificationItem,
   type NotificationTimelineItem,
 } from '@/api/notifications'
+import { useNotificationStore } from '@/store/notification'
 
 const router = useRouter()
 const route = useRoute()
+const notifications = useNotificationStore()
 const activeTab = ref<'all' | 'unread' | 'read' | 'initiated' | 'cc'>('unread')
 const items = ref<NotificationItem[]>([])
 const selectedIds = ref<number[]>([])
@@ -78,7 +80,11 @@ const stats = reactive({
   today_reminder_count: 0,
   read_rate: 0,
   avg_process_duration_seconds: 0,
+  latest_notification_id: null as number | null,
+  server_time: '',
 })
+
+let stopRefreshWatch: (() => void) | null = null
 
 async function load() {
   const [listResult, statsResult] = await Promise.all([
@@ -100,6 +106,7 @@ async function load() {
 async function openNotification(item: NotificationItem) {
   if (!item.is_read) {
     await markNotificationRead(item.id)
+    notifications.applyReadState([item.id])
   }
   const [detail, timeline] = await Promise.all([
     getNotificationDetail(item.id),
@@ -113,7 +120,9 @@ async function openNotification(item: NotificationItem) {
 
 async function batchRead() {
   if (!selectedIds.value.length) return
-  await batchMarkNotificationRead(selectedIds.value)
+  const readIds = [...selectedIds.value]
+  await batchMarkNotificationRead(readIds)
+  notifications.applyReadState(readIds)
   ElMessage.success('已批量标记为已读')
   selectedIds.value = []
   await load()
@@ -139,7 +148,27 @@ function gotoTarget(item: NotificationItem) {
   ElMessage.info('该消息暂无可跳转目标')
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  stopRefreshWatch = watch(
+    () => notifications.listRefreshToken,
+    async () => {
+      await load()
+    },
+  )
+})
+
+watch(
+  () => notifications.stats,
+  (value) => {
+    Object.assign(stats, value)
+  },
+  { deep: true },
+)
+
+onUnmounted(() => {
+  stopRefreshWatch?.()
+})
 </script>
 
 <style scoped>

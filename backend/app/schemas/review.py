@@ -33,6 +33,10 @@ class ReviewRecordResponse(BaseModel):
     action: str
     comment: str | None
     acted_at: datetime
+    source_record_id: int | None = None
+    source_round_comment: str | None = None
+    source_round_reviewer_name: str | None = None
+    auto_carried_from_previous: bool = False
 
 
 class ReviewRecordListResponse(BaseModel):

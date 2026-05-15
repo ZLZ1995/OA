@@ -122,6 +122,19 @@
     <template v-if="canReview">
       <el-divider>审核处理</el-divider>
       <el-form label-width="120px">
+        <el-form-item
+          v-if="records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT' && item.source_round_comment)"
+          label="上一轮审核意见"
+        >
+          <div class="previous-review-card">
+            <div class="previous-review-meta">
+              {{ records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT')?.source_round_reviewer_name || '上一轮审核人' }}
+            </div>
+            <div>
+              {{ records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT')?.source_round_comment }}
+            </div>
+          </div>
+        </el-form-item>
         <el-form-item label="审核意见">
           <el-input v-model="reviewComment" type="textarea" :rows="3" placeholder="请输入审核意见" />
         </el-form-item>
@@ -248,6 +261,9 @@ interface ReviewRow {
   comment: string
   acted_at: string
   files: WorkOrderFileItem[]
+  sourceRoundComment?: string
+  sourceRoundReviewerName?: string
+  autoCarriedFromPrevious?: boolean
 }
 
 const auth = useAuthStore()
@@ -359,7 +375,10 @@ const reviewRows = computed<ReviewRow[]>(() => {
     roundLabel: recordRoundLabel(record),
     comment: recordCommentText(record),
     acted_at: record.acted_at,
-    files: filesForRecord(record)
+    files: filesForRecord(record),
+    sourceRoundComment: record.source_round_comment || undefined,
+    sourceRoundReviewerName: record.source_round_reviewer_name || undefined,
+    autoCarriedFromPrevious: Boolean(record.auto_carried_from_previous)
   }))
   const recordedReplyRounds = new Set(records.value.filter(record => record.action === 'SUBMIT').map(record => record.review_round))
   for (const file of files.value.filter(item => item.file_category === 'REVIEW_REPLY')) {
@@ -383,10 +402,10 @@ const REVIEW_STATUS_TEXT: Record<string, string> = {
   WAIT_FIRST_REVIEW_SUBMIT: '待上传文件',
   FIRST_REVIEWING: '一审审核中',
   FIRST_REVIEW_REJECTED: '一审意见已返回等待回复',
-  WAIT_SECOND_REVIEW_SUBMIT: '一审已通过，待提交二审',
+  WAIT_SECOND_REVIEW_SUBMIT: '二审待办',
   SECOND_REVIEWING: '二审审核中',
   SECOND_REVIEW_REJECTED: '二审意见已返回等待回复',
-  WAIT_THIRD_REVIEW_SUBMIT: '二审已通过，待提交三审',
+  WAIT_THIRD_REVIEW_SUBMIT: '三审待办',
   THIRD_REVIEWING: '三审审核中',
   THIRD_REVIEW_REJECTED: '三审意见已返回等待回复',
   THIRD_APPROVED_WAIT_PRINTROOM: '三审已通过，待补充正式报告与合同扫描件'

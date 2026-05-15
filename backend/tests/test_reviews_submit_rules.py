@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.models.review_record import ReviewRecord
+from app.models.work_order_file import WorkOrderFile
 from app.schemas.review import ReviewAssigneeChangeRequest, ReviewDecisionRequest, ReviewSubmitRequest
 
 def _build_session() -> Session:
@@ -357,6 +358,63 @@ def test_first_review_approve_moves_to_second_submit() -> None:
     assert result.comment == "审核通过"
     assert work_order.current_status == "WAIT_SECOND_REVIEW_SUBMIT"
     assert work_order.current_handler_user_id == work_order.project_leader_id
+
+
+def test_first_review_approve_auto_advances_to_second_when_project_party_uploaded_report() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    second_reviewer = User(username="reviewer_second", password_hash="x", real_name="ReviewerSecond", is_active=True)
+    db.add(second_reviewer)
+    db.flush()
+    second_role = Role(code="SECOND_REVIEWER", name="二审", description="", is_system_fixed=True)
+    db.add(second_role)
+    db.flush()
+    db.add(UserRole(user_id=second_reviewer.id, role_id=second_role.id))
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    work_order.second_reviewer_id = second_reviewer.id
+    db.add(
+        WorkOrderFile(
+            work_order_id=work_order.id,
+            file_category="REPORT_ZIP",
+            business_stage="REVIEW_FIRST",
+            version_no=1,
+            is_current=True,
+            origin_file_name="report-v1.zip",
+            storage_key="report-v1.zip",
+            file_size=100,
+            uploaded_by=leader.id,
+            uploaded_at=work_order.created_at,
+        )
+    )
+    db.commit()
+
+    decide_review(
+        payload=ReviewDecisionRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            action="APPROVE",
+        ),
+        db=db,
+        current_user=reviewer,
+        _={"FIRST_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    latest_submit = db.query(ReviewRecord).filter(ReviewRecord.work_order_id == work_order.id, ReviewRecord.action == "SUBMIT", ReviewRecord.review_round == "SECOND").first()
+    cloned_file = db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order.id,
+        WorkOrderFile.business_stage == "REVIEW_SECOND",
+        WorkOrderFile.file_category == "REPORT_ZIP",
+    ).first()
+    assert work_order.current_status == "SECOND_REVIEWING"
+    assert work_order.current_handler_user_id == second_reviewer.id
+    assert latest_submit is not None
+    assert cloned_file is not None
+    assert cloned_file.origin_file_name == "report-v1.zip"
 
 
 def test_third_review_approve_keeps_third_reviewer_as_handler() -> None:

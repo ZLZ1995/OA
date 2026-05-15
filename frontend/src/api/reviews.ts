@@ -9,6 +9,10 @@ export interface ReviewRecordItem {
   action: 'SUBMIT' | 'APPROVE' | 'REJECT_RETURN' | 'CHANGE_REVIEWER'
   comment?: string
   acted_at: string
+  source_record_id?: number | null
+  source_round_comment?: string | null
+  source_round_reviewer_name?: string | null
+  auto_carried_from_previous?: boolean
 }
 
 export async function submitReview(payload: {
