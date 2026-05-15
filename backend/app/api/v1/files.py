@@ -58,7 +58,7 @@ def _ensure_project_contract_operator(db: Session, work_order: WorkOrder, curren
         return
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if project and project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=403, detail="外部项目仅项目创建人或负责人可操作合同")
+        raise HTTPException(status_code=403, detail="评估二部项目仅项目创建人或负责人可操作合同")
     is_member = db.query(ProjectMember.id).filter(
         ProjectMember.project_id == work_order.project_id,
         ProjectMember.user_id == current_user.id,

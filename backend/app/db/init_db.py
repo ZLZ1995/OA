@@ -131,6 +131,8 @@ def ensure_project_columns(db: Session) -> None:
     existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('projects')")).fetchall()}
     if "undertaking_unit" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL"))
+    if "evaluation_business_nature" not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN evaluation_business_nature VARCHAR(64) NULL"))
     if "report_type" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN report_type VARCHAR(32) NULL"))
     if "valuation_base_date" not in existing_columns:

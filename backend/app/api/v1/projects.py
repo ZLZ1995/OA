@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.api.v1.contract_reviews import get_contract_review_status_display
+from app.api.v1.finance import calculate_project_invoice_total
 from app.db.session import get_db
 from app.models.archive import Archive
 from app.models.contract import Contract
@@ -25,6 +26,15 @@ from app.models.work_order_file import WorkOrderFile
 from app.schemas.contract_review import ContractReviewRecordResponse
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectResponse, ProjectUpdate
 from app.schemas.project_flow import ProjectFlowProject, ProjectFlowResponse, ProjectUpdateLogItem
+from app.services.project_conflicts import get_unresolved_conflicts, mark_project_duplicate_deleted, upsert_conflict_snapshot_and_detect
+from app.services.project_delete_service import can_project_owner_delete_direct, delete_project_related_data
+from app.services.project_field_normalizer import (
+    normalize_evaluation_business_nature,
+    normalize_external_project_leader_name,
+    normalize_project_source,
+    normalize_report_type,
+    normalize_undertaking_unit,
+)
 from app.services.project_flow import (
     build_todo_action,
     get_flow_steps,
@@ -34,11 +44,8 @@ from app.services.project_flow import (
     get_user_role_in_project,
     normalize_project_step,
 )
-from app.services.workflow_log_service import create_workflow_log
-from app.services.project_delete_service import can_project_owner_delete_direct, delete_project_related_data
-from app.services.project_conflicts import get_unresolved_conflicts, mark_project_duplicate_deleted, upsert_conflict_snapshot_and_detect
-from app.api.v1.finance import calculate_project_invoice_total
 from app.services.reminder_policy import evaluate_reminder_eligibility
+from app.services.workflow_log_service import create_workflow_log
 from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
 
@@ -143,27 +150,39 @@ def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrd
     }
 
 
+def _display_project_leader_name(project: Project, leader_name: str | None = None) -> str | None:
+    project_source = normalize_project_source(project.project_source)
+    external_leader = normalize_external_project_leader_name(project.external_project_leader_name)
+    if project_source == "EXTERNAL" and external_leader:
+        return external_leader
+    return leader_name
+
+
 def _serialize_project(db: Session, project: Project) -> ProjectResponse:
     work_order = _get_latest_work_order(db, project.id)
     leader_name = db.query(User.real_name).filter(User.id == project.project_leader_id).scalar()
     latest_status = work_order.current_status if work_order else None
-    status_cn = _build_status_display(project, latest_status)
+    status_text = _build_status_display(project, latest_status)
     readonly_fields = _get_readonly_flow_fields(db, project, work_order)
     contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
     history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
+    display_project_leader_name = _display_project_leader_name(project, leader_name)
+    project_source = normalize_project_source(project.project_source)
+    external_project_leader_name = normalize_external_project_leader_name(project.external_project_leader_name)
 
     project_payload = {
         "id": project.id,
         "project_code": project.project_code,
-        "undertaking_unit": project.undertaking_unit,
+        "undertaking_unit": normalize_undertaking_unit(project.undertaking_unit),
         "project_name": project.project_name,
         "client_name": project.client_name,
-        "report_type": project.report_type or "评估报告",
+        "evaluation_business_nature": normalize_evaluation_business_nature(project.evaluation_business_nature),
+        "report_type": normalize_report_type(project.report_type),
         "valuation_base_date": project.valuation_base_date,
         "business_salesman": project.business_salesman or "",
         "project_amount": project.project_amount,
-        "project_source": project.project_source or "INTERNAL",
-        "external_project_leader_name": project.external_project_leader_name,
+        "project_source": project_source,
+        "external_project_leader_name": external_project_leader_name,
         "business_user_id": project.business_user_id,
         "project_leader_id": project.project_leader_id,
         "department_id": project.department_id,
@@ -181,15 +200,26 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
         "deleted_at": project.deleted_at,
     }
     data = ProjectResponse.model_validate(project_payload).model_dump()
-    for key in ["status", "status_display", "project_source_display", "project_leader_display_name", "contract_review_status", "contract_review_status_display", "contract_no", "report_no"]:
+    for key in [
+        "status",
+        "status_display",
+        "project_source_display",
+        "project_leader_display_name",
+        "display_project_leader_name",
+        "contract_review_status",
+        "contract_review_status_display",
+        "contract_no",
+        "report_no",
+    ]:
         data.pop(key, None)
 
     return ProjectResponse(
         **data,
-        status=status_cn,
-        status_display=status_cn,
-        project_source_display=get_project_source_display(project.project_source),
+        status=status_text,
+        status_display=status_text,
+        project_source_display=get_project_source_display(project_source),
         project_leader_display_name=get_project_leader_display_name(project, leader_name),
+        display_project_leader_name=display_project_leader_name,
         report_no=readonly_fields.get("report_no"),
         contract_no=readonly_fields.get("contract_no"),
         contract_review_status=(
@@ -218,6 +248,7 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
 
 
 def _generate_project_code(db: Session, undertaking_unit: str) -> str:
+    undertaking_unit = normalize_undertaking_unit(undertaking_unit)
     unit_code = UNIT_CODE_MAP.get(undertaking_unit)
     if not unit_code:
         raise HTTPException(status_code=400, detail="不支持的项目承接单位")
@@ -264,6 +295,18 @@ def _record_project_update_log(db: Session, project: Project, current_user: User
     )
 
 
+def _prepare_project_payload(payload: ProjectCreate, current_user: User) -> dict:
+    data = payload.model_dump(exclude={"project_code"})
+    data["undertaking_unit"] = normalize_undertaking_unit(data.get("undertaking_unit"))
+    data["evaluation_business_nature"] = normalize_evaluation_business_nature(data.get("evaluation_business_nature"))
+    data["report_type"] = normalize_report_type(data.get("report_type"))
+    data["project_source"] = normalize_project_source(data.get("project_source"))
+    data["external_project_leader_name"] = normalize_external_project_leader_name(data.get("external_project_leader_name"))
+    if data["project_source"] == "EXTERNAL":
+        data["project_leader_id"] = current_user.id
+    return data
+
+
 @router.get("", response_model=ProjectListResponse)
 def list_projects(
     db: Session = Depends(get_db),
@@ -307,7 +350,7 @@ def create_project(
     if exists:
         raise HTTPException(status_code=400, detail="项目编号已存在")
 
-    row = Project(**payload.model_dump(exclude={"project_code"}), project_code=project_code)
+    row = Project(**_prepare_project_payload(payload, current_user), project_code=project_code)
     db.add(row)
     db.flush()
 
@@ -364,10 +407,20 @@ def update_project(
         raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可编辑项目基本信息")
 
     data = payload.model_dump(exclude_unset=True)
-    project_source = data.get("project_source", row.project_source)
-    external_leader = data.get("external_project_leader_name", row.external_project_leader_name)
+    if "undertaking_unit" in data:
+        data["undertaking_unit"] = normalize_undertaking_unit(data["undertaking_unit"])
+    if "evaluation_business_nature" in data:
+        data["evaluation_business_nature"] = normalize_evaluation_business_nature(data["evaluation_business_nature"])
+    if "report_type" in data:
+        data["report_type"] = normalize_report_type(data["report_type"])
+    if "project_source" in data:
+        data["project_source"] = normalize_project_source(data["project_source"])
+    if "external_project_leader_name" in data:
+        data["external_project_leader_name"] = normalize_external_project_leader_name(data["external_project_leader_name"])
+    project_source = data.get("project_source", normalize_project_source(row.project_source))
+    external_leader = data.get("external_project_leader_name", normalize_external_project_leader_name(row.external_project_leader_name))
     if project_source == "EXTERNAL" and not external_leader:
-        raise HTTPException(status_code=400, detail="外部项目必须填写外部项目负责人姓名")
+        raise HTTPException(status_code=400, detail="评估二部项目必须填写项目负责人")
     if project_source != "EXTERNAL":
         data["external_project_leader_name"] = None
 
@@ -375,6 +428,7 @@ def update_project(
         "undertaking_unit": row.undertaking_unit,
         "project_name": row.project_name,
         "client_name": row.client_name,
+        "evaluation_business_nature": row.evaluation_business_nature,
         "report_type": row.report_type,
         "valuation_base_date": row.valuation_base_date.isoformat() if row.valuation_base_date else None,
         "business_salesman": row.business_salesman,
@@ -390,6 +444,7 @@ def update_project(
         "undertaking_unit": row.undertaking_unit,
         "project_name": row.project_name,
         "client_name": row.client_name,
+        "evaluation_business_nature": row.evaluation_business_nature,
         "report_type": row.report_type,
         "valuation_base_date": row.valuation_base_date.isoformat() if row.valuation_base_date else None,
         "business_salesman": row.business_salesman,
@@ -624,22 +679,26 @@ def get_project_flow(
     elif project.project_amount is None or project.project_amount < 0 or project.valuation_base_date is None:
         review_lock_reason = "请先在项目基本信息中填写项目金额和评估基准日"
 
+    display_project_leader_name = _display_project_leader_name(project, leader_name)
+
     return ProjectFlowResponse(
         project=ProjectFlowProject(
             id=project.id,
             project_no=project.project_code,
             project_name=project.project_name,
             client_name=project.client_name,
-            undertaking_unit=project.undertaking_unit,
-            report_type=project.report_type,
+            undertaking_unit=normalize_undertaking_unit(project.undertaking_unit),
+            evaluation_business_nature=normalize_evaluation_business_nature(project.evaluation_business_nature),
+            report_type=normalize_report_type(project.report_type),
             valuation_base_date=project.valuation_base_date.strftime("%Y-%m-%d") if project.valuation_base_date else None,
             business_salesman=project.business_salesman,
             project_amount=project.project_amount,
             invoiced_amount=calculate_project_invoice_total(db, project.id),
-            project_source=project.project_source,
+            project_source=normalize_project_source(project.project_source),
             project_source_display=get_project_source_display(project.project_source),
-            external_project_leader_name=project.external_project_leader_name,
+            external_project_leader_name=normalize_external_project_leader_name(project.external_project_leader_name),
             project_leader_display_name=get_project_leader_display_name(project, leader_name),
+            display_project_leader_name=display_project_leader_name,
             contract_no=readonly_fields.get("contract_no"),
             report_no=readonly_fields.get("report_no"),
             first_reviewer_name=readonly_fields.get("first_reviewer_name"),
@@ -666,8 +725,7 @@ def get_project_flow(
                 WorkOrderStatus.CONTRACT_REVIEWING.value,
                 WorkOrderStatus.CONTRACT_REJECTED.value,
                 WorkOrderStatus.CONTRACT_APPROVED.value,
-            }
-            else history_contract_status
+            } else history_contract_status
         ),
         contract_review_status_display=(
             get_contract_review_status_display(work_order.current_status if work_order else None)

@@ -1,7 +1,15 @@
 import http from './http'
 
 export type ProjectUndertakingUnit = '中勤' | '中立国际' | '中众' | '其他'
-export type ReportType = '评估报告' | '估值报告' | '咨询报告'
+export type EvaluationBusinessNature =
+  | '国有资产评估业务'
+  | '境外资产评估业务'
+  | '证券期货评估业务'
+  | '司法评估业务'
+  | '金融资产评估业务'
+  | '珠宝首饰评估业务'
+  | '其他'
+export type ReportType = '评估报告' | '估值报告' | '咨询报告' | '复核报告' | '追溯性报告'
 export type ProjectSource = 'INTERNAL' | 'EXTERNAL'
 
 export interface ProjectItem {
@@ -10,6 +18,7 @@ export interface ProjectItem {
   undertaking_unit: ProjectUndertakingUnit
   project_name: string
   client_name: string
+  evaluation_business_nature?: EvaluationBusinessNature | null
   report_type: ReportType
   valuation_base_date?: string | null
   business_salesman: string
@@ -19,6 +28,7 @@ export interface ProjectItem {
   business_user_id: number
   project_leader_id: number
   project_leader_display_name?: string | null
+  display_project_leader_name?: string | null
   status: string
   status_display: string
   contract_review_status?: string | null
@@ -33,6 +43,7 @@ export interface ProjectUpdatePayload {
   project_name?: string
   client_name?: string
   undertaking_unit?: ProjectUndertakingUnit
+  evaluation_business_nature?: EvaluationBusinessNature | null
   report_type?: ReportType
   valuation_base_date?: string | null
   business_salesman?: string
@@ -46,6 +57,7 @@ export interface ProjectCreatePayload {
   undertaking_unit: ProjectUndertakingUnit
   project_name: string
   client_name: string
+  evaluation_business_nature?: EvaluationBusinessNature | null
   report_type: ReportType
   valuation_base_date?: string | null
   business_salesman: string
