@@ -27,6 +27,7 @@
         :items="items"
         @selection-change="selectedIds = $event"
         @open="openNotification"
+        @enter-handle="enterHandle"
       />
     </el-card>
 
@@ -116,6 +117,22 @@ async function openNotification(item: NotificationItem) {
   currentItem.value = { ...detail, is_read: true }
   timelineItems.value = timeline.items
   detailVisible.value = true
+}
+
+async function enterHandle(item: NotificationItem) {
+  if (item.process_status === 'PROCESSED') {
+    ElMessage.warning('该消息对应环节已处理')
+    await load()
+    return
+  }
+  if (!item.project_id) {
+    return
+  }
+  if (!item.is_read) {
+    await markNotificationRead(item.id)
+    notifications.applyReadState([item.id])
+  }
+  await router.push(`/projects/${item.project_id}/flow`)
 }
 
 async function batchRead() {
