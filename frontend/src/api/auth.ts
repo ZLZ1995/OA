@@ -62,6 +62,11 @@ export async function login(payload: LoginPayload) {
   return ensureTokenResponse(data)
 }
 
+export async function logout() {
+  const { data } = await http.post('/auth/logout')
+  return data as { message: string }
+}
+
 export async function me() {
   const { data } = await http.get('/auth/me')
   return ensureCurrentUserResponse(data)

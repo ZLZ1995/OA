@@ -1,7 +1,13 @@
 <template>
   <div class="desktop-layout" :class="{ 'has-workflow': showWorkflow }">
     <aside class="nav"><MainMenu /></aside>
-    <main class="main"><router-view /></main>
+    <section class="content-shell">
+      <header class="content-topbar">
+        <div class="content-topbar__spacer"></div>
+        <UserAccountBar />
+      </header>
+      <main class="main"><router-view /></main>
+    </section>
     <aside class="workflow" v-if="showWorkflow"><WorkflowGuide :active-step="2" /></aside>
   </div>
 </template>
@@ -10,6 +16,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import MainMenu from '@/components/common/MainMenu.vue'
+import UserAccountBar from '@/components/common/UserAccountBar.vue'
 import WorkflowGuide from '@/components/workflow/WorkflowGuide.vue'
 
 const route = useRoute()
