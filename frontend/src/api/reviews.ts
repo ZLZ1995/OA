@@ -13,6 +13,8 @@ export interface ReviewRecordItem {
   source_round_comment?: string | null
   source_round_reviewer_name?: string | null
   auto_carried_from_previous?: boolean
+  transferred_to_next?: boolean
+  transferred_to_round?: 'FIRST' | 'SECOND' | 'THIRD' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND' | 'EXTERNAL_THIRD' | null
 }
 
 export async function submitReview(payload: {

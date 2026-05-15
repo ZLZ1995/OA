@@ -138,22 +138,26 @@ def _to_review_record_response(db: Session, record: ReviewRecord) -> ReviewRecor
     reviewer_name = db.query(User.real_name).filter(User.id == record.reviewer_user_id).scalar()
     data = ReviewRecordResponse.model_validate(record, from_attributes=True)
     data.reviewer_name = reviewer_name
-    data.comment = _strip_auto_comment_marker(record.comment)
+    data.comment = _strip_internal_markers(record.comment)
     source_record_id = _parse_source_record_id(record.comment)
     if source_record_id:
         source_record = db.query(ReviewRecord).filter(ReviewRecord.id == source_record_id).first()
         if source_record:
             data.source_record_id = source_record.id
-            data.source_round_comment = _strip_auto_comment_marker(source_record.comment)
+            data.source_round_comment = _strip_internal_markers(source_record.comment)
             data.source_round_reviewer_name = db.query(User.real_name).filter(User.id == source_record.reviewer_user_id).scalar()
             data.auto_carried_from_previous = True
+    transferred_to_round = _parse_transferred_to_round(record.comment)
+    if transferred_to_round:
+        data.transferred_to_next = True
+        data.transferred_to_round = transferred_to_round
     return data
 
 
 def _parse_source_record_id(comment: str | None) -> int | None:
     if not comment:
         return None
-    marker = "[AUTO_FROM_RECORD:"
+    marker = AUTO_FROM_RECORD_MARKER
     if marker not in comment:
         return None
     try:
@@ -163,15 +167,32 @@ def _parse_source_record_id(comment: str | None) -> int | None:
         return None
 
 
-def _strip_auto_comment_marker(comment: str | None) -> str | None:
+def _parse_transferred_to_round(comment: str | None) -> str | None:
+    if not comment:
+        return None
+    marker = PASSED_TO_MARKER
+    if marker not in comment:
+        return None
+    try:
+        return comment.split(marker, 1)[1].split("]", 1)[0]
+    except (IndexError, ValueError):
+        return None
+
+
+def _strip_internal_markers(comment: str | None) -> str | None:
     if not comment:
         return comment
-    marker = "[AUTO_FROM_RECORD:"
-    if marker not in comment:
-        return comment
-    prefix, _ = comment.split(marker, 1)
-    value = prefix.strip()
+    value = comment
+    for marker in (AUTO_FROM_RECORD_MARKER, PASSED_TO_MARKER):
+        if marker in value:
+            value = value.split(marker, 1)[0]
+    value = value.strip()
     return value or None
+
+
+def _append_passed_to_marker(comment: str | None, next_round: str) -> str:
+    base = _strip_internal_markers(comment) or "审核通过"
+    return f"{base} {PASSED_TO_MARKER}{next_round}]"
 
 
 def _latest_submit_record(db: Session, work_order_id: int, review_round: str) -> ReviewRecord | None:
@@ -188,21 +209,17 @@ def _latest_submit_record(db: Session, work_order_id: int, review_round: str) ->
 
 
 def _latest_round_files(db: Session, work_order_id: int, review_round: str, file_category: str) -> list[WorkOrderFile]:
-    rows = (
+    return (
         db.query(WorkOrderFile)
         .filter(
             WorkOrderFile.work_order_id == work_order_id,
             WorkOrderFile.business_stage == f"REVIEW_{review_round}",
             WorkOrderFile.file_category == file_category,
+            WorkOrderFile.is_current.is_(True),
         )
         .order_by(WorkOrderFile.version_no.desc(), WorkOrderFile.id.desc())
         .all()
     )
-    latest_by_name: dict[str, WorkOrderFile] = {}
-    for row in rows:
-        if row.origin_file_name not in latest_by_name:
-            latest_by_name[row.origin_file_name] = row
-    return list(latest_by_name.values())
 
 
 def _clone_files_to_round(
@@ -252,6 +269,53 @@ def _clone_files_to_round(
                 )
             )
             next_version += 1
+
+
+def _clone_opinion_files_to_round(
+    db: Session,
+    *,
+    work_order_id: int,
+    from_round: str,
+    to_round: str,
+    uploaded_by: int,
+) -> None:
+    stage_to = f"REVIEW_{to_round}"
+    source_files = _latest_round_files(db, work_order_id, from_round, "REVIEW_OPINION")
+    if not source_files:
+        return
+    existing_latest = (
+        db.query(WorkOrderFile)
+        .filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.business_stage == stage_to,
+            WorkOrderFile.file_category == "REVIEW_OPINION",
+        )
+        .order_by(WorkOrderFile.version_no.desc())
+        .first()
+    )
+    next_version = 1 if not existing_latest else existing_latest.version_no + 1
+    db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order_id,
+        WorkOrderFile.business_stage == stage_to,
+        WorkOrderFile.file_category == "REVIEW_OPINION",
+        WorkOrderFile.is_current.is_(True),
+    ).update({"is_current": False})
+    for source_file in source_files:
+        db.add(
+            WorkOrderFile(
+                work_order_id=source_file.work_order_id,
+                file_category=source_file.file_category,
+                business_stage=stage_to,
+                version_no=next_version,
+                is_current=True,
+                origin_file_name=source_file.origin_file_name,
+                storage_key=source_file.storage_key,
+                file_size=source_file.file_size,
+                uploaded_by=uploaded_by,
+                uploaded_at=source_file.uploaded_at,
+            )
+        )
+        next_version += 1
 
 
 def _latest_report_file_owner_is_project_party(db: Session, work_order: WorkOrder, review_round: str) -> bool:
@@ -344,24 +408,30 @@ def _auto_advance_if_needed(
     if not _latest_report_file_owner_is_project_party(db, work_order, current_round):
         return ROUND_APPROVED_STATUS[current_round], work_order.project_leader_id, f"{current_round}_APPROVE"
 
-    next_reviewer_id = getattr(work_order, ROUND_CURRENT_REVIEWER_ATTR[next_round])
-    if not next_reviewer_id:
-        return ROUND_APPROVED_STATUS[current_round], work_order.project_leader_id, f"{current_round}_APPROVE"
-
     _clone_files_to_round(
         db,
         work_order_id=work_order.id,
         from_round=current_round,
         to_round=next_round,
-        uploaded_by=_latest_submit_record(db, work_order.id, current_round).reviewer_user_id if _latest_submit_record(db, work_order.id, current_round) else work_order.project_leader_id,
+        uploaded_by=clone_uploaded_by,
     )
+    _clone_opinion_files_to_round(
+        db,
+        work_order_id=work_order.id,
+        from_round=current_round,
+        to_round=next_round,
+        uploaded_by=clone_uploaded_by,
+    )
+    next_reviewer_id = getattr(work_order, ROUND_CURRENT_REVIEWER_ATTR[next_round])
+    if not next_reviewer_id:
+        return ROUND_APPROVED_STATUS[current_round], work_order.project_leader_id, f"{current_round}_APPROVE"
     db.add(
         ReviewRecord(
             work_order_id=work_order.id,
             review_round=next_round,
             reviewer_user_id=next_reviewer_id,
             action="SUBMIT",
-            comment=f"来源于上一轮自动流转 [AUTO_FROM_RECORD:{approved_record.id}]",
+            comment=f"沿用上一轮审核通过文件 {AUTO_FROM_RECORD_MARKER}{approved_record.id}]",
             acted_at=datetime.now(timezone.utc),
         )
     )
@@ -721,6 +791,9 @@ def decide_review(
             project=project,
             approved_record=record,
         )
+        transferred_round = ROUND_NEXT.get(payload.review_round)
+        if transferred_round and _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):
+            record.comment = _append_passed_to_marker(record.comment, transferred_round)
     else:
         workflow_action = f"{payload.review_round}_REJECT_RETURN"
 
@@ -859,6 +932,31 @@ def withdraw_latest_review_step(
         if path.exists():
             path.unlink()
         db.delete(file_row)
+
+    if latest.action == "APPROVE":
+        next_round = _parse_transferred_to_round(latest.comment)
+        if next_round:
+            carried_categories = {"REPORT_ZIP", "REVIEW_OPINION"}
+            carried_categories.add("EXTERNAL_AUDIT_OPINION" if review_round.startswith("EXTERNAL_") else "REVIEW_REPLY")
+            carried_stage = f"REVIEW_{next_round}"
+            carried_files = db.query(WorkOrderFile).filter(
+                WorkOrderFile.work_order_id == work_order_id,
+                WorkOrderFile.business_stage == carried_stage,
+                WorkOrderFile.file_category.in_(carried_categories),
+            ).all()
+            for carried_file in carried_files:
+                path = Path(settings.local_storage_dir) / carried_file.storage_key
+                if path.exists():
+                    path.unlink()
+                db.delete(carried_file)
+            carried_records = db.query(ReviewRecord).filter(
+                ReviewRecord.work_order_id == work_order_id,
+                ReviewRecord.review_round == next_round,
+                ReviewRecord.action == "SUBMIT",
+                ReviewRecord.comment.contains(f"{AUTO_FROM_RECORD_MARKER}{latest.id}]"),
+            ).all()
+            for carried_record in carried_records:
+                db.delete(carried_record)
 
     work_order.current_status = rollback_status.value
     work_order.current_handler_user_id = rollback_handler

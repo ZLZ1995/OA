@@ -83,10 +83,11 @@
         <div class="review-upload-block">
           <div class="review-upload-main">
             <div class="review-upload-actions">
-              <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
-                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
+              <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile || isLockedCarryForwardStage">
+                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked || isLockedCarryForwardStage">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
               </el-upload>
               <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
+              <el-tag v-else-if="isLockedCarryForwardStage" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
             </div>
             <div class="file-list" v-if="submitFiles.length">
               <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
@@ -132,6 +133,12 @@
             </div>
             <div>
               {{ records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT')?.source_round_comment }}
+            </div>
+            <div v-if="previousOpinionReferenceFiles.length" class="previous-review-files">
+              <div v-for="file in previousOpinionReferenceFiles" :key="file.id" class="attachment-item">
+                <span>{{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）</span>
+                <el-button type="primary" link @click="download(file)">下载</el-button>
+              </div>
             </div>
           </div>
         </el-form-item>
@@ -292,6 +299,8 @@ interface ReviewRow {
   sourceRoundComment?: string
   sourceRoundReviewerName?: string
   autoCarriedFromPrevious?: boolean
+  transferredToNext?: boolean
+  transferredToRound?: ReviewRound
 }
 
 const auth = useAuthStore()
@@ -322,6 +331,7 @@ const isReviewSubmitter = computed(() => {
   return roleName === '项目负责人' || roleName === '项目组成员' || roleName === '创建人' || isCurrentHandler.value
 })
 const isReplyFlow = computed(() => ['FIRST_REVIEW_REJECTED', 'SECOND_REVIEW_REJECTED', 'THIRD_REVIEW_REJECTED'].includes(statusCode.value))
+const isLockedCarryForwardStage = computed(() => ['WAIT_SECOND_REVIEW_SUBMIT', 'WAIT_THIRD_REVIEW_SUBMIT', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))
 const latestSubmitAt = computed(() => {
   const latest = records.value
     .filter(record => record.review_round === reviewRound.value && record.action === 'SUBMIT')
@@ -387,6 +397,7 @@ const showProjectSummary = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 
 const reviewPackageFiles = computed(() => files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.business_stage === reviewStage(reviewRound.value)))
 const replyFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_REPLY' && file.business_stage === reviewStage(reviewRound.value)))
 const submitFiles = computed(() => isReplyFlow.value ? replyFiles.value : reviewPackageFiles.value)
+const previousOpinionReferenceFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
 const opinionFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
 const formalReportFiles = computed(() => files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.business_stage === 'FORMAL_REPORT'))
 const contractDraftFiles = computed(() => files.value.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.business_stage === 'CONTRACT_DRAFT' && file.is_current))
@@ -421,7 +432,9 @@ const reviewRows = computed<ReviewRow[]>(() => {
     files: filesForRecord(record),
     sourceRoundComment: record.source_round_comment || undefined,
     sourceRoundReviewerName: record.source_round_reviewer_name || undefined,
-    autoCarriedFromPrevious: Boolean(record.auto_carried_from_previous)
+    autoCarriedFromPrevious: Boolean(record.auto_carried_from_previous),
+    transferredToNext: Boolean(record.transferred_to_next),
+    transferredToRound: record.transferred_to_round || undefined
   }))
   const recordedReplyRounds = new Set(records.value.filter(record => record.action === 'SUBMIT').map(record => record.review_round))
   for (const file of files.value.filter(item => item.file_category === 'REVIEW_REPLY')) {

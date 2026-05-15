@@ -201,3 +201,102 @@ def test_real_scenario_round_two_reject_reupload_preserves_first_round_history()
     assert current_second_file is not None
     assert first_round_file.origin_file_name == "一审第一版.zip"
     assert current_second_file.origin_file_name == "二审修改第二版.zip"
+
+
+
+def test_first_round_reapprove_carries_latest_passed_package_to_second_wait_submit() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    leader, _, first, _, work_order = _seed_project_bundle(db)
+    work_order.second_reviewer_id = None
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = first.id
+
+    first_submit_time = datetime(2026, 5, 15, 9, 0, tzinfo=timezone.utc)
+    reject_time = datetime(2026, 5, 15, 10, 0, tzinfo=timezone.utc)
+    reupload_time = datetime(2026, 5, 15, 11, 0, tzinfo=timezone.utc)
+
+    db.add(
+        WorkOrderFile(
+            work_order_id=work_order.id,
+            file_category="REPORT_ZIP",
+            business_stage="REVIEW_FIRST",
+            version_no=1,
+            is_current=False,
+            origin_file_name="?????V1.0.zip",
+            storage_key="review-first-v1.zip",
+            file_size=120,
+            uploaded_by=leader.id,
+            uploaded_at=first_submit_time,
+        )
+    )
+    db.add(
+        ReviewRecord(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            reviewer_user_id=first.id,
+            action="REJECT_RETURN",
+            comment="???",
+            acted_at=reject_time,
+        )
+    )
+    db.add(
+        WorkOrderFile(
+            work_order_id=work_order.id,
+            file_category="REPORT_ZIP",
+            business_stage="REVIEW_FIRST",
+            version_no=2,
+            is_current=True,
+            origin_file_name="?????V2.0.zip",
+            storage_key="review-first-v2.zip",
+            file_size=256,
+            uploaded_by=leader.id,
+            uploaded_at=reupload_time,
+        )
+    )
+    db.add(
+        WorkOrderFile(
+            work_order_id=work_order.id,
+            file_category="REVIEW_OPINION",
+            business_stage="REVIEW_FIRST",
+            version_no=1,
+            is_current=True,
+            origin_file_name="????.docx",
+            storage_key="review-opinion-first.docx",
+            file_size=88,
+            uploaded_by=first.id,
+            uploaded_at=reject_time,
+        )
+    )
+    db.commit()
+
+    result = decide_review(
+        payload=ReviewDecisionRequest(work_order_id=work_order.id, review_round="FIRST", action="APPROVE", comment="???????"),
+        db=db,
+        current_user=first,
+        _={"FIRST_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    second_report = db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order.id,
+        WorkOrderFile.business_stage == "REVIEW_SECOND",
+        WorkOrderFile.file_category == "REPORT_ZIP",
+        WorkOrderFile.is_current.is_(True),
+    ).order_by(WorkOrderFile.version_no.desc()).first()
+    second_opinion = db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order.id,
+        WorkOrderFile.business_stage == "REVIEW_SECOND",
+        WorkOrderFile.file_category == "REVIEW_OPINION",
+        WorkOrderFile.is_current.is_(True),
+    ).order_by(WorkOrderFile.version_no.desc()).first()
+
+    assert work_order.current_status == "WAIT_SECOND_REVIEW_SUBMIT"
+    assert work_order.current_handler_user_id == work_order.project_leader_id
+    assert second_report is not None
+    assert second_report.origin_file_name == "?????V2.0.zip"
+    assert second_opinion is not None
+    assert second_opinion.origin_file_name == "????.docx"
+    assert result.transferred_to_next is True
+    assert result.transferred_to_round == "SECOND"
