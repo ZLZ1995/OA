@@ -43,7 +43,7 @@ def _parse_member_role(member_role: str) -> str:
 
 def _ensure_internal_project(project: Project) -> None:
     if project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=400, detail="外部项目不允许维护项目组成员")
+        raise HTTPException(status_code=400, detail="评估二部项目不允许维护项目组成员")
 
 
 @router.get("", response_model=ProjectMemberListResponse)

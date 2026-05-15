@@ -19,11 +19,16 @@
           </el-form-item>
         </el-col>
         <el-col :span="6">
+          <el-form-item label="评估业务性质">
+            <el-select v-model="filters.evaluation_business_nature" clearable>
+              <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
           <el-form-item label="报告类型">
             <el-select v-model="filters.report_type" clearable>
-              <el-option label="评估报告" value="评估报告" />
-              <el-option label="估值报告" value="估值报告" />
-              <el-option label="咨询报告" value="咨询报告" />
+              <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -31,12 +36,12 @@
         <el-col :span="6">
           <el-form-item label="项目来源">
             <el-select v-model="filters.project_source" clearable>
-              <el-option label="内部项目" value="INTERNAL" />
-              <el-option label="外部项目" value="EXTERNAL" />
+              <el-option label="评估一部" value="INTERNAL" />
+              <el-option label="评估二部" value="EXTERNAL" />
             </el-select>
           </el-form-item>
         </el-col>
-        <el-col :span="6"><el-form-item label="外部项目负责人"><el-input v-model="filters.external_project_leader_name" clearable /></el-form-item></el-col>
+        <el-col :span="6"><el-form-item label="文本项目负责人"><el-input v-model="filters.external_project_leader_name" clearable /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="签字评估师"><el-input v-model="filters.signer_name" clearable /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="收费金额下限"><el-input-number v-model="filters.amount_min" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="收费金额上限"><el-input-number v-model="filters.amount_max" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
@@ -49,7 +54,7 @@
           <el-form-item>
             <el-button type="primary" @click="load">筛选</el-button>
             <el-button @click="reset">重置</el-button>
-            <el-button type="success" @click="onExport">导出Excel</el-button>
+            <el-button type="success" @click="onExport">导出 Excel</el-button>
           </el-form-item>
         </el-col>
       </el-row>
@@ -63,11 +68,12 @@
       <el-table-column prop="report_no" label="报告编号" min-width="140" />
       <el-table-column prop="project_leader_name" label="项目负责人姓名" min-width="130" />
       <el-table-column prop="undertaking_unit" label="承接单位" min-width="100" />
+      <el-table-column prop="evaluation_business_nature" label="评估业务性质" min-width="160" />
       <el-table-column prop="report_type" label="报告类型" min-width="110" />
       <el-table-column prop="valuation_base_date" label="评估基准日" min-width="120" />
       <el-table-column prop="business_salesman" label="项目承接业务员" min-width="140" />
       <el-table-column prop="project_source_display" label="项目来源" min-width="100" />
-      <el-table-column prop="external_project_leader_name" label="外部项目负责人" min-width="140" />
+      <el-table-column prop="external_project_leader_name" label="文本项目负责人" min-width="140" />
       <el-table-column prop="amount" label="收费金额" min-width="110" />
       <el-table-column prop="invoiced_amount" label="累计开票金额" min-width="130" />
       <el-table-column prop="signer_names" label="签字评估师姓名" min-width="160" show-overflow-tooltip />
@@ -114,6 +120,18 @@ import { createProjectDeleteRequest } from '@/api/projectDeleteRequests'
 import { listUserCandidates, type UserItem } from '@/api/users'
 import { useAuthStore } from '@/store/auth'
 
+const evaluationBusinessOptions = [
+  '国有资产评估业务',
+  '境外资产评估业务',
+  '证券期货评估业务',
+  '司法评估业务',
+  '金融资产评估业务',
+  '珠宝首饰评估业务',
+  '其他',
+] as const
+
+const reportTypeOptions = ['评估报告', '估值报告', '咨询报告', '复核报告', '追溯性报告'] as const
+
 const loading = ref(false)
 const auth = useAuthStore()
 const rows = ref<ProjectExportItem[]>([])
@@ -125,7 +143,7 @@ const deleteTargetProjectId = ref<number>()
 const deleteTargetProjectName = ref('')
 const deleteDraft = reactive({
   approver_user_id: undefined as number | undefined,
-  reason: ''
+  reason: '',
 })
 
 async function load() {
@@ -144,7 +162,7 @@ function reset() {
 
 async function onExport() {
   await exportProjectRowsExcel(filters)
-  ElMessage.success('Excel已生成')
+  ElMessage.success('Excel 已生成')
 }
 
 async function requestDelete(row: ProjectExportItem) {
@@ -152,7 +170,7 @@ async function requestDelete(row: ProjectExportItem) {
   await ElMessageBox.confirm('确认申请删除该已归档项目吗？', '删除确认', {
     confirmButtonText: '确认',
     cancelButtonText: '取消',
-    type: 'warning'
+    type: 'warning',
   })
   const admins = (await listUserCandidates('ADMIN')).items.filter(item => item.id !== user?.id)
   if (!admins.length) {
@@ -177,7 +195,7 @@ async function submitDeleteRequest() {
     const approver = deleteAdminOptions.value.find(item => item.id === deleteDraft.approver_user_id)
     await createProjectDeleteRequest(deleteTargetProjectId.value, {
       approver_user_id: deleteDraft.approver_user_id,
-      reason: deleteDraft.reason.trim() || undefined
+      reason: deleteDraft.reason.trim() || undefined,
     })
     deleteDialogVisible.value = false
     ElMessage.success(`已提交项目「${deleteTargetProjectName.value}」删除申请，待管理员 ${approver?.real_name || ''} 确认`)

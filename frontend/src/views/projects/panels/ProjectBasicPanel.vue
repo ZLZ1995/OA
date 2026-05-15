@@ -18,11 +18,14 @@
           <el-option label="其他" value="其他" />
         </el-select>
       </el-form-item>
+      <el-form-item label="评估业务性质">
+        <el-select v-model="form.evaluation_business_nature" style="width: 100%">
+          <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="报告类型">
         <el-select v-model="form.report_type" style="width: 100%">
-          <el-option label="评估报告" value="评估报告" />
-          <el-option label="估值报告" value="估值报告" />
-          <el-option label="咨询报告" value="咨询报告" />
+          <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
         </el-select>
       </el-form-item>
       <el-form-item label="评估基准日">
@@ -42,18 +45,23 @@
       </el-form-item>
       <el-form-item label="项目来源">
         <el-radio-group v-model="form.project_source">
-          <el-radio-button label="INTERNAL">内部项目</el-radio-button>
-          <el-radio-button label="EXTERNAL">外部项目</el-radio-button>
+          <el-radio-button label="INTERNAL">评估一部</el-radio-button>
+          <el-radio-button label="EXTERNAL">评估二部</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      <el-form-item v-if="form.project_source === 'EXTERNAL'" label="外部项目负责人">
-        <el-input v-model="form.external_project_leader_name" />
+      <el-form-item label="项目负责人">
+        <el-input
+          v-if="form.project_source === 'EXTERNAL'"
+          v-model="form.external_project_leader_name"
+          placeholder="请输入项目负责人姓名"
+        />
+        <el-input v-else :model-value="systemProjectLeaderName" disabled />
       </el-form-item>
 
       <el-divider />
 
-      <el-form-item label="项目负责人">
-        <el-input :model-value="projectLeaderName" disabled />
+      <el-form-item label="项目负责人（展示）">
+        <el-input :model-value="displayProjectLeaderName" disabled />
       </el-form-item>
       <el-form-item label="一审人员姓名">
         <el-input :model-value="flowInfo.project.first_reviewer_name || '-'" disabled />
@@ -104,12 +112,13 @@
         <el-descriptions-item label="项目名称">{{ flowInfo.project.project_name }}</el-descriptions-item>
         <el-descriptions-item label="客户名称">{{ flowInfo.project.client_name }}</el-descriptions-item>
         <el-descriptions-item label="承接单位">{{ flowInfo.project.undertaking_unit || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="评估业务性质">{{ flowInfo.project.evaluation_business_nature || '-' }}</el-descriptions-item>
         <el-descriptions-item label="报告类型">{{ flowInfo.project.report_type || '-' }}</el-descriptions-item>
         <el-descriptions-item label="评估基准日">{{ flowInfo.project.valuation_base_date || '-' }}</el-descriptions-item>
         <el-descriptions-item label="项目承接业务员">{{ flowInfo.project.business_salesman || '-' }}</el-descriptions-item>
         <el-descriptions-item label="项目金额">{{ formatAmount(flowInfo.project.project_amount) }}</el-descriptions-item>
         <el-descriptions-item label="项目来源">{{ flowInfo.project.project_source_display }}</el-descriptions-item>
-        <el-descriptions-item label="项目负责人">{{ projectLeaderName }}</el-descriptions-item>
+        <el-descriptions-item label="项目负责人">{{ displayProjectLeaderName }}</el-descriptions-item>
         <el-descriptions-item label="一审人员姓名">{{ flowInfo.project.first_reviewer_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="二审人员姓名">{{ flowInfo.project.second_reviewer_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="三审人员姓名">{{ flowInfo.project.third_reviewer_name || '-' }}</el-descriptions-item>
@@ -146,8 +155,21 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import type { EvaluationBusinessNature, ProjectSource, ProjectUndertakingUnit, ReportType } from '@/api/projects'
+import { updateProject } from '@/api/projects'
 import type { ProjectFlowData } from '@/api/projectFlow'
-import { updateProject, type ProjectSource, type ProjectUndertakingUnit, type ReportType } from '@/api/projects'
+
+const evaluationBusinessOptions: EvaluationBusinessNature[] = [
+  '国有资产评估业务',
+  '境外资产评估业务',
+  '证券期货评估业务',
+  '司法评估业务',
+  '金融资产评估业务',
+  '珠宝首饰评估业务',
+  '其他',
+]
+
+const reportTypeOptions: ReportType[] = ['评估报告', '估值报告', '咨询报告', '复核报告', '追溯性报告']
 
 const props = defineProps<{ flowInfo: ProjectFlowData; userRoles?: string[]; canEdit?: boolean }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
@@ -159,28 +181,32 @@ const canEditBasicInfo = computed(() => Boolean(
   props.canEdit &&
   props.userRoles?.some(role => ['PROJECT_LEADER', 'PROJECT_MEMBER', 'ADMIN'].includes(role))
 ))
-const projectLeaderName = computed(() => (
+const displayProjectLeaderName = computed(() => (
+  props.flowInfo.project.display_project_leader_name ||
   props.flowInfo.project.external_project_leader_name ||
   props.flowInfo.project.project_leader_display_name ||
   '-'
 ))
+const systemProjectLeaderName = computed(() => props.flowInfo.project.project_leader_display_name || '-')
 
 const form = reactive({
   undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_name: '',
   client_name: '',
+  evaluation_business_nature: '国有资产评估业务' as EvaluationBusinessNature,
   report_type: '评估报告' as ReportType,
   valuation_base_date: '',
   business_salesman: '',
   project_amount: 0,
   project_source: 'INTERNAL' as ProjectSource,
-  external_project_leader_name: ''
+  external_project_leader_name: '',
 })
 
 function fillForm() {
   form.undertaking_unit = (props.flowInfo.project.undertaking_unit || '中勤') as ProjectUndertakingUnit
   form.project_name = props.flowInfo.project.project_name || ''
   form.client_name = props.flowInfo.project.client_name || ''
+  form.evaluation_business_nature = (props.flowInfo.project.evaluation_business_nature || '国有资产评估业务') as EvaluationBusinessNature
   form.report_type = (props.flowInfo.project.report_type || '评估报告') as ReportType
   form.valuation_base_date = props.flowInfo.project.valuation_base_date || ''
   form.business_salesman = props.flowInfo.project.business_salesman || ''
@@ -214,12 +240,13 @@ function formatChangedFields(changedFields: string) {
       undertaking_unit: '承接单位',
       project_name: '项目名称',
       client_name: '客户名称',
+      evaluation_business_nature: '评估业务性质',
       report_type: '报告类型',
       valuation_base_date: '评估基准日',
       business_salesman: '项目承接业务员',
       project_amount: '项目金额',
       project_source: '项目来源',
-      external_project_leader_name: '外部项目负责人姓名'
+      external_project_leader_name: '项目负责人',
     }
     const labels = Object.keys(parsed).map(key => fieldLabelMap[key] || key)
     return labels.length ? labels.join('、') : '-'
@@ -238,7 +265,7 @@ async function save() {
     return
   }
   if (form.project_source === 'EXTERNAL' && !form.external_project_leader_name.trim()) {
-    ElMessage.warning('外部项目必须填写外部项目负责人姓名')
+    ElMessage.warning('评估二部项目必须填写项目负责人')
     return
   }
 
@@ -248,12 +275,13 @@ async function save() {
       undertaking_unit: form.undertaking_unit,
       project_name: form.project_name.trim(),
       client_name: form.client_name.trim(),
+      evaluation_business_nature: form.evaluation_business_nature,
       report_type: form.report_type,
       valuation_base_date: form.valuation_base_date || undefined,
       business_salesman: form.business_salesman.trim(),
       project_amount: form.project_amount,
       project_source: form.project_source,
-      external_project_leader_name: form.project_source === 'EXTERNAL' ? form.external_project_leader_name.trim() : null
+      external_project_leader_name: form.project_source === 'EXTERNAL' ? form.external_project_leader_name.trim() : null,
     })
     ElMessage.success('项目基本信息已更新')
     editing.value = false

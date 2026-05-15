@@ -2,8 +2,16 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, model_validator
 
-REPORT_TYPES = {"评估报告", "估值报告", "咨询报告"}
-PROJECT_SOURCES = {"INTERNAL", "EXTERNAL"}
+from app.services.project_field_normalizer import (
+    EVALUATION_BUSINESS_NATURES,
+    PROJECT_SOURCES,
+    REPORT_TYPES,
+    normalize_evaluation_business_nature,
+    normalize_external_project_leader_name,
+    normalize_project_source,
+    normalize_report_type,
+    normalize_undertaking_unit,
+)
 
 
 class ProjectBase(BaseModel):
@@ -11,6 +19,7 @@ class ProjectBase(BaseModel):
     undertaking_unit: str = Field(min_length=1, max_length=32)
     project_name: str = Field(min_length=1, max_length=255)
     client_name: str = Field(min_length=1, max_length=255)
+    evaluation_business_nature: str | None = Field(default=None, min_length=1, max_length=64)
     report_type: str = Field(default="评估报告", min_length=1, max_length=32)
     valuation_base_date: date | None = None
     business_salesman: str = Field(default="", max_length=255)
@@ -26,15 +35,21 @@ class ProjectBase(BaseModel):
     description: str | None = None
 
     @model_validator(mode="after")
-    def validate_contract_fields(self) -> "ProjectBase":
+    def validate_project_fields(self) -> "ProjectBase":
+        self.undertaking_unit = normalize_undertaking_unit(self.undertaking_unit)
+        self.evaluation_business_nature = normalize_evaluation_business_nature(self.evaluation_business_nature)
+        if self.evaluation_business_nature not in EVALUATION_BUSINESS_NATURES:
+            raise ValueError("评估业务性质不合法")
+        self.report_type = normalize_report_type(self.report_type)
         if self.report_type not in REPORT_TYPES:
             raise ValueError("报告类型不合法")
+        self.project_source = normalize_project_source(self.project_source)
         if self.project_source not in PROJECT_SOURCES:
             raise ValueError("项目来源不合法")
+        self.external_project_leader_name = normalize_external_project_leader_name(self.external_project_leader_name)
         if self.project_source == "EXTERNAL":
-            if not self.external_project_leader_name or not self.external_project_leader_name.strip():
-                raise ValueError("外部项目必须填写外部项目负责人姓名")
-            self.external_project_leader_name = self.external_project_leader_name.strip()
+            if not self.external_project_leader_name:
+                raise ValueError("评估二部项目必须填写项目负责人")
         else:
             self.external_project_leader_name = None
         self.business_salesman = self.business_salesman.strip()
@@ -49,6 +64,7 @@ class ProjectUpdate(BaseModel):
     undertaking_unit: str | None = Field(default=None, min_length=1, max_length=32)
     project_name: str | None = Field(default=None, min_length=1, max_length=255)
     client_name: str | None = Field(default=None, min_length=1, max_length=255)
+    evaluation_business_nature: str | None = Field(default=None, min_length=1, max_length=64)
     report_type: str | None = Field(default=None, min_length=1, max_length=32)
     valuation_base_date: date | None = None
     business_salesman: str | None = Field(default=None, min_length=1, max_length=255)
@@ -66,8 +82,9 @@ class ProjectUpdate(BaseModel):
 
 class ProjectResponse(ProjectBase):
     id: int
-    project_source_display: str = "内部项目"
+    project_source_display: str = "评估一部"
     project_leader_display_name: str | None = None
+    display_project_leader_name: str | None = None
     report_no: str | None = None
     contract_no: str | None = None
     status_display: str = "项目创建"

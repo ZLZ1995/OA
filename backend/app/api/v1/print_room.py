@@ -42,7 +42,7 @@ def _ensure_project_operator(db: Session, work_order: WorkOrder, user_id: int) -
         return
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if project and project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=403, detail="外部项目仅创建人或负责人可处理该流程")
+        raise HTTPException(status_code=403, detail="评估二部项目仅创建人或负责人可处理该流程")
     is_member = db.query(ProjectMember.id).filter(
         ProjectMember.project_id == work_order.project_id,
         ProjectMember.user_id == user_id,
