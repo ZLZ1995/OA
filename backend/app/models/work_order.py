@@ -29,5 +29,7 @@ class WorkOrder(Base, TimestampMixin):
     archive_submitter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     archive_submission_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     mailing_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    signoff_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    chief_appraiser_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     priority: Mapped[str] = mapped_column(String(16), default="MEDIUM", nullable=False)
     deadline_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -66,6 +66,7 @@ import ProjectBasicPanel from './panels/ProjectBasicPanel.vue'
 import ProjectMembersPanel from './panels/ProjectMembersPanel.vue'
 import ContractUploadPanel from './panels/ContractUploadPanel.vue'
 import ReviewSubmitPanel from './panels/ReviewSubmitPanel.vue'
+import SignoffPanel from './panels/SignoffPanel.vue'
 import ReportIssuePanel from './panels/ReportIssuePanel.vue'
 import ReportMailingPanel from './panels/ReportMailingPanel.vue'
 import InvoicePanel from './panels/InvoicePanel.vue'
@@ -78,6 +79,7 @@ const baseFlowNodes = [
   { key: 'contract', label: '合同初稿上传' },
   { key: 'contractReview', label: '合同初稿审核' },
   { key: 'review', label: '报告送审' },
+  { key: 'signoff', label: '签发审核' },
   { key: 'issue', label: '报告出具' },
   { key: 'mailing', label: '报告邮寄' },
   { key: 'invoice', label: '发票开具' },
@@ -90,6 +92,7 @@ const panelMap: Record<string, any> = {
   contract: ContractUploadPanel,
   contractReview: ContractReviewPanel,
   review: ReviewSubmitPanel,
+  signoff: SignoffPanel,
   issue: ReportIssuePanel,
   mailing: ReportMailingPanel,
   invoice: InvoicePanel,
@@ -141,6 +144,9 @@ const visibleFlowNodes = computed(() => {
   }
   if (roleName === '财务' || roles.includes('FINANCE')) {
     return availableNodes.value.filter(node => node.key === 'invoice')
+  }
+  if (roleName === '首席评估师' || roles.includes('CHIEF_APPRAISER')) {
+    return availableNodes.value.filter(node => node.key === 'signoff')
   }
   if (roles.includes('ARCHIVE_MANAGER')) {
     return availableNodes.value.filter(node => node.key === 'archive')

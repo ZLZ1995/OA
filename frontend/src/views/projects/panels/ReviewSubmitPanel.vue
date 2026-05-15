@@ -157,6 +157,33 @@
       </el-form>
     </template>
 
+    <template v-if="canRequestOwnerExternalAuditConfirm">
+      <el-divider>外部审核确认</el-divider>
+      <el-alert
+        type="info"
+        :closable="false"
+        title="本流程将流转至项目负责人处，请等待项目负责人反馈。"
+        show-icon
+        style="margin-bottom: 12px"
+      />
+      <el-button type="primary" @click="onRequestOwnerExternalAuditConfirm">向项目负责人发送确认信息</el-button>
+    </template>
+
+    <template v-if="canOwnerChooseExternalAudit">
+      <el-divider>项目负责人确认</el-divider>
+      <el-alert
+        type="warning"
+        :closable="false"
+        title="请确认该项目是否涉及外部审核。"
+        show-icon
+        style="margin-bottom: 12px"
+      />
+      <el-space wrap>
+        <el-button type="success" @click="onMarkNoExternalAudit">不涉及外部审核</el-button>
+        <el-button type="primary" plain @click="onMarkHasExternalAudit">涉及外部审核</el-button>
+      </el-space>
+    </template>
+
     <template v-if="showFormalReportPanel">
       <el-divider>三审通过后资料</el-divider>
       <el-alert
@@ -243,12 +270,13 @@ import type { ProjectFlowData } from '@/api/projectFlow'
 import { updateWorkOrder } from '@/api/workorders'
 import { transferPrintRoom } from '@/api/printRoom'
 import { listUserCandidates, type UserItem } from '@/api/users'
+import { markHasExternalAudit, markNoExternalAudit, requestOwnerExternalAuditConfirm } from '@/api/signoff'
 import ReviewUploadRequirementBox from '@/components/common/ReviewUploadRequirementBox.vue'
 
 const props = defineProps<{ workOrderId?: number; canEdit: boolean; userRoles: string[]; flowInfo?: ProjectFlowData }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
-type ReviewRound = 'FIRST' | 'SECOND' | 'THIRD'
+type ReviewRound = 'FIRST' | 'SECOND' | 'THIRD' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND' | 'EXTERNAL_THIRD'
 
 interface ReviewRow {
   id: string
@@ -286,6 +314,7 @@ const userOptions = ref<ReviewCandidateItem[]>([])
 const loading = ref(false)
 
 const statusCode = computed(() => props.flowInfo?.current_work_order_status || '')
+const isStateOwnedAsset = computed(() => props.flowInfo?.project.evaluation_business_nature === '国有资产评估业务')
 const currentUserId = computed(() => auth.user?.id)
 const isCurrentHandler = computed(() => Boolean(currentUserId.value && props.flowInfo?.current_handler_user_id === currentUserId.value))
 const isReviewSubmitter = computed(() => {
@@ -316,6 +345,8 @@ const canSubmitReviewerChange = computed(() =>
 const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'FIRST') return props.flowInfo?.first_reviewer_id
   if (reviewRound.value === 'SECOND') return props.flowInfo?.second_reviewer_id
+  if (reviewRound.value === 'EXTERNAL_FIRST') return props.flowInfo?.first_reviewer_id
+  if (reviewRound.value === 'EXTERNAL_SECOND') return props.flowInfo?.second_reviewer_id
   return props.flowInfo?.third_reviewer_id
 })
 const canSubmitReview = computed(() => props.canEdit && !isReviewLocked.value && isReviewSubmitter.value && isSubmitStatus(statusCode.value))
@@ -325,7 +356,10 @@ const canReview = computed(() => {
   return (
     (reviewRound.value === 'FIRST' && props.userRoles.includes('FIRST_REVIEWER') && statusCode.value === 'FIRST_REVIEWING') ||
     (reviewRound.value === 'SECOND' && props.userRoles.includes('SECOND_REVIEWER') && statusCode.value === 'SECOND_REVIEWING') ||
-    (reviewRound.value === 'THIRD' && props.userRoles.includes('THIRD_REVIEWER') && statusCode.value === 'THIRD_REVIEWING')
+    (reviewRound.value === 'THIRD' && props.userRoles.includes('THIRD_REVIEWER') && statusCode.value === 'THIRD_REVIEWING') ||
+    (reviewRound.value === 'EXTERNAL_FIRST' && props.userRoles.includes('FIRST_REVIEWER') && statusCode.value === 'EXTERNAL_FIRST_REVIEWING') ||
+    (reviewRound.value === 'EXTERNAL_SECOND' && props.userRoles.includes('SECOND_REVIEWER') && statusCode.value === 'EXTERNAL_SECOND_REVIEWING') ||
+    (reviewRound.value === 'EXTERNAL_THIRD' && props.userRoles.includes('THIRD_REVIEWER') && statusCode.value === 'EXTERNAL_THIRD_REVIEWING')
   )
 })
 const canUploadFormalReport = computed(() => {
@@ -338,6 +372,15 @@ const canUploadFormalReport = computed(() => {
   )
 })
 const showFormalReportPanel = computed(() => canUploadFormalReport.value)
+const canRequestOwnerExternalAuditConfirm = computed(() =>
+  statusCode.value === 'THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND' &&
+  Boolean(currentUserId.value && currentUserId.value === props.flowInfo?.third_reviewer_id) &&
+  (props.userRoles.includes('THIRD_REVIEWER') || props.userRoles.includes('ADMIN'))
+)
+const canOwnerChooseExternalAudit = computed(() =>
+  statusCode.value === 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM' &&
+  isReviewSubmitter.value
+)
 const showContractDraftDownload = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].some(role => props.userRoles.includes(role)))
 const showProjectSummary = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER', 'ADMIN'].some(role => props.userRoles.includes(role)))
 
@@ -417,7 +460,10 @@ function isSubmitStatus(status: string) {
 
 function syncRoundWithStatus() {
   const status = statusCode.value
-  if (status.includes('SECOND')) reviewRound.value = 'SECOND'
+  if (status.includes('EXTERNAL_THIRD')) reviewRound.value = 'EXTERNAL_THIRD'
+  else if (status.includes('EXTERNAL_SECOND')) reviewRound.value = 'EXTERNAL_SECOND'
+  else if (status.includes('EXTERNAL_FIRST')) reviewRound.value = 'EXTERNAL_FIRST'
+  else if (status.includes('SECOND')) reviewRound.value = 'SECOND'
   else if (status.includes('THIRD')) reviewRound.value = 'THIRD'
   else reviewRound.value = 'FIRST'
 }
@@ -427,13 +473,23 @@ function reviewStage(round: ReviewRound) {
 }
 
 function roundLabel(round: ReviewRound) {
-  return ({ FIRST: '一审', SECOND: '二审', THIRD: '三审' } as const)[round]
+  return ({
+    FIRST: '一审',
+    SECOND: '二审',
+    THIRD: '三审',
+    EXTERNAL_FIRST: '外部一级复核',
+    EXTERNAL_SECOND: '外部二级复核',
+    EXTERNAL_THIRD: '外部三级复核',
+  } as const)[round]
 }
 
 function roundFromStage(stage: string): ReviewRound | undefined {
   if (stage === 'REVIEW_FIRST') return 'FIRST'
   if (stage === 'REVIEW_SECOND') return 'SECOND'
   if (stage === 'REVIEW_THIRD') return 'THIRD'
+  if (stage === 'REVIEW_EXTERNAL_FIRST') return 'EXTERNAL_FIRST'
+  if (stage === 'REVIEW_EXTERNAL_SECOND') return 'EXTERNAL_SECOND'
+  if (stage === 'REVIEW_EXTERNAL_THIRD') return 'EXTERNAL_THIRD'
   return undefined
 }
 
@@ -648,6 +704,27 @@ async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
   ElMessage.success(action === 'APPROVE' ? '审核通过' : '已返回修改')
   reviewComment.value = ''
   await Promise.all([loadRecords(), loadFiles()])
+  emit('changed')
+}
+
+async function onRequestOwnerExternalAuditConfirm() {
+  if (!props.workOrderId) return
+  await requestOwnerExternalAuditConfirm(props.workOrderId)
+  ElMessage.success('已发送项目负责人确认信息')
+  emit('changed')
+}
+
+async function onMarkNoExternalAudit() {
+  if (!props.workOrderId) return
+  await markNoExternalAudit(props.workOrderId)
+  ElMessage.success('已进入附件上传流程')
+  emit('changed')
+}
+
+async function onMarkHasExternalAudit() {
+  if (!props.workOrderId) return
+  await markHasExternalAudit(props.workOrderId)
+  ElMessage.success('已进入外部审核复核准备流程')
   emit('changed')
 }
 

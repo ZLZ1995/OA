@@ -34,6 +34,19 @@ STATUS_TO_STEP = {
     "WAIT_THIRD_REVIEW_SUBMIT": "三审",
     "THIRD_REVIEWING": "三审",
     "THIRD_REVIEW_REJECTED": "报告送审",
+    "THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND": "外部审核确认",
+    "WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM": "外部审核确认",
+    "WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT": "外部审核复核",
+    "EXTERNAL_FIRST_REVIEWING": "外部审核复核",
+    "EXTERNAL_FIRST_REJECTED": "外部审核复核",
+    "WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT": "外部审核复核",
+    "EXTERNAL_SECOND_REVIEWING": "外部审核复核",
+    "EXTERNAL_SECOND_REJECTED": "外部审核复核",
+    "WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT": "外部审核复核",
+    "EXTERNAL_THIRD_REVIEWING": "外部审核复核",
+    "EXTERNAL_THIRD_REJECTED": "外部审核复核",
+    "WAIT_OWNER_SIGNOFF_UPLOAD": "报告出具",
+    "SIGNOFF_REVIEWING": "签发审核",
     "THIRD_APPROVED_WAIT_PRINTROOM": "报告出具",
     "PRINTROOM_PROCESSING": "报告出具",
     "PAPER_REPORT_ISSUED": "发票开具",
@@ -58,6 +71,9 @@ FLOW_STEPS = [
     "一审",
     "二审",
     "三审",
+    "外部审核确认",
+    "外部审核复核",
+    "签发审核",
     "报告出具",
     "报告邮寄",
     "发票开具",
@@ -73,6 +89,9 @@ EXTERNAL_FLOW_STEPS = [
     "一审",
     "二审",
     "三审",
+    "外部审核确认",
+    "外部审核复核",
+    "签发审核",
     "报告出具",
     "报告邮寄",
     "发票开具",
@@ -140,6 +159,8 @@ def get_user_role_in_project(project: Project, work_order: WorkOrder | None, cur
         return "二审老师"
     if work_order and work_order.third_reviewer_id == current_user.id:
         return "三审老师"
+    if work_order and work_order.chief_appraiser_user_id == current_user.id:
+        return "首席评估师"
     if work_order and work_order.contract_reviewer_id == current_user.id:
         return "合同审核人"
     if any(item.role.code == "PRINT_ROOM" for item in current_user.roles):
@@ -162,6 +183,8 @@ def build_todo_action(step: str, user_role: str) -> str | None:
         return "请处理二审"
     if user_role == "三审老师" and step == "三审":
         return "请处理三审"
+    if user_role == "首席评估师" and step == "签发审核":
+        return "请处理签发审核"
     if user_role == "三审老师" and step == "报告出具":
         return "请上传正式报告文件和合同扫描件"
     if user_role == "文印室" and step == "报告出具":
@@ -179,6 +202,9 @@ def build_todo_action(step: str, user_role: str) -> str | None:
             "合同初稿上传": "请上传合同初稿",
             "合同初稿审核": "请提交合同初稿审核",
             "报告送审": "请提交报告送审",
+            "外部审核确认": "请确认是否涉及外部审核",
+            "外部审核复核": "请上传报告文件和外部审核意见并推进复核",
+            "签发审核": "请等待签发审核结果",
             "报告出具": "请跟进报告出具",
             "报告邮寄": "请填写和确认邮寄信息",
             "发票开具": "请提交开票信息",
