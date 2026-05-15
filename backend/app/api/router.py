@@ -20,7 +20,9 @@ from app.api.v1.report_versions import router as report_versions_router
 from app.api.v1.reminders import router as reminders_router
 from app.api.v1.reviews import router as reviews_router
 from app.api.v1.roles import router as roles_router
+from app.api.v1.signoff import router as signoff_router
 from app.api.v1.users import router as users_router
+from app.api.v1.ws_notifications import router as ws_notifications_router
 from app.api.v1.work_orders import router as work_orders_router
 from app.api.v1.workflow_logs import router as workflow_logs_router
 from app.api.v1.workbench import router as workbench_router
@@ -29,6 +31,7 @@ api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(auth_router)
 api_router.include_router(users_router)
+api_router.include_router(ws_notifications_router)
 api_router.include_router(roles_router)
 api_router.include_router(projects_router)
 api_router.include_router(project_exports_router)
@@ -40,6 +43,7 @@ api_router.include_router(report_versions_router)
 api_router.include_router(files_router)
 api_router.include_router(contract_reviews_router)
 api_router.include_router(reviews_router)
+api_router.include_router(signoff_router)
 api_router.include_router(print_room_router)
 api_router.include_router(report_mailing_router)
 api_router.include_router(finance_router)

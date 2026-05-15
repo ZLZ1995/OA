@@ -32,6 +32,8 @@ class WorkOrderUpdate(BaseModel):
     archive_submitter_id: int | None = None
     archive_submission_type: str | None = None
     mailing_status: str | None = None
+    signoff_status: str | None = None
+    chief_appraiser_user_id: int | None = None
 
 
 class WorkOrderResponse(WorkOrderBase):
@@ -50,6 +52,8 @@ class WorkOrderResponse(WorkOrderBase):
     archive_submitter_id: int | None = None
     archive_submission_type: str | None = None
     mailing_status: str | None = None
+    signoff_status: str | None = None
+    chief_appraiser_user_id: int | None = None
 
 
 class WorkOrderListResponse(BaseModel):

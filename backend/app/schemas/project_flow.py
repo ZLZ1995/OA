@@ -9,15 +9,17 @@ class ProjectFlowProject(BaseModel):
     project_name: str
     client_name: str
     undertaking_unit: str
+    evaluation_business_nature: str | None = None
     report_type: str | None = None
     valuation_base_date: str | None = None
     business_salesman: str | None = None
     project_amount: float | None = None
     invoiced_amount: float = 0
     project_source: str = "INTERNAL"
-    project_source_display: str = "内部项目"
+    project_source_display: str = "评估一部"
     external_project_leader_name: str | None = None
     project_leader_display_name: str | None = None
+    display_project_leader_name: str | None = None
     contract_no: str | None = None
     report_no: str | None = None
     first_reviewer_name: str | None = None
@@ -60,6 +62,8 @@ class ProjectFlowResponse(BaseModel):
     archive_submitter_id: int | None = None
     archive_submission_type: str | None = None
     mailing_status: str | None = None
+    signoff_status: str | None = None
+    chief_appraiser_user_id: int | None = None
     user_role_in_project: str
     available_action: str
     can_operate: bool

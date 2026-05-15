@@ -19,6 +19,7 @@ FIXED_ROLES: list[tuple[str, str, str]] = [
     ("FIRST_REVIEWER", "一审人员", "一审角色"),
     ("SECOND_REVIEWER", "二审人员", "二审角色"),
     ("THIRD_REVIEWER", "三审人员", "三审角色"),
+    ("CHIEF_APPRAISER", "首席评估师", "签发审核角色"),
     ("PRINT_ROOM", "文印室", "文印室角色"),
     ("FINANCE", "财务人员", "财务角色"),
     ("ARCHIVE_MANAGER", "档案管理员", "档案管理角色"),
@@ -28,84 +29,6 @@ SUPER_ADMIN_USERNAME = settings.initial_admin_username
 SUPER_ADMIN_PASSWORD = settings.initial_admin_password
 SUPER_ADMIN_REAL_NAME = settings.initial_admin_real_name
 
-LOCAL_BOOTSTRAP_USERS: list[dict[str, object]] = [
-    {
-        "username": "zhongqin123",
-        "real_name": "系统管理员",
-        "password_hash": "$2b$12$UJmlRxhp7L7WJy3GprgWOeRaAVF/B3ExkUhH3G3RfkhBV4owhXkm.",
-        "role_codes": [
-            "ADMIN",
-            "SALES",
-            "PROJECT_LEADER",
-            "PROJECT_MEMBER",
-            "CONTRACT_REVIEWER",
-            "FIRST_REVIEWER",
-            "SECOND_REVIEWER",
-            "THIRD_REVIEWER",
-            "PRINT_ROOM",
-            "FINANCE",
-            "ARCHIVE_MANAGER",
-        ],
-    },
-    {
-        "username": "张立志",
-        "real_name": "张立志",
-        "password_hash": "$2b$12$B3VjartK4zN0mprmk2otkuzFUtlPAFo/dW8L4g/IhGkjnJD/5vIn.",
-        "role_codes": ["SALES", "PROJECT_LEADER", "PROJECT_MEMBER"],
-    },
-    {
-        "username": "孙自现",
-        "real_name": "孙自现",
-        "password_hash": "$2b$12$kRAHe6hQ40ohGjTvMpFZgO7Hm/wdP/tU1olQt9vbte7uxeNHY2HVS",
-        "role_codes": [
-            "SALES",
-            "PROJECT_LEADER",
-            "PROJECT_MEMBER",
-            "CONTRACT_REVIEWER",
-            "FIRST_REVIEWER",
-            "SECOND_REVIEWER",
-            "THIRD_REVIEWER",
-        ],
-    },
-    {
-        "username": "付胜",
-        "real_name": "付胜",
-        "password_hash": "$2b$12$Te1rGmb0RbYumgah..LSw.GpB.NIKYaPZiYCqsuszeHM/Cc82.kRu",
-        "role_codes": [
-            "SALES",
-            "PROJECT_LEADER",
-            "PROJECT_MEMBER",
-            "FIRST_REVIEWER",
-            "SECOND_REVIEWER",
-            "THIRD_REVIEWER",
-        ],
-    },
-    {
-        "username": "李利英",
-        "real_name": "李利英",
-        "password_hash": "$2b$12$Z6ecaghOLig1VbePF28jW.aEyt6pOuyrMzIz8sYTKNcMD1E80JLKC",
-        "role_codes": ["CONTRACT_REVIEWER", "FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER"],
-    },
-    {
-        "username": "李晓",
-        "real_name": "李晓",
-        "password_hash": "$2b$12$EDcZ7uZqXC0KkQYiCJkIj.DHAXg5VagKr9nEQHzehpN/liqmFJv1y",
-        "role_codes": ["FINANCE"],
-    },
-    {
-        "username": "王宇",
-        "real_name": "王宇",
-        "password_hash": "$2b$12$TbIZMEsC27ZNotunL7iCJeQZivzW.1itHP8.yxjCrGOfL1hy07M4e",
-        "role_codes": ["PRINT_ROOM"],
-    },
-    {
-        "username": "李彪",
-        "real_name": "李彪",
-        "password_hash": "$2b$12$0FBZrb1JrGy98PS5EnPbnezbgVHEIWJv3ohfmd6yJP.MH2K9BVQNW",
-        "role_codes": ["ARCHIVE_MANAGER"],
-    },
-]
-
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
@@ -113,24 +36,18 @@ def init_db() -> None:
         ensure_project_columns(db)
         ensure_work_order_columns(db)
         ensure_work_order_file_columns(db)
-        ensure_contract_review_table(db)
-        ensure_project_update_log_table(db)
-        ensure_report_mailing_table(db)
-        ensure_project_delete_request_table(db)
-        ensure_project_conflict_tables(db)
-        ensure_reminder_tables(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
-        sync_local_bootstrap_users(db)
 
 
 def ensure_project_columns(db: Session) -> None:
     if engine.dialect.name != "sqlite":
         return
-
     existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('projects')")).fetchall()}
     if "undertaking_unit" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL"))
+    if "evaluation_business_nature" not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN evaluation_business_nature VARCHAR(64) NULL"))
     if "report_type" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN report_type VARCHAR(32) NULL"))
     if "valuation_base_date" not in existing_columns:
@@ -147,354 +64,39 @@ def ensure_project_columns(db: Session) -> None:
         db.execute(text("ALTER TABLE projects ADD COLUMN archived_at TIMESTAMPTZ NULL"))
     if "deleted_at" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMPTZ NULL"))
-    if "duplicate_delete_required" not in existing_columns:
-        db.execute(text("ALTER TABLE projects ADD COLUMN duplicate_delete_required BOOLEAN DEFAULT 0 NOT NULL"))
-    if "duplicate_delete_reason" not in existing_columns:
-        db.execute(text("ALTER TABLE projects ADD COLUMN duplicate_delete_reason TEXT NULL"))
-    if "termination_status" not in existing_columns:
-        db.execute(text("ALTER TABLE projects ADD COLUMN termination_status VARCHAR(32) NULL"))
-    if "termination_reason" not in existing_columns:
-        db.execute(text("ALTER TABLE projects ADD COLUMN termination_reason TEXT NULL"))
-    if "termination_requested_by" not in existing_columns:
-        db.execute(text("ALTER TABLE projects ADD COLUMN termination_requested_by INTEGER NULL"))
-    if "termination_requested_at" not in existing_columns:
-        db.execute(text("ALTER TABLE projects ADD COLUMN termination_requested_at TIMESTAMPTZ NULL"))
-    if "termination_approved_by" not in existing_columns:
-        db.execute(text("ALTER TABLE projects ADD COLUMN termination_approved_by INTEGER NULL"))
-    if "termination_approved_at" not in existing_columns:
-        db.execute(text("ALTER TABLE projects ADD COLUMN termination_approved_at TIMESTAMPTZ NULL"))
-    db.commit()
-
-
-def ensure_work_order_file_columns(db: Session) -> None:
-    if engine.dialect.name != "sqlite":
-        return
-
-    existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('work_order_files')")).fetchall()}
-    if "file_size" not in existing_columns:
-        db.execute(text("ALTER TABLE work_order_files ADD COLUMN file_size INTEGER NULL"))
     db.commit()
 
 
 def ensure_work_order_columns(db: Session) -> None:
     if engine.dialect.name != "sqlite":
         return
-
     existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('work_orders')")).fetchall()}
-    if "contract_reviewer_id" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN contract_reviewer_id INTEGER NULL"))
-    if "signer_one" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN signer_one VARCHAR(64) NULL"))
-    if "signer_two" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN signer_two VARCHAR(64) NULL"))
-    if "formal_report_count" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN formal_report_count INTEGER NULL"))
-    if "print_room_handler_id" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN print_room_handler_id INTEGER NULL"))
-    if "mailing_handler_user_id" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN mailing_handler_user_id INTEGER NULL"))
-    if "archive_reviewer_id" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_reviewer_id INTEGER NULL"))
-    if "archive_submitter_id" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_submitter_id INTEGER NULL"))
-    if "archive_submission_type" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN archive_submission_type VARCHAR(16) NULL"))
-    if "mailing_status" not in existing_columns:
-        db.execute(text("ALTER TABLE work_orders ADD COLUMN mailing_status VARCHAR(32) NULL"))
-
-    invoice_columns = {row[1] for row in db.execute(text("PRAGMA table_info('invoices')")).fetchall()}
-    if "invoice_info" not in invoice_columns:
-        db.execute(text("ALTER TABLE invoices ADD COLUMN invoice_info TEXT NULL"))
-    if "invoice_type" not in invoice_columns:
-        db.execute(text("ALTER TABLE invoices ADD COLUMN invoice_type VARCHAR(16) NULL"))
-    if "finance_handler_id" not in invoice_columns:
-        db.execute(text("ALTER TABLE invoices ADD COLUMN finance_handler_id INTEGER NULL"))
+    column_sql = {
+        "contract_reviewer_id": "ALTER TABLE work_orders ADD COLUMN contract_reviewer_id INTEGER NULL",
+        "signer_one": "ALTER TABLE work_orders ADD COLUMN signer_one VARCHAR(64) NULL",
+        "signer_two": "ALTER TABLE work_orders ADD COLUMN signer_two VARCHAR(64) NULL",
+        "formal_report_count": "ALTER TABLE work_orders ADD COLUMN formal_report_count INTEGER NULL",
+        "print_room_handler_id": "ALTER TABLE work_orders ADD COLUMN print_room_handler_id INTEGER NULL",
+        "mailing_handler_user_id": "ALTER TABLE work_orders ADD COLUMN mailing_handler_user_id INTEGER NULL",
+        "archive_reviewer_id": "ALTER TABLE work_orders ADD COLUMN archive_reviewer_id INTEGER NULL",
+        "archive_submitter_id": "ALTER TABLE work_orders ADD COLUMN archive_submitter_id INTEGER NULL",
+        "archive_submission_type": "ALTER TABLE work_orders ADD COLUMN archive_submission_type VARCHAR(16) NULL",
+        "mailing_status": "ALTER TABLE work_orders ADD COLUMN mailing_status VARCHAR(32) NULL",
+        "signoff_status": "ALTER TABLE work_orders ADD COLUMN signoff_status VARCHAR(32) NULL",
+        "chief_appraiser_user_id": "ALTER TABLE work_orders ADD COLUMN chief_appraiser_user_id INTEGER NULL",
+    }
+    for column, sql in column_sql.items():
+        if column not in existing_columns:
+            db.execute(text(sql))
     db.commit()
 
 
-def ensure_contract_review_table(db: Session) -> None:
+def ensure_work_order_file_columns(db: Session) -> None:
     if engine.dialect.name != "sqlite":
         return
-
-    table_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='contract_review_records'")).fetchone()
-    if not table_exists:
-        db.execute(
-            text(
-                """
-                CREATE TABLE contract_review_records (
-                    id INTEGER PRIMARY KEY,
-                    work_order_id INTEGER NOT NULL,
-                    project_id INTEGER NOT NULL,
-                    action_type VARCHAR(32) NOT NULL,
-                    operator_user_id INTEGER NOT NULL,
-                    reviewer_user_id INTEGER NOT NULL,
-                    comment TEXT NULL,
-                    contract_file_id INTEGER NULL,
-                    review_attachment_file_id INTEGER NULL,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-                )
-                """
-            )
-        )
-    db.commit()
-
-
-def ensure_project_update_log_table(db: Session) -> None:
-    if engine.dialect.name != "sqlite":
-        return
-
-    table_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_update_logs'")).fetchone()
-    if not table_exists:
-        db.execute(
-            text(
-                """
-                CREATE TABLE project_update_logs (
-                    id INTEGER PRIMARY KEY,
-                    project_id INTEGER NOT NULL,
-                    operator_user_id INTEGER NOT NULL,
-                    changed_fields TEXT NOT NULL,
-                    remark VARCHAR(255) NULL,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-                )
-                """
-            )
-        )
-    db.commit()
-
-
-def ensure_report_mailing_table(db: Session) -> None:
-    if engine.dialect.name != "sqlite":
-        return
-
-    table_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='report_mailing_records'")).fetchone()
-    if not table_exists:
-        db.execute(
-            text(
-                """
-                CREATE TABLE report_mailing_records (
-                    id INTEGER PRIMARY KEY,
-                    work_order_id INTEGER NOT NULL,
-                    project_id INTEGER NOT NULL,
-                    action_type VARCHAR(32) NOT NULL,
-                    operator_user_id INTEGER NOT NULL,
-                    receiver_name VARCHAR(128) NULL,
-                    receiver_phone VARCHAR(64) NULL,
-                    receiver_address TEXT NULL,
-                    receiver_remark TEXT NULL,
-                    express_no VARCHAR(128) NULL,
-                    status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
-                    invalidated_express_no VARCHAR(128) NULL,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-                )
-                """
-            )
-        )
-    db.commit()
-
-
-def ensure_project_delete_request_table(db: Session) -> None:
-    if engine.dialect.name != "sqlite":
-        return
-
-    table_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_delete_requests'")).fetchone()
-    if not table_exists:
-        db.execute(
-            text(
-                """
-                CREATE TABLE project_delete_requests (
-                    id INTEGER PRIMARY KEY,
-                    project_id INTEGER NULL UNIQUE,
-                    project_no VARCHAR(64) NOT NULL DEFAULT '',
-                    project_name VARCHAR(255) NOT NULL DEFAULT '',
-                    client_name VARCHAR(255) NOT NULL DEFAULT '',
-                    current_step VARCHAR(64) NOT NULL DEFAULT '',
-                    requester_user_id INTEGER NOT NULL,
-                    approver_user_id INTEGER NOT NULL,
-                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
-                    reason TEXT NULL,
-                    requested_at TIMESTAMPTZ NOT NULL,
-                    reviewed_at TIMESTAMPTZ NULL,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-                )
-                """
-            )
-        )
-    existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('project_delete_requests')")).fetchall()}
-    if "project_no" not in existing_columns:
-        db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN project_no VARCHAR(64) NOT NULL DEFAULT ''"))
-    if "project_name" not in existing_columns:
-        db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN project_name VARCHAR(255) NOT NULL DEFAULT ''"))
-    if "client_name" not in existing_columns:
-        db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN client_name VARCHAR(255) NOT NULL DEFAULT ''"))
-    if "current_step" not in existing_columns:
-        db.execute(text("ALTER TABLE project_delete_requests ADD COLUMN current_step VARCHAR(64) NOT NULL DEFAULT ''"))
-    db.commit()
-
-
-def ensure_project_conflict_tables(db: Session) -> None:
-    if engine.dialect.name != "sqlite":
-        return
-
-    snapshot_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_conflict_snapshots'")).fetchone()
-    if not snapshot_exists:
-        db.execute(
-            text(
-                """
-                CREATE TABLE project_conflict_snapshots (
-                    id INTEGER PRIMARY KEY,
-                    project_id INTEGER NOT NULL UNIQUE,
-                    work_order_id INTEGER NOT NULL,
-                    project_no VARCHAR(64) NOT NULL,
-                    project_name VARCHAR(255) NOT NULL,
-                    client_name VARCHAR(255) NOT NULL,
-                    normalized_client_name VARCHAR(255) NOT NULL,
-                    project_amount FLOAT NOT NULL,
-                    valuation_base_date DATE NOT NULL,
-                    project_leader_display_name VARCHAR(255) NOT NULL,
-                    creator_user_id INTEGER NULL,
-                    creator_username VARCHAR(255) NULL,
-                    contract_uploaded_at TIMESTAMPTZ NOT NULL,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-                )
-                """
-            )
-        )
-
-    conflict_exists = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_conflict_records'")).fetchone()
-    if not conflict_exists:
-        db.execute(
-            text(
-                """
-                CREATE TABLE project_conflict_records (
-                    id INTEGER PRIMARY KEY,
-                    project_a_id INTEGER NOT NULL,
-                    project_b_id INTEGER NOT NULL,
-                    snapshot_a_id INTEGER NOT NULL,
-                    snapshot_b_id INTEGER NOT NULL,
-                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
-                    decision VARCHAR(32) NULL,
-                    kept_project_id INTEGER NULL,
-                    delete_project_id INTEGER NULL,
-                    decided_by INTEGER NULL,
-                    decided_at TIMESTAMPTZ NULL,
-                    resolve_comment TEXT NULL,
-                    resolved_at TIMESTAMPTZ NULL,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-                )
-                """
-            )
-        )
-    db.commit()
-
-
-def ensure_reminder_tables(db: Session) -> None:
-    if engine.dialect.name != "sqlite":
-        return
-
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS reminder_events (
-                id INTEGER PRIMARY KEY,
-                project_id INTEGER NOT NULL,
-                work_order_id INTEGER NOT NULL,
-                current_handler_user_id INTEGER NOT NULL,
-                initiator_user_id INTEGER NOT NULL,
-                initiator_role_type VARCHAR(32) NOT NULL,
-                trigger_type VARCHAR(16) NOT NULL DEFAULT 'MANUAL',
-                current_status VARCHAR(64) NOT NULL,
-                overdue_seconds INTEGER NOT NULL DEFAULT 0,
-                comment TEXT NULL,
-                day_remind_seq INTEGER NOT NULL DEFAULT 1,
-                handler_cycle_key VARCHAR(128) NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-            """
-        )
-    )
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_project_id ON reminder_events (project_id)"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_work_order_id ON reminder_events (work_order_id)"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_current_handler_user_id ON reminder_events (current_handler_user_id)"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_initiator_user_id ON reminder_events (initiator_user_id)"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_events_handler_cycle_key ON reminder_events (handler_cycle_key)"))
-
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS reminder_receipts (
-                id INTEGER PRIMARY KEY,
-                reminder_event_id INTEGER NOT NULL,
-                receiver_user_id INTEGER NOT NULL,
-                receiver_type VARCHAR(16) NOT NULL,
-                channel VARCHAR(16) NOT NULL DEFAULT 'IN_APP',
-                delivery_status VARCHAR(16) NOT NULL DEFAULT 'SENT',
-                read_status VARCHAR(16) NOT NULL DEFAULT 'UNREAD',
-                delivery_error TEXT NULL,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-            """
-        )
-    )
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_receipts_reminder_event_id ON reminder_receipts (reminder_event_id)"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_receipts_receiver_user_id ON reminder_receipts (receiver_user_id)"))
-
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS user_notifications (
-                id INTEGER PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                biz_type VARCHAR(32) NOT NULL,
-                biz_id INTEGER NOT NULL,
-                title VARCHAR(255) NOT NULL,
-                content TEXT NOT NULL,
-                message_type VARCHAR(32) NOT NULL DEFAULT 'SYSTEM',
-                priority VARCHAR(16) NOT NULL DEFAULT 'NORMAL',
-                sender_user_id INTEGER NULL,
-                project_id INTEGER NULL,
-                work_order_id INTEGER NULL,
-                process_status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
-                cc_flag BOOLEAN NOT NULL DEFAULT 0,
-                group_key VARCHAR(64) NULL,
-                link_type VARCHAR(32) NULL,
-                link_target_id INTEGER NULL,
-                is_read BOOLEAN NOT NULL DEFAULT 0,
-                popup_flag BOOLEAN NOT NULL DEFAULT 1,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-            """
-        )
-    )
-    existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('user_notifications')")).fetchall()}
-    if "message_type" not in existing_columns:
-        db.execute(text("ALTER TABLE user_notifications ADD COLUMN message_type VARCHAR(32) NOT NULL DEFAULT 'SYSTEM'"))
-    if "priority" not in existing_columns:
-        db.execute(text("ALTER TABLE user_notifications ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'NORMAL'"))
-    if "sender_user_id" not in existing_columns:
-        db.execute(text("ALTER TABLE user_notifications ADD COLUMN sender_user_id INTEGER NULL"))
-    if "project_id" not in existing_columns:
-        db.execute(text("ALTER TABLE user_notifications ADD COLUMN project_id INTEGER NULL"))
-    if "work_order_id" not in existing_columns:
-        db.execute(text("ALTER TABLE user_notifications ADD COLUMN work_order_id INTEGER NULL"))
-    if "process_status" not in existing_columns:
-        db.execute(text("ALTER TABLE user_notifications ADD COLUMN process_status VARCHAR(16) NOT NULL DEFAULT 'PENDING'"))
-    if "cc_flag" not in existing_columns:
-        db.execute(text("ALTER TABLE user_notifications ADD COLUMN cc_flag BOOLEAN NOT NULL DEFAULT 0"))
-    if "group_key" not in existing_columns:
-        db.execute(text("ALTER TABLE user_notifications ADD COLUMN group_key VARCHAR(64) NULL"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_user_id ON user_notifications (user_id)"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_biz_type ON user_notifications (biz_type)"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_biz_id ON user_notifications (biz_id)"))
-    db.execute(text("CREATE INDEX IF NOT EXISTS ix_user_notifications_message_type ON user_notifications (message_type)"))
+    existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('work_order_files')")).fetchall()}
+    if "file_size" not in existing_columns:
+        db.execute(text("ALTER TABLE work_order_files ADD COLUMN file_size INTEGER NULL"))
     db.commit()
 
 
@@ -527,33 +129,4 @@ def seed_initial_admin(db: Session) -> None:
     for role_id in all_role_ids:
         if role_id not in bound_role_ids:
             db.add(UserRole(user_id=admin.id, role_id=role_id))
-    db.commit()
-
-
-def sync_local_bootstrap_users(db: Session) -> None:
-    roles_by_code = {role.code: role for role in db.query(Role).all()}
-    for item in LOCAL_BOOTSTRAP_USERS:
-        username = str(item["username"])
-        user = db.query(User).filter(User.username == username).first()
-        if not user:
-            user = User(
-                username=username,
-                real_name=str(item["real_name"]),
-                password_hash=str(item["password_hash"]),
-                is_active=True,
-            )
-            db.add(user)
-            db.flush()
-
-        user.real_name = str(item["real_name"])
-        user.password_hash = str(item["password_hash"])
-        user.is_active = True
-
-        role_codes = item["role_codes"]
-        db.query(UserRole).filter(UserRole.user_id == user.id).delete()
-        for code in role_codes if isinstance(role_codes, list) else []:
-            role = roles_by_code.get(str(code))
-            if role:
-                db.add(UserRole(user_id=user.id, role_id=role.id))
-
     db.commit()

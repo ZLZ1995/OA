@@ -3,10 +3,14 @@ from fastapi import HTTPException
 from app.models.project import Project
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.services.project_field_normalizer import (
+    normalize_external_project_leader_name,
+    normalize_project_source,
+)
 
 PROJECT_SOURCE_LABELS = {
-    "INTERNAL": "内部项目",
-    "EXTERNAL": "外部项目",
+    "INTERNAL": "评估一部",
+    "EXTERNAL": "评估二部",
 }
 
 STATUS_TO_STEP = {
@@ -30,6 +34,19 @@ STATUS_TO_STEP = {
     "WAIT_THIRD_REVIEW_SUBMIT": "三审",
     "THIRD_REVIEWING": "三审",
     "THIRD_REVIEW_REJECTED": "报告送审",
+    "THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND": "外部审核确认",
+    "WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM": "外部审核确认",
+    "WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT": "外部审核复核",
+    "EXTERNAL_FIRST_REVIEWING": "外部审核复核",
+    "EXTERNAL_FIRST_REJECTED": "外部审核复核",
+    "WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT": "外部审核复核",
+    "EXTERNAL_SECOND_REVIEWING": "外部审核复核",
+    "EXTERNAL_SECOND_REJECTED": "外部审核复核",
+    "WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT": "外部审核复核",
+    "EXTERNAL_THIRD_REVIEWING": "外部审核复核",
+    "EXTERNAL_THIRD_REJECTED": "外部审核复核",
+    "WAIT_OWNER_SIGNOFF_UPLOAD": "报告出具",
+    "SIGNOFF_REVIEWING": "签发审核",
     "THIRD_APPROVED_WAIT_PRINTROOM": "报告出具",
     "PRINTROOM_PROCESSING": "报告出具",
     "PAPER_REPORT_ISSUED": "发票开具",
@@ -54,6 +71,9 @@ FLOW_STEPS = [
     "一审",
     "二审",
     "三审",
+    "外部审核确认",
+    "外部审核复核",
+    "签发审核",
     "报告出具",
     "报告邮寄",
     "发票开具",
@@ -69,6 +89,9 @@ EXTERNAL_FLOW_STEPS = [
     "一审",
     "二审",
     "三审",
+    "外部审核确认",
+    "外部审核复核",
+    "签发审核",
     "报告出具",
     "报告邮寄",
     "发票开具",
@@ -82,22 +105,26 @@ def is_system_admin(user: User) -> bool:
 
 
 def get_project_source_display(project_source: str | None) -> str:
-    return PROJECT_SOURCE_LABELS.get(project_source or "INTERNAL", "内部项目")
+    project_source = normalize_project_source(project_source)
+    return PROJECT_SOURCE_LABELS.get(project_source or "INTERNAL", "评估一部")
 
 
 def get_project_leader_display_name(project: Project, leader_name: str | None = None) -> str | None:
-    if project.project_source == "EXTERNAL" and project.external_project_leader_name:
-        return project.external_project_leader_name
+    project_source = normalize_project_source(project.project_source)
+    external_leader = normalize_external_project_leader_name(project.external_project_leader_name)
+    if project_source == "EXTERNAL" and external_leader:
+        return external_leader
     return leader_name
 
 
 def get_flow_steps(project: Project) -> list[str]:
-    return EXTERNAL_FLOW_STEPS if project.project_source == "EXTERNAL" else FLOW_STEPS
+    return EXTERNAL_FLOW_STEPS if normalize_project_source(project.project_source) == "EXTERNAL" else FLOW_STEPS
 
 
 def normalize_project_step(status: str | None, archived: bool, project_source: str = "INTERNAL") -> str:
     if archived:
         return "已归档"
+    project_source = normalize_project_source(project_source)
     step = STATUS_TO_STEP.get(status or "", "项目创建")
     if project_source == "EXTERNAL" and step == "项目组成员":
         return "合同初稿上传"
@@ -112,7 +139,7 @@ def assert_project_creator(project: Project, current_user: User) -> None:
     if project.deleted_at is not None:
         raise HTTPException(status_code=400, detail="项目已删除，不能重复操作")
     if project.business_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="只有项目创建人可以执行该操作")
+        raise HTTPException(status_code=403, detail="只有项目创建人才可以执行该操作")
     if project.archived_at is not None:
         raise HTTPException(status_code=400, detail="项目已归档，不能继续操作")
 
@@ -132,6 +159,8 @@ def get_user_role_in_project(project: Project, work_order: WorkOrder | None, cur
         return "二审老师"
     if work_order and work_order.third_reviewer_id == current_user.id:
         return "三审老师"
+    if work_order and work_order.chief_appraiser_user_id == current_user.id:
+        return "首席评估师"
     if work_order and work_order.contract_reviewer_id == current_user.id:
         return "合同审核人"
     if any(item.role.code == "PRINT_ROOM" for item in current_user.roles):
@@ -154,6 +183,8 @@ def build_todo_action(step: str, user_role: str) -> str | None:
         return "请处理二审"
     if user_role == "三审老师" and step == "三审":
         return "请处理三审"
+    if user_role == "首席评估师" and step == "签发审核":
+        return "请处理签发审核"
     if user_role == "三审老师" and step == "报告出具":
         return "请上传正式报告文件和合同扫描件"
     if user_role == "文印室" and step == "报告出具":
@@ -171,6 +202,9 @@ def build_todo_action(step: str, user_role: str) -> str | None:
             "合同初稿上传": "请上传合同初稿",
             "合同初稿审核": "请提交合同初稿审核",
             "报告送审": "请提交报告送审",
+            "外部审核确认": "请确认是否涉及外部审核",
+            "外部审核复核": "请上传报告文件和外部审核意见并推进复核",
+            "签发审核": "请等待签发审核结果",
             "报告出具": "请跟进报告出具",
             "报告邮寄": "请填写和确认邮寄信息",
             "发票开具": "请提交开票信息",

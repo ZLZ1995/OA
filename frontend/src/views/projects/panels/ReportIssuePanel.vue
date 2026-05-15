@@ -15,6 +15,7 @@
     show-icon
     style="margin-bottom: 12px"
   />
+
   <template v-if="workOrderId">
     <el-form label-width="120px">
       <el-form-item label="正式合同编号">
@@ -23,30 +24,50 @@
       <el-form-item label="纸质报告编号">
         <el-input v-model="paperReportNo" :disabled="!canPrintRoom" />
       </el-form-item>
-      <el-form-item label="签字评估师姓名">
+      <el-form-item label="签字评估师">
         <el-space direction="vertical" alignment="start">
           <el-input v-model="signerOne" disabled placeholder="签字评估师一" style="width: 260px" />
           <el-input v-model="signerTwo" disabled placeholder="签字评估师二" style="width: 260px" />
         </el-space>
       </el-form-item>
-      <el-form-item label="合同扫描件下载">
-        <div v-if="contractFiles.length" class="download-list">
-          <div v-for="file in contractFiles" :key="file.id" class="download-item">
-            <span>{{ file.origin_file_name }}</span>
-            <el-button type="primary" link @click="download(file)">下载</el-button>
-          </div>
+
+      <el-form-item label="签发文件">
+        <div class="issue-file-grid">
+          <el-card shadow="never" class="issue-file-card">
+            <template #header>报告文件</template>
+            <div v-if="reviewPackageFiles.length" class="download-list">
+              <div v-for="file in reviewPackageFiles" :key="file.id" class="download-item">
+                <span>{{ file.origin_file_name }}</span>
+                <el-button type="primary" link @click="download(file)">下载</el-button>
+              </div>
+            </div>
+            <span v-else>-</span>
+          </el-card>
+
+          <el-card shadow="never" class="issue-file-card">
+            <template #header>报告附件</template>
+            <div v-if="formalReportFiles.length" class="download-list">
+              <div v-for="file in formalReportFiles" :key="file.id" class="download-item">
+                <span>{{ file.origin_file_name }}</span>
+                <el-button type="primary" link @click="download(file)">下载</el-button>
+              </div>
+            </div>
+            <span v-else>-</span>
+          </el-card>
+
+          <el-card shadow="never" class="issue-file-card">
+            <template #header>合同扫描件</template>
+            <div v-if="contractFiles.length" class="download-list">
+              <div v-for="file in contractFiles" :key="file.id" class="download-item">
+                <span>{{ file.origin_file_name }}</span>
+                <el-button type="primary" link @click="download(file)">下载</el-button>
+              </div>
+            </div>
+            <span v-else>-</span>
+          </el-card>
         </div>
-        <span v-else>-</span>
       </el-form-item>
-      <el-form-item label="正式报告下载">
-        <div v-if="formalReportFiles.length" class="download-list">
-          <div v-for="file in formalReportFiles" :key="file.id" class="download-item">
-            <span>{{ file.origin_file_name }}</span>
-            <el-button type="primary" link @click="download(file)">下载</el-button>
-          </div>
-        </div>
-        <span v-else>-</span>
-      </el-form-item>
+
       <el-form-item label="报告扫描件">
         <el-upload v-if="canPrintRoom" :auto-upload="false" :on-change="onScanSelected" :show-file-list="false">
           <el-button type="primary">上传报告扫描件</el-button>
@@ -66,6 +87,7 @@
         </div>
         <span v-if="!reportScanFiles.length && !canPrintRoom">-</span>
       </el-form-item>
+
       <el-form-item label="出具数量">
         <el-input-number v-model="copyCount" :min="1" :disabled="!canPrintRoom" />
       </el-form-item>
@@ -109,6 +131,7 @@ const signerTwo = ref('')
 const contractFiles = ref<WorkOrderFileItem[]>([])
 const formalReportFiles = ref<WorkOrderFileItem[]>([])
 const reportScanFiles = ref<WorkOrderFileItem[]>([])
+const reviewPackageFiles = ref<WorkOrderFileItem[]>([])
 const replaceInputs = new Map<number, HTMLInputElement>()
 
 const isPrintRoomRole = computed(() => Boolean(props.userRoles?.includes('PRINT_ROOM')))
@@ -136,6 +159,7 @@ async function loadFiles() {
     contractFiles.value = []
     formalReportFiles.value = []
     reportScanFiles.value = []
+    reviewPackageFiles.value = []
     return
   }
   const info = await getPrintRoomInfo(props.workOrderId)
@@ -144,9 +168,10 @@ async function loadFiles() {
   copyCount.value = info.copy_count || 1
   remark.value = info.remark || ''
   const files = (await listWorkOrderFiles(props.workOrderId)).items
-  contractFiles.value = files.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' || file.business_stage === 'FINAL_CONTRACT_SCAN')
-  formalReportFiles.value = files.filter(file => file.file_category === 'FORMAL_REPORT' || file.business_stage === 'FORMAL_REPORT')
+  contractFiles.value = files.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.is_current)
+  formalReportFiles.value = files.filter(file => file.file_category === 'FORMAL_REPORT' && file.is_current)
   reportScanFiles.value = files.filter(file => file.file_category === 'REPORT_SCAN' || file.business_stage === 'REPORT_SCAN')
+  reviewPackageFiles.value = files.filter(file => file.file_category === 'REPORT_ZIP')
 }
 
 async function issueContract() {
@@ -172,7 +197,7 @@ async function issueReport() {
     work_order_id: props.workOrderId,
     paper_report_no: paperReportNo.value.trim(),
     copy_count: copyCount.value,
-    remark: remark.value || undefined
+    remark: remark.value || undefined,
   })
   ElMessage.success('纸质报告登记成功')
   emit('changed')
@@ -184,7 +209,7 @@ async function onScanSelected(file: UploadFile) {
     work_order_id: props.workOrderId,
     file_category: 'REPORT_SCAN',
     business_stage: 'REPORT_SCAN',
-    file: file.raw
+    file: file.raw,
   })
   ElMessage.success('报告扫描件已上传')
   await loadFiles()
@@ -253,10 +278,7 @@ function download(file: WorkOrderFileItem) {
 }
 
 onMounted(loadFiles)
-watch(
-  () => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.signer_two, props.flowInfo?.current_work_order_status],
-  loadFiles
-)
+watch(() => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.signer_two, props.flowInfo?.current_work_order_status], loadFiles)
 </script>
 
 <style scoped>
@@ -280,5 +302,22 @@ watch(
 
 .hidden-file-input {
   display: none;
+}
+
+.issue-file-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.issue-file-card {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .issue-file-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

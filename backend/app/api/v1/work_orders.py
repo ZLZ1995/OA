@@ -39,6 +39,19 @@ STATUS_LABEL_MAP = {
     WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT.value: "三审",
     WorkOrderStatus.THIRD_REVIEWING.value: "三审",
     WorkOrderStatus.THIRD_REVIEW_REJECTED.value: "三审退回",
+    WorkOrderStatus.THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND.value: "三审通过待发送外部审核确认",
+    WorkOrderStatus.WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM.value: "待项目负责人确认是否涉及外部审核",
+    WorkOrderStatus.WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT.value: "待提交外部一级复核",
+    WorkOrderStatus.EXTERNAL_FIRST_REVIEWING.value: "外部一级复核",
+    WorkOrderStatus.EXTERNAL_FIRST_REJECTED.value: "外部一级复核退回",
+    WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT.value: "待提交外部二级复核",
+    WorkOrderStatus.EXTERNAL_SECOND_REVIEWING.value: "外部二级复核",
+    WorkOrderStatus.EXTERNAL_SECOND_REJECTED.value: "外部二级复核退回",
+    WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT.value: "待提交外部三级复核",
+    WorkOrderStatus.EXTERNAL_THIRD_REVIEWING.value: "外部三级复核",
+    WorkOrderStatus.EXTERNAL_THIRD_REJECTED.value: "外部三级复核退回",
+    WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value: "待上传报告附件与合同扫描件",
+    WorkOrderStatus.SIGNOFF_REVIEWING.value: "签发审核",
     WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "报告出具准备",
     WorkOrderStatus.PRINTROOM_PROCESSING.value: "报告出具",
     WorkOrderStatus.PAPER_REPORT_ISSUED.value: "报告出具完成",
@@ -147,7 +160,7 @@ def update_work_order(
     payload: WorkOrderUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    role_codes: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "THIRD_REVIEWER", "CONTRACT_REVIEWER")),
+    role_codes: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER", "THIRD_REVIEWER", "CONTRACT_REVIEWER", "CHIEF_APPRAISER")),
 ) -> WorkOrderResponse:
     row = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not row:
@@ -157,6 +170,7 @@ def update_work_order(
     signer_keys = {"signer_one", "signer_two", "formal_report_count"}
     contract_keys = {"contract_reviewer_id"}
     mailing_keys = {"mailing_handler_user_id", "mailing_status"}
+    signoff_keys = {"signoff_status", "chief_appraiser_user_id"}
 
     if signer_keys & set(data) and "ADMIN" not in role_codes:
         if set(data) - signer_keys:

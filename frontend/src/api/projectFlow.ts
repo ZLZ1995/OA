@@ -16,6 +16,7 @@ export interface ProjectFlowData {
     project_name: string
     client_name: string
     undertaking_unit: string
+    evaluation_business_nature?: string | null
     report_type?: string | null
     valuation_base_date?: string | null
     business_salesman?: string | null
@@ -25,6 +26,7 @@ export interface ProjectFlowData {
     project_source_display: string
     external_project_leader_name?: string | null
     project_leader_display_name?: string | null
+    display_project_leader_name?: string | null
     contract_no?: string | null
     report_no?: string | null
     first_reviewer_name?: string | null
@@ -56,6 +58,8 @@ export interface ProjectFlowData {
   archive_submission_type?: string | null
   mailing_handler_user_id?: number | null
   mailing_status?: string | null
+  signoff_status?: string | null
+  chief_appraiser_user_id?: number | null
   user_role_in_project: string
   available_action: string
   can_operate: boolean
