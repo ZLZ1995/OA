@@ -417,7 +417,7 @@ def test_first_review_approve_auto_advances_to_second_when_project_party_uploade
     assert cloned_file.origin_file_name == "report-v1.zip"
 
 
-def test_third_review_approve_keeps_third_reviewer_as_handler() -> None:
+def test_third_review_approve_moves_to_owner_signoff_upload_for_non_state_owned_project() -> None:
     from app.api.v1.reviews import decide_review
 
     db = _build_session()
@@ -439,8 +439,8 @@ def test_third_review_approve_keeps_third_reviewer_as_handler() -> None:
     )
 
     db.refresh(work_order)
-    assert work_order.current_status == "THIRD_APPROVED_WAIT_PRINTROOM"
-    assert work_order.current_handler_user_id == reviewer.id
+    assert work_order.current_status == "WAIT_OWNER_SIGNOFF_UPLOAD"
+    assert work_order.current_handler_user_id == work_order.project_leader_id
 
 
 def test_workbench_shows_current_reviewer_todo_even_when_user_created_project() -> None:

@@ -56,11 +56,51 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
     WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT: {WorkOrderStatus.THIRD_REVIEWING},
     WorkOrderStatus.THIRD_REVIEWING: {
         WorkOrderStatus.THIRD_REVIEW_REJECTED,
+        WorkOrderStatus.THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND,
+        WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD,
         WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM,
     },
     WorkOrderStatus.THIRD_REVIEW_REJECTED: {
         WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
         WorkOrderStatus.THIRD_REVIEWING,
+    },
+    WorkOrderStatus.THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND: {WorkOrderStatus.WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM},
+    WorkOrderStatus.WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM: {
+        WorkOrderStatus.WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT,
+        WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD,
+    },
+    WorkOrderStatus.WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT: {WorkOrderStatus.EXTERNAL_FIRST_REVIEWING},
+    WorkOrderStatus.EXTERNAL_FIRST_REVIEWING: {
+        WorkOrderStatus.EXTERNAL_FIRST_REJECTED,
+        WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT,
+    },
+    WorkOrderStatus.EXTERNAL_FIRST_REJECTED: {
+        WorkOrderStatus.WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT,
+        WorkOrderStatus.EXTERNAL_FIRST_REVIEWING,
+    },
+    WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT: {WorkOrderStatus.EXTERNAL_SECOND_REVIEWING},
+    WorkOrderStatus.EXTERNAL_SECOND_REVIEWING: {
+        WorkOrderStatus.EXTERNAL_SECOND_REJECTED,
+        WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT,
+    },
+    WorkOrderStatus.EXTERNAL_SECOND_REJECTED: {
+        WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT,
+        WorkOrderStatus.EXTERNAL_SECOND_REVIEWING,
+    },
+    WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT: {WorkOrderStatus.EXTERNAL_THIRD_REVIEWING},
+    WorkOrderStatus.EXTERNAL_THIRD_REVIEWING: {
+        WorkOrderStatus.EXTERNAL_THIRD_REJECTED,
+        WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD,
+    },
+    WorkOrderStatus.EXTERNAL_THIRD_REJECTED: {
+        WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT,
+        WorkOrderStatus.EXTERNAL_THIRD_REVIEWING,
+    },
+    WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD: {WorkOrderStatus.SIGNOFF_REVIEWING},
+    WorkOrderStatus.SIGNOFF_REVIEWING: {
+        WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD,
+        WorkOrderStatus.THIRD_REVIEWING,
+        WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM,
     },
     WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM: {
         WorkOrderStatus.THIRD_REVIEWING,

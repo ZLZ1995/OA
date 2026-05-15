@@ -751,6 +751,8 @@ def get_project_flow(
         archive_submitter_id=work_order.archive_submitter_id if work_order else None,
         archive_submission_type=work_order.archive_submission_type if work_order else None,
         mailing_status=work_order.mailing_status if work_order else None,
+        signoff_status=work_order.signoff_status if work_order else None,
+        chief_appraiser_user_id=work_order.chief_appraiser_user_id if work_order else None,
         user_role_in_project=role,
         available_action=action,
         can_operate=role != "无权限" and not is_termination_locked,
