@@ -85,7 +85,7 @@
             <template #default="{ row }">
               <el-button v-if="row.can_approve_delete" link type="danger" @click="goDeleteApprovals">处理删除审核</el-button>
               <template v-else>
-                <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
+                <el-button link type="primary" @click="goProject(row.id, row)">进入项目</el-button>
                 <el-button link type="success" @click="goNotifications(row.id)">相关消息</el-button>
               </template>
               <el-button v-if="row.can_approve_termination" link type="danger" @click="approveTermination(row)">允许终止/废止</el-button>
@@ -457,8 +457,51 @@ async function saveProject() {
   }
 }
 
-function goProject(id: number) {
-  router.push(`/projects/${id}/flow`)
+const TODO_PANEL_PRIORITY = ['contractReview', 'review', 'signoff', 'issue', 'mailing', 'invoice', 'archive'] as const
+
+function normalizeTodoText(value?: string | null) {
+  return (value || '').trim().toUpperCase()
+}
+
+function resolveTodoPanel(row: WorkbenchProjectItem) {
+  if (row.can_approve_delete || row.can_approve_termination) return 'basic'
+
+  const currentStep = normalizeTodoText(row.current_step)
+  const todoAction = normalizeTodoText(row.todo_action)
+  const statusDisplay = normalizeTodoText(row.status_display)
+  const combined = `${currentStep} ${todoAction} ${statusDisplay}`
+  const matched = new Set<string>()
+
+  if (combined.includes('合同') && (combined.includes('审核') || combined.includes('初审'))) matched.add('contractReview')
+  if (combined.includes('送审') || combined.includes('一审') || combined.includes('二审') || combined.includes('三审') || combined.includes('评审')) matched.add('review')
+  if (combined.includes('签发')) matched.add('signoff')
+  if (combined.includes('出具') || combined.includes('文印')) matched.add('issue')
+  if (combined.includes('邮寄') || combined.includes('寄送')) matched.add('mailing')
+  if (combined.includes('发票') || combined.includes('开票')) matched.add('invoice')
+  if (combined.includes('归档') || combined.includes('档案')) matched.add('archive')
+
+  return TODO_PANEL_PRIORITY.find(item => matched.has(item))
+}
+
+function resolveTodoLabel(row: WorkbenchProjectItem) {
+  return row.todo_action?.trim() || row.current_step?.trim() || ''
+}
+
+function goProject(id: number, row?: WorkbenchProjectItem) {
+  const todoPanel = row ? resolveTodoPanel(row) : undefined
+  if (!todoPanel) {
+    router.push(`/projects/${id}/flow`)
+    return
+  }
+
+  router.push({
+    path: `/projects/${id}/flow`,
+    query: {
+      todoPanel,
+      todoLabel: resolveTodoLabel(row),
+      fromTodo: '1',
+    },
+  })
 }
 
 function goDeleteApprovals() {
