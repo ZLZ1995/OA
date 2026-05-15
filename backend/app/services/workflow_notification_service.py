@@ -535,6 +535,8 @@ def send_workflow_notification(
 ) -> None:
     if not receiver_user_id:
         return
+    if sender_user.id == receiver_user_id:
+        return
 
     receiver_user = db.query(User).filter(User.id == receiver_user_id, User.is_active.is_(True)).first()
     if not receiver_user:

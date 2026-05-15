@@ -48,6 +48,29 @@ const router = createRouter({
   routes
 })
 
+const DYNAMIC_IMPORT_RELOAD_FLAG = 'dynamic-import-reloaded'
+
+router.onError((error, to) => {
+  const message = error instanceof Error ? error.message : String(error)
+  const isDynamicImportFailure =
+    message.includes('Failed to fetch dynamically imported module') ||
+    message.includes('Importing a module script failed') ||
+    message.includes('error loading dynamically imported module')
+
+  if (!isDynamicImportFailure) {
+    return
+  }
+
+  const hasReloaded = sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_FLAG) === '1'
+  if (hasReloaded) {
+    sessionStorage.removeItem(DYNAMIC_IMPORT_RELOAD_FLAG)
+    return
+  }
+
+  sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_FLAG, '1')
+  window.location.assign(to.fullPath)
+})
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore(pinia)
 
