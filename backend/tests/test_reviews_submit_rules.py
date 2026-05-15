@@ -12,7 +12,7 @@ from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.models.review_record import ReviewRecord
 from app.models.work_order_file import WorkOrderFile
-from app.schemas.review import ReviewAssigneeChangeRequest, ReviewDecisionRequest, ReviewSubmitRequest
+from app.schemas.review import ReviewApprovalRoutingRequest, ReviewAssigneeChangeRequest, ReviewDecisionRequest, ReviewSubmitRequest
 
 def _build_session() -> Session:
     engine = create_engine("sqlite:///:memory:")
@@ -356,8 +356,8 @@ def test_first_review_approve_moves_to_second_submit() -> None:
 
     db.refresh(work_order)
     assert result.comment == "审核通过"
-    assert work_order.current_status == "WAIT_SECOND_REVIEW_SUBMIT"
-    assert work_order.current_handler_user_id == work_order.project_leader_id
+    assert work_order.current_status == "FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND"
+    assert work_order.current_handler_user_id == reviewer.id
 
 
 def test_first_review_approve_auto_advances_to_second_when_project_party_uploaded_report() -> None:
@@ -410,9 +410,9 @@ def test_first_review_approve_auto_advances_to_second_when_project_party_uploade
         WorkOrderFile.business_stage == "REVIEW_SECOND",
         WorkOrderFile.file_category == "REPORT_ZIP",
     ).first()
-    assert work_order.current_status == "SECOND_REVIEWING"
-    assert work_order.current_handler_user_id == second_reviewer.id
-    assert latest_submit is not None
+    assert work_order.current_status == "FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND"
+    assert work_order.current_handler_user_id == reviewer.id
+    assert latest_submit is None
     assert cloned_file is not None
     assert cloned_file.origin_file_name == "report-v1.zip"
 
@@ -479,3 +479,42 @@ def test_workbench_shows_current_reviewer_todo_even_when_user_created_project() 
     result = get_workbench(db=db, current_user=reviewer)
 
     assert [item.id for item in result.todo_projects] == [project.id]
+
+
+
+def test_first_review_route_back_to_project_leader_after_approve() -> None:
+    from app.api.v1.reviews import decide_review, route_approved_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    db.commit()
+
+    decide_review(
+        payload=ReviewDecisionRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            action="APPROVE",
+        ),
+        db=db,
+        current_user=reviewer,
+        _={"FIRST_REVIEWER"},
+    )
+
+    result = route_approved_review(
+        payload=ReviewApprovalRoutingRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            route_mode="RETURN_TO_PROJECT_LEADER",
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == "FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND"
+    assert work_order.current_handler_user_id == work_order.project_leader_id
+    assert result.action == "CHANGE_REVIEWER"

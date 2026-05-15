@@ -119,10 +119,9 @@ def test_real_scenario_round_one_first_approve_auto_advances_to_second() -> None
         WorkOrderFile.file_category == "REPORT_ZIP",
     ).first()
 
-    assert work_order.current_status == "SECOND_REVIEWING"
-    assert work_order.current_handler_user_id == second.id
-    assert second_submit is not None
-    assert second_submit.comment and "AUTO_FROM_RECORD" in second_submit.comment
+    assert work_order.current_status == "FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND"
+    assert work_order.current_handler_user_id == first.id
+    assert second_submit is None
     assert second_file is not None
     assert second_file.origin_file_name == "一期报告包.zip"
 
@@ -292,8 +291,8 @@ def test_first_round_reapprove_carries_latest_passed_package_to_second_wait_subm
         WorkOrderFile.is_current.is_(True),
     ).order_by(WorkOrderFile.version_no.desc()).first()
 
-    assert work_order.current_status == "WAIT_SECOND_REVIEW_SUBMIT"
-    assert work_order.current_handler_user_id == work_order.project_leader_id
+    assert work_order.current_status == "FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND"
+    assert work_order.current_handler_user_id == first.id
     assert second_report is not None
     assert second_report.origin_file_name == "?????V2.0.zip"
     assert second_opinion is not None
