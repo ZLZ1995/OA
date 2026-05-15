@@ -15,6 +15,7 @@ from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
 from app.schemas.review import (
+    ReviewApprovalRoutingRequest,
     ReviewCandidateListResponse,
     ReviewCandidateResponse,
     ReviewDecisionRequest,
@@ -70,8 +71,8 @@ ROUND_REVIEWING_STATUS = {
 }
 
 ROUND_APPROVED_STATUS = {
-    "FIRST": WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
-    "SECOND": WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
+    "FIRST": WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND,
+    "SECOND": WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD,
     "THIRD": WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM,
     "EXTERNAL_FIRST": WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT,
     "EXTERNAL_SECOND": WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT,
@@ -98,8 +99,8 @@ ROUND_ROLE_CODE = {
 
 ROUND_WAIT_STATUS = {
     "FIRST": WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
-    "SECOND": WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
-    "THIRD": WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
+    "SECOND": WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND,
+    "THIRD": WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD,
     "EXTERNAL_FIRST": WorkOrderStatus.WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT,
     "EXTERNAL_SECOND": WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT,
     "EXTERNAL_THIRD": WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT,
@@ -193,6 +194,20 @@ def _strip_internal_markers(comment: str | None) -> str | None:
 def _append_passed_to_marker(comment: str | None, next_round: str) -> str:
     base = _strip_internal_markers(comment) or "审核通过"
     return f"{base} {PASSED_TO_MARKER}{next_round}]"
+
+
+ROUND_REVIEWER_SELECT_STATUS = {
+    "FIRST": WorkOrderStatus.FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND,
+    "SECOND": WorkOrderStatus.SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD,
+}
+
+
+def _round_leader_wait_status(review_round: str) -> WorkOrderStatus:
+    if review_round == "FIRST":
+        return WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND
+    if review_round == "SECOND":
+        return WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD
+    raise HTTPException(status_code=400, detail="仅一审、二审支持下一轮选人分流")
 
 
 def _latest_submit_record(db: Session, work_order_id: int, review_round: str) -> ReviewRecord | None:
@@ -733,6 +748,87 @@ def change_reviewer_after_reject(
     return _to_review_record_response(db, record)
 
 
+@router.post("/approve-routing", response_model=ReviewRecordResponse)
+def route_approved_review(
+    payload: ReviewApprovalRoutingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "FIRST_REVIEWER", "SECOND_REVIEWER", "ADMIN")),
+) -> ReviewRecordResponse:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    if payload.review_round == "FIRST":
+        approved_status = WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND
+        reviewer_select_status = WorkOrderStatus.FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND
+        reviewer_id = work_order.first_reviewer_id
+        next_round = "SECOND"
+    else:
+        approved_status = WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD
+        reviewer_select_status = WorkOrderStatus.SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD
+        reviewer_id = work_order.second_reviewer_id
+        next_round = "THIRD"
+
+    if payload.route_mode == "REVIEWER_SELECT_NEXT":
+        if reviewer_id != current_user.id and "ADMIN" not in role_codes:
+            raise HTTPException(status_code=403, detail="仅当前审核老师可直接选择下一轮审核人")
+        if WorkOrderStatus(work_order.current_status) != approved_status:
+            raise HTTPException(status_code=400, detail="当前状态不可进入审核人选下一轮")
+        if not can_transit(approved_status, reviewer_select_status):
+            raise HTTPException(status_code=400, detail="非法状态流转")
+        work_order.current_status = reviewer_select_status.value
+        work_order.current_handler_user_id = reviewer_id
+        action_name = f"{payload.review_round}_APPROVE_REVIEWER_SELECT_{next_round}"
+    else:
+        if "ADMIN" not in role_codes and not _is_project_party(db, work_order, current_user):
+            raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可处理项目负责人选人流转")
+        if WorkOrderStatus(work_order.current_status) not in {approved_status, reviewer_select_status}:
+            raise HTTPException(status_code=400, detail="当前状态不可返回项目负责人选择")
+        target_status = _round_leader_wait_status(payload.review_round)
+        source_status = WorkOrderStatus(work_order.current_status)
+        if not can_transit(source_status, target_status):
+            raise HTTPException(status_code=400, detail="非法状态流转")
+        work_order.current_status = target_status.value
+        work_order.current_handler_user_id = work_order.project_leader_id
+        action_name = f"{payload.review_round}_APPROVE_RETURN_PROJECT_LEADER_SELECT_{next_round}"
+
+    record = ReviewRecord(
+        work_order_id=work_order.id,
+        review_round=payload.review_round,
+        reviewer_user_id=current_user.id,
+        action="CHANGE_REVIEWER",
+        comment=payload.comment or action_name,
+        acted_at=datetime.now(timezone.utc),
+    )
+    db.add(record)
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=approved_status.value if payload.route_mode == "REVIEWER_SELECT_NEXT" else WorkOrderStatus(work_order.current_status).value,
+        to_status=work_order.current_status,
+        action_type=action_name,
+        operator_user_id=current_user.id,
+        remark=payload.comment,
+    )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        receiver = reviewer_id if payload.route_mode == "REVIEWER_SELECT_NEXT" else work_order.project_leader_id
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=receiver,
+            action_name=action_name,
+            comment=payload.comment,
+            biz_id=record.id,
+        )
+    db.commit()
+    db.refresh(record)
+    return _to_review_record_response(db, record)
+
+
 @router.post("/decision", response_model=ReviewRecordResponse)
 def decide_review(
     payload: ReviewDecisionRequest,
@@ -780,23 +876,44 @@ def decide_review(
     db.add(record)
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if payload.action == "APPROVE":
-        default_status = ROUND_APPROVED_STATUS[payload.review_round]
+        default_status = ROUND_REVIEWER_SELECT_STATUS.get(payload.review_round, ROUND_APPROVED_STATUS[payload.review_round])
         if not can_transit(from_status, default_status):
-            raise HTTPException(status_code=400, detail="闈炴硶鐘舵€佽縼绉?")
-        to_status, next_handler, workflow_action = _auto_advance_if_needed(
-            db,
-            work_order=work_order,
-            current_round=payload.review_round,
-            current_reviewer=current_user,
-            project=project,
-            approved_record=record,
-        )
-        transferred_round = ROUND_NEXT.get(payload.review_round)
-        if transferred_round and _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):
-            record.comment = _append_passed_to_marker(record.comment, transferred_round)
+            raise HTTPException(status_code=400, detail="??????")
+        if payload.review_round in {"FIRST", "SECOND"}:
+            next_round = ROUND_NEXT[payload.review_round]
+            if _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):
+                _clone_files_to_round(
+                    db,
+                    work_order_id=work_order.id,
+                    from_round=payload.review_round,
+                    to_round=next_round,
+                    uploaded_by=current_user.id,
+                )
+                _clone_opinion_files_to_round(
+                    db,
+                    work_order_id=work_order.id,
+                    from_round=payload.review_round,
+                    to_round=next_round,
+                    uploaded_by=current_user.id,
+                )
+                record.comment = _append_passed_to_marker(record.comment, next_round)
+            to_status = ROUND_REVIEWER_SELECT_STATUS[payload.review_round]
+            next_handler = current_user.id
+            workflow_action = f"{payload.review_round}_APPROVE_WAIT_REVIEWER_SELECT_{next_round}"
+        else:
+            to_status, next_handler, workflow_action = _auto_advance_if_needed(
+                db,
+                work_order=work_order,
+                current_round=payload.review_round,
+                current_reviewer=current_user,
+                project=project,
+                approved_record=record,
+            )
+            transferred_round = ROUND_NEXT.get(payload.review_round)
+            if transferred_round and _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):
+                record.comment = _append_passed_to_marker(record.comment, transferred_round)
     else:
         workflow_action = f"{payload.review_round}_REJECT_RETURN"
-
     work_order.current_status = to_status.value
     work_order.current_handler_user_id = next_handler
 

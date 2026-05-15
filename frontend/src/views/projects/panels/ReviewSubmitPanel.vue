@@ -269,8 +269,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage, type UploadFile } from 'element-plus'
-import { changeReviewAssignee, decideReview, listReviewCandidates, listReviews, submitReview, withdrawLatestReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
+import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
+import { changeReviewAssignee, decideReview, listReviewCandidates, listReviews, routeApprovedReview, submitReview, withdrawLatestReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
 import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import { useAuthStore } from '@/store/auth'
 import type { ProjectFlowData } from '@/api/projectFlow'
@@ -332,6 +332,8 @@ const isReviewSubmitter = computed(() => {
 })
 const isReplyFlow = computed(() => ['FIRST_REVIEW_REJECTED', 'SECOND_REVIEW_REJECTED', 'THIRD_REVIEW_REJECTED'].includes(statusCode.value))
 const isLockedCarryForwardStage = computed(() => ['WAIT_SECOND_REVIEW_SUBMIT', 'WAIT_THIRD_REVIEW_SUBMIT', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))
+const isReviewerSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND', 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD'].includes(statusCode.value))
+const isLeaderSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD'].includes(statusCode.value))
 const latestSubmitAt = computed(() => {
   const latest = records.value
     .filter(record => record.review_round === reviewRound.value && record.action === 'SUBMIT')
@@ -359,7 +361,18 @@ const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'EXTERNAL_SECOND') return props.flowInfo?.second_reviewer_id
   return props.flowInfo?.third_reviewer_id
 })
-const canSubmitReview = computed(() => props.canEdit && !isReviewLocked.value && isReviewSubmitter.value && isSubmitStatus(statusCode.value))
+const canSubmitReview = computed(() => props.canEdit && !isReviewLocked.value && isReviewSubmitter.value && (isSubmitStatus(statusCode.value) || isLeaderSelectNextStage.value || isReviewerSelectNextStage.value))
+const canReviewerSelectNext = computed(() =>
+  props.canEdit &&
+  !isReviewLocked.value &&
+  isReviewerSelectNextStage.value &&
+  Boolean(currentUserId.value && props.flowInfo?.current_handler_user_id === currentUserId.value) &&
+  (
+    (statusCode.value === 'FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND' && props.userRoles.includes('FIRST_REVIEWER')) ||
+    (statusCode.value === 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD' && props.userRoles.includes('SECOND_REVIEWER')) ||
+    props.userRoles.includes('ADMIN')
+  )
+)
 const canReview = computed(() => {
   if (!currentUserId.value || props.flowInfo?.current_handler_user_id !== currentUserId.value) return false
   if (props.userRoles.includes('ADMIN')) return true
@@ -468,7 +481,7 @@ const REVIEW_STATUS_TEXT: Record<string, string> = {
 }
 
 function isSubmitStatus(status: string) {
-  return ['CONTRACT_APPROVED', 'WAIT_FIRST_REVIEW_SUBMIT', 'FIRST_REVIEW_REJECTED', 'WAIT_SECOND_REVIEW_SUBMIT', 'SECOND_REVIEW_REJECTED', 'WAIT_THIRD_REVIEW_SUBMIT', 'THIRD_REVIEW_REJECTED'].includes(status)
+  return ['CONTRACT_APPROVED', 'WAIT_FIRST_REVIEW_SUBMIT', 'FIRST_REVIEW_REJECTED', 'FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND', 'WAIT_SECOND_REVIEW_SUBMIT', 'SECOND_REVIEW_REJECTED', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD', 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD', 'WAIT_THIRD_REVIEW_SUBMIT', 'THIRD_REVIEW_REJECTED'].includes(status)
 }
 
 function syncRoundWithStatus() {
@@ -559,7 +572,7 @@ async function loadCandidates() {
     userOptions.value = []
     return
   }
-  if (!props.workOrderId || !canSubmitReview.value) {
+  if (!props.workOrderId || (!canSubmitReview.value && !canReviewerSelectNext.value)) {
     userOptions.value = []
     return
   }
@@ -714,9 +727,41 @@ async function onSubmitWithReviewerChange() {
 async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
   if (!props.workOrderId) return
   await decideReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, action, comment: reviewComment.value || undefined })
-  ElMessage.success(action === 'APPROVE' ? '审核通过' : '已返回修改')
+  if (action === 'APPROVE' && (reviewRound.value === 'FIRST' || reviewRound.value === 'SECOND')) {
+    try {
+      await ElMessageBox.confirm(
+        reviewRound.value === 'FIRST' ? '???????????????????' : '???????????????????',
+        '????',
+        {
+          confirmButtonText: '??',
+          cancelButtonText: '?????????',
+          distinguishCancelAndClose: true,
+          type: 'warning'
+        }
+      )
+      await routeApprovedReview({
+        work_order_id: props.workOrderId,
+        review_round: reviewRound.value,
+        route_mode: 'REVIEWER_SELECT_NEXT'
+      })
+      ElMessage.success('????????????')
+    } catch (error) {
+      if (error === 'cancel') {
+        await routeApprovedReview({
+          work_order_id: props.workOrderId,
+          review_round: reviewRound.value,
+          route_mode: 'RETURN_TO_PROJECT_LEADER'
+        })
+        ElMessage.success('?????????????????')
+      } else if (error !== 'close') {
+        throw error
+      }
+    }
+  } else {
+    ElMessage.success(action === 'APPROVE' ? '????' : '?????')
+  }
   reviewComment.value = ''
-  await Promise.all([loadRecords(), loadFiles()])
+  await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
   emit('changed')
 }
 
