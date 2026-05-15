@@ -132,8 +132,6 @@ REVIEW_ROUND_SEQUENCE = {
 
 REVIEW_FILE_CATEGORIES = {"REPORT_ZIP", "REVIEW_REPLY", "REVIEW_OPINION"}
 STATE_OWNED_EVAL_NATURE = "国有资产评估业务"
-AUTO_FROM_RECORD_MARKER = "[AUTO_FROM_RECORD:"
-PASSED_TO_MARKER = "[PASSED_TO:"
 
 
 def _to_review_record_response(db: Session, record: ReviewRecord) -> ReviewRecordResponse:
@@ -354,62 +352,45 @@ def _auto_advance_if_needed(
     project: Project,
     approved_record: ReviewRecord,
 ) -> tuple[WorkOrderStatus, int, str]:
-    latest_submit = _latest_submit_record(db, work_order.id, current_round)
-    clone_uploaded_by = latest_submit.reviewer_user_id if latest_submit else work_order.project_leader_id
-
     if current_round == "EXTERNAL_FIRST":
+        if not work_order.second_reviewer_id:
+            return WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT, work_order.project_leader_id, f"{current_round}_APPROVE"
         _clone_files_to_round(
             db,
             work_order_id=work_order.id,
             from_round=current_round,
             to_round="EXTERNAL_SECOND",
-            uploaded_by=clone_uploaded_by,
+            uploaded_by=work_order.project_leader_id,
         )
-        _clone_opinion_files_to_round(
-            db,
-            work_order_id=work_order.id,
-            from_round=current_round,
-            to_round="EXTERNAL_SECOND",
-            uploaded_by=clone_uploaded_by,
-        )
-        if not work_order.second_reviewer_id:
-            return WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT, work_order.project_leader_id, f"{current_round}_APPROVE"
         db.add(
             ReviewRecord(
                 work_order_id=work_order.id,
                 review_round="EXTERNAL_SECOND",
                 reviewer_user_id=work_order.second_reviewer_id,
                 action="SUBMIT",
-                comment=f"沿用上一轮审核通过文件 {AUTO_FROM_RECORD_MARKER}{approved_record.id}]",
+                comment=f"来源于上一轮自动流转 [AUTO_FROM_RECORD:{approved_record.id}]",
                 acted_at=datetime.now(timezone.utc),
             )
         )
         return WorkOrderStatus.EXTERNAL_SECOND_REVIEWING, work_order.second_reviewer_id, "SUBMIT_EXTERNAL_SECOND"
 
     if current_round == "EXTERNAL_SECOND":
+        if not work_order.third_reviewer_id:
+            return WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT, work_order.project_leader_id, f"{current_round}_APPROVE"
         _clone_files_to_round(
             db,
             work_order_id=work_order.id,
             from_round=current_round,
             to_round="EXTERNAL_THIRD",
-            uploaded_by=clone_uploaded_by,
+            uploaded_by=work_order.project_leader_id,
         )
-        _clone_opinion_files_to_round(
-            db,
-            work_order_id=work_order.id,
-            from_round=current_round,
-            to_round="EXTERNAL_THIRD",
-            uploaded_by=clone_uploaded_by,
-        )
-        if not work_order.third_reviewer_id:
-            return WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT, work_order.project_leader_id, f"{current_round}_APPROVE"
         db.add(
             ReviewRecord(
                 work_order_id=work_order.id,
                 review_round="EXTERNAL_THIRD",
                 reviewer_user_id=work_order.third_reviewer_id,
                 action="SUBMIT",
-                comment=f"沿用上一轮审核通过文件 {AUTO_FROM_RECORD_MARKER}{approved_record.id}]",
+                comment=f"来源于上一轮自动流转 [AUTO_FROM_RECORD:{approved_record.id}]",
                 acted_at=datetime.now(timezone.utc),
             )
         )

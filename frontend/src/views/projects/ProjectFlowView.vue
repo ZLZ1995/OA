@@ -17,7 +17,18 @@
             <el-button type="primary" link @click="goHome">返回首页</el-button>
           </div>
         </template>
+
+        <el-alert
+          v-if="todoBannerTitle"
+          class="todo-banner"
+          type="info"
+          :closable="false"
+          show-icon
+          :title="todoBannerTitle"
+        />
+
         <el-empty v-if="!flow" description="暂无项目数据" />
+
         <template v-else-if="flow.duplicate_delete_required">
           <el-alert
             type="error"
@@ -28,6 +39,7 @@
           />
           <el-button type="danger" :loading="duplicateDeleting" @click="deleteDuplicate">删除重复项目</el-button>
         </template>
+
         <component
           v-else
           :is="activePanel"
@@ -76,8 +88,8 @@ import ContractReviewPanel from './panels/ContractReviewPanel.vue'
 const baseFlowNodes = [
   { key: 'basic', label: '项目基本信息' },
   { key: 'members', label: '项目组成员' },
-  { key: 'contract', label: '合同初稿上传' },
-  { key: 'contractReview', label: '合同初稿审核' },
+  { key: 'contract', label: '合同初审上传' },
+  { key: 'contractReview', label: '合同初审审核' },
   { key: 'review', label: '报告送审' },
   { key: 'signoff', label: '签发审核' },
   { key: 'issue', label: '报告出具' },
@@ -106,10 +118,13 @@ const projectId = Number(route.params.id)
 const flow = ref<ProjectFlowData | null>(null)
 const workOrderId = ref<number>()
 const activeNode = ref('basic')
-const userRoles = computed(() => auth.user?.roles || [])
 const duplicateDeleting = ref(false)
+
+const userRoles = computed(() => auth.user?.roles || [])
 const canProjectOperate = computed(() => Boolean(flow.value?.can_operate))
 const activePanel = computed(() => panelMap[activeNode.value] || ProjectBasicPanel)
+const todoPanelQuery = computed(() => (typeof route.query.todoPanel === 'string' ? route.query.todoPanel : ''))
+const todoLabelQuery = computed(() => (typeof route.query.todoLabel === 'string' ? route.query.todoLabel : ''))
 
 const availableNodes = computed(() => {
   if (flow.value?.project.project_source === 'EXTERNAL') {
@@ -154,9 +169,36 @@ const visibleFlowNodes = computed(() => {
   return availableNodes.value.filter(node => node.key === activeNode.value)
 })
 
+const activeNodeLabel = computed(() => {
+  const node = availableNodes.value.find(item => item.key === activeNode.value)
+  return node?.label || ''
+})
+
+const todoBannerTitle = computed(() => {
+  if (!flow.value) return ''
+  const label = todoLabelQuery.value.trim() || flow.value.project.current_step || activeNodeLabel.value
+  return label ? `当前待办环节：${label}` : ''
+})
+
 function ensureVisibleActiveNode() {
   if (!visibleFlowNodes.value.some(node => node.key === activeNode.value)) {
     activeNode.value = visibleFlowNodes.value[0]?.key || availableNodes.value[0]?.key || 'basic'
+  }
+}
+
+function syncActiveNodeFromTodoQuery() {
+  const queryNode = todoPanelQuery.value
+  if (!queryNode) return
+
+  const visibleNode = visibleFlowNodes.value.find(node => node.key === queryNode)
+  if (visibleNode) {
+    activeNode.value = visibleNode.key
+    return
+  }
+
+  const availableNode = availableNodes.value.find(node => node.key === queryNode)
+  if (availableNode) {
+    activeNode.value = availableNode.key
   }
 }
 
@@ -210,6 +252,7 @@ async function load() {
     flow.value = await getProjectFlow(projectId)
     await loadWorkOrder()
     ensureVisibleActiveNode()
+    syncActiveNodeFromTodoQuery()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '无权查看该项目')
   }
@@ -238,7 +281,12 @@ async function deleteDuplicate() {
   }
 }
 
-watch(visibleFlowNodes, ensureVisibleActiveNode)
+watch(visibleFlowNodes, () => {
+  ensureVisibleActiveNode()
+  syncActiveNodeFromTodoQuery()
+})
+watch(() => route.query.todoPanel, syncActiveNodeFromTodoQuery)
+
 onMounted(load)
 </script>
 
@@ -257,6 +305,10 @@ onMounted(load)
 .flow-main-card,
 .flow-step-card {
   min-height: 280px;
+}
+
+.todo-banner {
+  margin-bottom: 16px;
 }
 
 .flow-nav-card :deep(.el-menu) {
