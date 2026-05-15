@@ -37,6 +37,8 @@ class ReviewRecordResponse(BaseModel):
     source_round_comment: str | None = None
     source_round_reviewer_name: str | None = None
     auto_carried_from_previous: bool = False
+    transferred_to_next: bool = False
+    transferred_to_round: str | None = None
 
 
 class ReviewRecordListResponse(BaseModel):
