@@ -58,6 +58,8 @@ export interface ProjectFlowData {
   archive_submission_type?: string | null
   mailing_handler_user_id?: number | null
   mailing_status?: string | null
+  signoff_status?: string | null
+  chief_appraiser_user_id?: number | null
   user_role_in_project: string
   available_action: string
   can_operate: boolean

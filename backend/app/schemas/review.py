@@ -5,21 +5,21 @@ from pydantic import BaseModel, Field
 
 class ReviewSubmitRequest(BaseModel):
     work_order_id: int
-    review_round: str = Field(pattern="^(FIRST|SECOND|THIRD)$")
+    review_round: str = Field(pattern="^(FIRST|SECOND|THIRD|EXTERNAL_FIRST|EXTERNAL_SECOND|EXTERNAL_THIRD)$")
     reviewer_user_id: int
     comment: str | None = None
 
 
 class ReviewDecisionRequest(BaseModel):
     work_order_id: int
-    review_round: str = Field(pattern="^(FIRST|SECOND|THIRD)$")
+    review_round: str = Field(pattern="^(FIRST|SECOND|THIRD|EXTERNAL_FIRST|EXTERNAL_SECOND|EXTERNAL_THIRD)$")
     action: str = Field(pattern="^(APPROVE|REJECT_RETURN)$")
     comment: str | None = None
 
 
 class ReviewAssigneeChangeRequest(BaseModel):
     work_order_id: int
-    review_round: str = Field(pattern="^(FIRST|SECOND|THIRD)$")
+    review_round: str = Field(pattern="^(FIRST|SECOND|THIRD|EXTERNAL_FIRST|EXTERNAL_SECOND|EXTERNAL_THIRD)$")
     reviewer_user_id: int
     comment: str | None = None
 

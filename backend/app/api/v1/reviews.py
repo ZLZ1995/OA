@@ -46,56 +46,92 @@ ROUND_SUBMIT_STATUS = {
         WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
         WorkOrderStatus.THIRD_REVIEW_REJECTED,
     },
+    "EXTERNAL_FIRST": {
+        WorkOrderStatus.WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT,
+        WorkOrderStatus.EXTERNAL_FIRST_REJECTED,
+    },
+    "EXTERNAL_SECOND": {
+        WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT,
+        WorkOrderStatus.EXTERNAL_SECOND_REJECTED,
+    },
+    "EXTERNAL_THIRD": {
+        WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT,
+        WorkOrderStatus.EXTERNAL_THIRD_REJECTED,
+    },
 }
 
 ROUND_REVIEWING_STATUS = {
     "FIRST": WorkOrderStatus.FIRST_REVIEWING,
     "SECOND": WorkOrderStatus.SECOND_REVIEWING,
     "THIRD": WorkOrderStatus.THIRD_REVIEWING,
+    "EXTERNAL_FIRST": WorkOrderStatus.EXTERNAL_FIRST_REVIEWING,
+    "EXTERNAL_SECOND": WorkOrderStatus.EXTERNAL_SECOND_REVIEWING,
+    "EXTERNAL_THIRD": WorkOrderStatus.EXTERNAL_THIRD_REVIEWING,
 }
 
 ROUND_APPROVED_STATUS = {
     "FIRST": WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
     "SECOND": WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
     "THIRD": WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM,
+    "EXTERNAL_FIRST": WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT,
+    "EXTERNAL_SECOND": WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT,
+    "EXTERNAL_THIRD": WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD,
 }
 
 ROUND_REJECTED_STATUS = {
     "FIRST": WorkOrderStatus.FIRST_REVIEW_REJECTED,
     "SECOND": WorkOrderStatus.SECOND_REVIEW_REJECTED,
     "THIRD": WorkOrderStatus.THIRD_REVIEW_REJECTED,
+    "EXTERNAL_FIRST": WorkOrderStatus.EXTERNAL_FIRST_REJECTED,
+    "EXTERNAL_SECOND": WorkOrderStatus.EXTERNAL_SECOND_REJECTED,
+    "EXTERNAL_THIRD": WorkOrderStatus.EXTERNAL_THIRD_REJECTED,
 }
 
 ROUND_ROLE_CODE = {
     "FIRST": "FIRST_REVIEWER",
     "SECOND": "SECOND_REVIEWER",
     "THIRD": "THIRD_REVIEWER",
+    "EXTERNAL_FIRST": "FIRST_REVIEWER",
+    "EXTERNAL_SECOND": "SECOND_REVIEWER",
+    "EXTERNAL_THIRD": "THIRD_REVIEWER",
 }
 
 ROUND_WAIT_STATUS = {
     "FIRST": WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
     "SECOND": WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
     "THIRD": WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
+    "EXTERNAL_FIRST": WorkOrderStatus.WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT,
+    "EXTERNAL_SECOND": WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT,
+    "EXTERNAL_THIRD": WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT,
 }
 
 ROUND_CURRENT_REVIEWER_ATTR = {
     "FIRST": "first_reviewer_id",
     "SECOND": "second_reviewer_id",
     "THIRD": "third_reviewer_id",
+    "EXTERNAL_FIRST": "first_reviewer_id",
+    "EXTERNAL_SECOND": "second_reviewer_id",
+    "EXTERNAL_THIRD": "third_reviewer_id",
 }
 
 ROUND_NEXT = {
     "FIRST": "SECOND",
     "SECOND": "THIRD",
+    "EXTERNAL_FIRST": "EXTERNAL_SECOND",
+    "EXTERNAL_SECOND": "EXTERNAL_THIRD",
 }
 
 REVIEW_ROUND_SEQUENCE = {
     "FIRST": 1,
     "SECOND": 2,
     "THIRD": 3,
+    "EXTERNAL_FIRST": 4,
+    "EXTERNAL_SECOND": 5,
+    "EXTERNAL_THIRD": 6,
 }
 
 REVIEW_FILE_CATEGORIES = {"REPORT_ZIP", "REVIEW_REPLY", "REVIEW_OPINION"}
+STATE_OWNED_EVAL_NATURE = "国有资产评估业务"
 
 
 def _to_review_record_response(db: Session, record: ReviewRecord) -> ReviewRecordResponse:
@@ -178,7 +214,8 @@ def _clone_files_to_round(
     uploaded_by: int,
 ) -> None:
     stage_to = f"REVIEW_{to_round}"
-    for file_category in ("REPORT_ZIP", "REVIEW_REPLY"):
+    clone_categories = ("REPORT_ZIP", "EXTERNAL_AUDIT_OPINION") if from_round.startswith("EXTERNAL") else ("REPORT_ZIP", "REVIEW_REPLY")
+    for file_category in clone_categories:
         source_files = _latest_round_files(db, work_order_id, from_round, file_category)
         if not source_files:
             continue
@@ -218,6 +255,8 @@ def _clone_files_to_round(
 
 
 def _latest_report_file_owner_is_project_party(db: Session, work_order: WorkOrder, review_round: str) -> bool:
+    if review_round.startswith("EXTERNAL_"):
+        return True
     latest_report = (
         db.query(WorkOrderFile)
         .filter(
@@ -249,9 +288,59 @@ def _auto_advance_if_needed(
     project: Project,
     approved_record: ReviewRecord,
 ) -> tuple[WorkOrderStatus, int, str]:
+    if current_round == "EXTERNAL_FIRST":
+        if not work_order.second_reviewer_id:
+            return WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT, work_order.project_leader_id, f"{current_round}_APPROVE"
+        _clone_files_to_round(
+            db,
+            work_order_id=work_order.id,
+            from_round=current_round,
+            to_round="EXTERNAL_SECOND",
+            uploaded_by=work_order.project_leader_id,
+        )
+        db.add(
+            ReviewRecord(
+                work_order_id=work_order.id,
+                review_round="EXTERNAL_SECOND",
+                reviewer_user_id=work_order.second_reviewer_id,
+                action="SUBMIT",
+                comment=f"来源于上一轮自动流转 [AUTO_FROM_RECORD:{approved_record.id}]",
+                acted_at=datetime.now(timezone.utc),
+            )
+        )
+        return WorkOrderStatus.EXTERNAL_SECOND_REVIEWING, work_order.second_reviewer_id, "SUBMIT_EXTERNAL_SECOND"
+
+    if current_round == "EXTERNAL_SECOND":
+        if not work_order.third_reviewer_id:
+            return WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT, work_order.project_leader_id, f"{current_round}_APPROVE"
+        _clone_files_to_round(
+            db,
+            work_order_id=work_order.id,
+            from_round=current_round,
+            to_round="EXTERNAL_THIRD",
+            uploaded_by=work_order.project_leader_id,
+        )
+        db.add(
+            ReviewRecord(
+                work_order_id=work_order.id,
+                review_round="EXTERNAL_THIRD",
+                reviewer_user_id=work_order.third_reviewer_id,
+                action="SUBMIT",
+                comment=f"来源于上一轮自动流转 [AUTO_FROM_RECORD:{approved_record.id}]",
+                acted_at=datetime.now(timezone.utc),
+            )
+        )
+        return WorkOrderStatus.EXTERNAL_THIRD_REVIEWING, work_order.third_reviewer_id, "SUBMIT_EXTERNAL_THIRD"
+
     next_round = ROUND_NEXT.get(current_round)
     if not next_round:
-        return ROUND_APPROVED_STATUS[current_round], current_reviewer.id, f"{current_round}_APPROVE"
+        if current_round == "EXTERNAL_THIRD":
+            work_order.signoff_status = "WAIT_UPLOAD"
+            return WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD, work_order.project_leader_id, f"{current_round}_APPROVE"
+        if project and project.evaluation_business_nature == STATE_OWNED_EVAL_NATURE:
+            return WorkOrderStatus.THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND, current_reviewer.id, f"{current_round}_APPROVE"
+        work_order.signoff_status = "WAIT_UPLOAD"
+        return WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD, work_order.project_leader_id, f"{current_round}_APPROVE"
     if not _latest_report_file_owner_is_project_party(db, work_order, current_round):
         return ROUND_APPROVED_STATUS[current_round], work_order.project_leader_id, f"{current_round}_APPROVE"
 
@@ -459,9 +548,9 @@ def submit_review(
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
 
-    if payload.review_round == "FIRST":
+    if payload.review_round in {"FIRST", "EXTERNAL_FIRST"}:
         work_order.first_reviewer_id = target_reviewer_id
-    elif payload.review_round == "SECOND":
+    elif payload.review_round in {"SECOND", "EXTERNAL_SECOND"}:
         work_order.second_reviewer_id = target_reviewer_id
     else:
         work_order.third_reviewer_id = target_reviewer_id
@@ -589,6 +678,9 @@ def decide_review(
         "FIRST": work_order.first_reviewer_id,
         "SECOND": work_order.second_reviewer_id,
         "THIRD": work_order.third_reviewer_id,
+        "EXTERNAL_FIRST": work_order.first_reviewer_id,
+        "EXTERNAL_SECOND": work_order.second_reviewer_id,
+        "EXTERNAL_THIRD": work_order.third_reviewer_id,
     }[payload.review_round]
     if reviewer_id != current_user.id and not any(item.role.code == "ADMIN" for item in current_user.roles):
         raise HTTPException(status_code=403, detail="仅当前轮审核老师可操作")

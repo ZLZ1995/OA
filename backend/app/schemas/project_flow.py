@@ -62,6 +62,8 @@ class ProjectFlowResponse(BaseModel):
     archive_submitter_id: int | None = None
     archive_submission_type: str | None = None
     mailing_status: str | None = None
+    signoff_status: str | None = None
+    chief_appraiser_user_id: int | None = None
     user_role_in_project: str
     available_action: str
     can_operate: bool

@@ -14,20 +14,19 @@ from app.models.project_member import ProjectMember
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
-from app.models.project import Project
 from app.schemas.file import WorkOrderFileListResponse, WorkOrderFileResponse
 from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
-from app.services.workflow_notification_service import send_workflow_notification
-from app.services.workflow_log_service import create_workflow_log
 from app.storage.local_storage import save_upload_file
 from app.workflows.states import WorkOrderStatus
 
-router = APIRouter(prefix="/files", tags=["文件"])
+router = APIRouter(prefix="/files", tags=["files"])
 
 CONTRACT_DRAFT_FILE_CATEGORY = "CONTRACT_DRAFT"
 FINAL_CONTRACT_SCAN_FILE_CATEGORY = "FINAL_CONTRACT_SCAN"
 CONTRACT_DRAFT_STAGE = "CONTRACT_DRAFT"
 FINAL_CONTRACT_SCAN_STAGE = "FINAL_CONTRACT_SCAN"
+FORMAL_REPORT_FILE_CATEGORY = "FORMAL_REPORT"
+FORMAL_REPORT_STAGE = "FORMAL_REPORT"
 REVIEW_STAGE_PREFIX = "REVIEW_"
 
 
@@ -68,6 +67,19 @@ def _ensure_project_contract_operator(db: Session, work_order: WorkOrder, curren
         raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可操作合同")
 
 
+def _ensure_project_signoff_operator(db: Session, work_order: WorkOrder, current_user: User) -> None:
+    if any(item.role.code == "ADMIN" for item in current_user.roles):
+        return
+    if current_user.id in {work_order.project_leader_id, work_order.initiator_user_id}:
+        return
+    is_member = db.query(ProjectMember.id).filter(
+        ProjectMember.project_id == work_order.project_id,
+        ProjectMember.user_id == current_user.id,
+    ).first()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可上传报告附件和合同扫描件")
+
+
 def _get_latest_file(
     db: Session,
     work_order_id: int,
@@ -89,13 +101,52 @@ def _get_latest_file(
 
 
 def _ensure_review_package_unlocked(work_order: WorkOrder, row: WorkOrderFile) -> None:
-    if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
+    if work_order.current_status not in {
+        WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value,
+        WorkOrderStatus.THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND.value,
+        WorkOrderStatus.WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM.value,
+        WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value,
+        WorkOrderStatus.SIGNOFF_REVIEWING.value,
+    }:
         return
     if row.file_category not in {"REPORT_ZIP", "REVIEW_REPLY"}:
         return
     if not row.business_stage.startswith(REVIEW_STAGE_PREFIX):
         return
     raise HTTPException(status_code=400, detail="报告资料包已在三审通过后锁定，请先撤回三审审核通过后再修改")
+
+
+def _ensure_upload_permission(
+    db: Session,
+    *,
+    work_order: WorkOrder,
+    current_user: User,
+    file_category: str,
+) -> None:
+    if file_category == CONTRACT_DRAFT_FILE_CATEGORY:
+        if work_order.current_status in {WorkOrderStatus.CONTRACT_REVIEWING.value, WorkOrderStatus.CONTRACT_APPROVED.value}:
+            raise HTTPException(status_code=400, detail="合同初稿在审核中或已通过，已锁定")
+        _ensure_project_contract_operator(db, work_order, current_user)
+        return
+
+    if file_category == FORMAL_REPORT_FILE_CATEGORY:
+        if work_order.current_status == WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value:
+            _ensure_project_signoff_operator(db, work_order, current_user)
+            return
+        if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
+            raise HTTPException(status_code=400, detail="三审通过或进入签发附件上传流程后才可上传报告附件")
+        if current_user.id != work_order.third_reviewer_id:
+            raise HTTPException(status_code=403, detail="仅三审老师可上传正式报告文件")
+        return
+
+    if file_category == FINAL_CONTRACT_SCAN_FILE_CATEGORY:
+        if work_order.current_status == WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value:
+            _ensure_project_signoff_operator(db, work_order, current_user)
+            return
+        if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
+            raise HTTPException(status_code=400, detail="三审通过或进入签发附件上传流程后才可上传合同扫描件")
+        if current_user.id != work_order.third_reviewer_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
+            raise HTTPException(status_code=403, detail="仅三审老师可上传合同扫描件")
 
 
 @router.post("/upload", response_model=WorkOrderFileResponse, status_code=status.HTTP_201_CREATED)
@@ -119,6 +170,7 @@ def upload_file(
             "SECOND_REVIEWER",
             "THIRD_REVIEWER",
             "ARCHIVE_MANAGER",
+            "CHIEF_APPRAISER",
         )
     ),
 ) -> WorkOrderFileResponse:
@@ -126,22 +178,7 @@ def upload_file(
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
 
-    if file_category == CONTRACT_DRAFT_FILE_CATEGORY:
-        if work_order.current_status in {WorkOrderStatus.CONTRACT_REVIEWING.value, WorkOrderStatus.CONTRACT_APPROVED.value}:
-            raise HTTPException(status_code=400, detail="合同初稿审核中或已通过，合同初稿已锁定")
-        _ensure_project_contract_operator(db, work_order, current_user)
-
-    if file_category == "FORMAL_REPORT":
-        if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
-            raise HTTPException(status_code=400, detail="三审通过后才可上传正式报告文件")
-        if current_user.id != work_order.third_reviewer_id:
-            raise HTTPException(status_code=403, detail="仅三审老师可上传正式报告文件")
-
-    if file_category == FINAL_CONTRACT_SCAN_FILE_CATEGORY:
-        if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
-            raise HTTPException(status_code=400, detail="三审通过后才可上传合同扫描件")
-        if current_user.id != work_order.third_reviewer_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
-            raise HTTPException(status_code=403, detail="仅三审老师可上传合同扫描件")
+    _ensure_upload_permission(db, work_order=work_order, current_user=current_user, file_category=file_category)
 
     latest_same_slot = _get_latest_file(
         db,
@@ -241,6 +278,7 @@ def replace_work_order_file(
             "SECOND_REVIEWER",
             "THIRD_REVIEWER",
             "ARCHIVE_MANAGER",
+            "CHIEF_APPRAISER",
         )
     ),
 ) -> WorkOrderFileResponse:
@@ -254,14 +292,26 @@ def replace_work_order_file(
 
     if row.file_category == CONTRACT_DRAFT_FILE_CATEGORY:
         if work_order.current_status in {WorkOrderStatus.CONTRACT_REVIEWING.value, WorkOrderStatus.CONTRACT_APPROVED.value}:
-            raise HTTPException(status_code=400, detail="合同初稿审核中或已通过，合同初稿已锁定")
+            raise HTTPException(status_code=400, detail="合同初稿在审核中或已通过，已锁定")
         _ensure_project_contract_operator(db, work_order, current_user)
 
     if row.file_category == FINAL_CONTRACT_SCAN_FILE_CATEGORY:
-        if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
-            raise HTTPException(status_code=400, detail="当前状态不可替换合同扫描件")
-        if current_user.id != work_order.third_reviewer_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
-            raise HTTPException(status_code=403, detail="仅三审老师可替换合同扫描件")
+        if work_order.current_status == WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value:
+            _ensure_project_signoff_operator(db, work_order, current_user)
+        else:
+            if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
+                raise HTTPException(status_code=400, detail="当前状态不可替换合同扫描件")
+            if current_user.id != work_order.third_reviewer_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
+                raise HTTPException(status_code=403, detail="仅三审老师可替换合同扫描件")
+
+    if row.file_category == FORMAL_REPORT_FILE_CATEGORY:
+        if work_order.current_status == WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value:
+            _ensure_project_signoff_operator(db, work_order, current_user)
+        else:
+            if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
+                raise HTTPException(status_code=400, detail="当前状态不可替换报告附件")
+            if current_user.id != work_order.third_reviewer_id:
+                raise HTTPException(status_code=403, detail="仅三审老师可替换正式报告文件")
 
     _ensure_review_package_unlocked(work_order, row)
 
@@ -318,25 +368,6 @@ def complete_contract_upload(
 
     work_order.current_status = to_status.value
     work_order.current_handler_user_id = work_order.project_leader_id
-    create_workflow_log(
-        db,
-        work_order_id=work_order.id,
-        from_status=from_status.value,
-        to_status=to_status.value,
-        action_type="COMPLETE_CONTRACT_UPLOAD",
-        operator_user_id=current_user.id,
-        remark="合同初稿上传完成，待提交合同初稿审核",
-    )
-    project = db.query(Project).filter(Project.id == work_order.project_id).first()
-    if project:
-        send_workflow_notification(
-            db,
-            project=project,
-            work_order=work_order,
-            sender_user=current_user,
-            receiver_user_id=work_order.project_leader_id,
-            action_name="CONTRACT_UPLOAD_COMPLETED",
-        )
     db.commit()
     return {"status": "ok"}
 
