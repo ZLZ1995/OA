@@ -137,7 +137,13 @@ import { downloadWorkOrderFile, listWorkOrderFiles, replaceWorkOrderFile, upload
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { listUserCandidates, type UserItem } from '@/api/users'
 
-const props = defineProps<{ workOrderId?: number; canOperate: boolean; userRoles: string[]; flowInfo?: ProjectFlowData }>()
+const props = defineProps<{
+  workOrderId?: number
+  canOperate: boolean
+  userRoles: string[]
+  userRoleInProject?: string
+  flowInfo?: ProjectFlowData
+}>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
 const invoices = ref<InvoiceItem[]>([])
@@ -151,7 +157,11 @@ const financeHandlerId = ref<number>()
 const replaceInputs = new Map<number, HTMLInputElement>()
 
 const projectAmount = computed(() => props.flowInfo?.project.project_amount ?? null)
-const canFinance = computed(() => props.userRoles.some(role => ['FINANCE', 'ADMIN'].includes(role)))
+const canFinance = computed(() => {
+  // Finance actions should follow the user's role in the current project flow,
+  // otherwise mixed-role accounts like ADMIN + FINANCE get forced into the finance branch.
+  return props.userRoleInProject === '财务'
+})
 const activeStatuses = ['SUBMITTED', 'FINANCE_COMPLETED', 'PROJECT_RETURNED', 'REJECTED']
 const countedStatuses = ['SUBMITTED', 'FINANCE_COMPLETED', 'PROJECT_RETURNED', 'ISSUED']
 const currentInvoice = computed(() => invoices.value.find(item => activeStatuses.includes(item.status)))

@@ -9,13 +9,15 @@
     </div>
     <el-menu :default-active="active" class="menu" router>
       <el-menu-item v-for="item in visibleMenus" :key="item.key" :index="item.path">
-        <span>{{ item.title }}</span>
-        <el-badge
-          v-if="item.key === 'notifications' && unreadCount > 0"
-          :value="unreadCount"
-          :max="99"
-          class="menu-badge"
-        />
+        <span class="menu-item-title">
+          <span>{{ item.title }}</span>
+          <el-badge
+            v-if="item.key === 'notifications' && unreadCount > 0"
+            :value="unreadCount"
+            :max="99"
+            class="menu-badge"
+          />
+        </span>
       </el-menu-item>
     </el-menu>
     <div class="menu-actions">
@@ -158,7 +160,7 @@ async function submitFeedback() {
   font-weight: 600;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .menu :deep(.el-menu-item.is-active) {
@@ -186,7 +188,20 @@ async function submitFeedback() {
   margin-left: 0;
 }
 
+.menu-item-title {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
 .menu-badge {
-  margin-left: 10px;
+  position: absolute;
+  top: -8px;
+  right: -22px;
+}
+
+.menu-badge :deep(.el-badge__content) {
+  transform: none;
 }
 </style>

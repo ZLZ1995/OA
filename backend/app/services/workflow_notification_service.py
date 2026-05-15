@@ -75,7 +75,6 @@ def build_workflow_message_templates(
     current_step = work_order.current_status
     comment_text = _format_comment(comment)
 
-    cc_title = "项目流程进度同步通知"
     cc_content = (
         f"项目流程发生更新，当前由{receiver_name}办理。\n"
         f"动作：{action_name}\n"
@@ -87,7 +86,7 @@ def build_workflow_message_templates(
 
     templates: dict[str, tuple[str, str]] = {
         "WAIT_CONTRACT_UPLOAD_ASSIGNED": (
-            "你有一条新的流程待办",
+            "请处理合同上传",
             (
                 f"{sender_user.real_name}已创建项目流程，请你办理合同初稿上传。\n"
                 f"项目编号：{project_code}\n"
@@ -99,7 +98,7 @@ def build_workflow_message_templates(
             ),
         ),
         "CONTRACT_UPLOAD_COMPLETED": (
-            "你有一条新的流程待办",
+            "请处理合同审核",
             (
                 f"{sender_user.real_name}已完成合同初稿上传，请你提交合同审核。\n"
                 f"项目编号：{project_code}\n"
@@ -111,7 +110,7 @@ def build_workflow_message_templates(
             ),
         ),
         "SUBMIT_CONTRACT_REVIEW": (
-            "你有一条新的流程待办",
+            "请处理合同审核",
             (
                 f"{sender_user.real_name}已向你提交合同初稿审核。\n"
                 f"项目编号：{project_code}\n"
@@ -124,7 +123,7 @@ def build_workflow_message_templates(
             ),
         ),
         "APPROVE_CONTRACT_REVIEW": (
-            "你有一条新的流程待办",
+            "请处理一审流程",
             (
                 f"{sender_user.real_name}已完成合同初稿审核，请继续办理报告送审。\n"
                 f"项目编号：{project_code}\n"
@@ -136,7 +135,7 @@ def build_workflow_message_templates(
             ),
         ),
         "REJECT_CONTRACT_REVIEW": (
-            "你有一条流程退回待处理",
+            "请修改后重提合同",
             (
                 f"{sender_user.real_name}已退回合同初稿，请修改后重新提交。\n"
                 f"项目编号：{project_code}\n"
@@ -149,7 +148,7 @@ def build_workflow_message_templates(
             ),
         ),
         "SUBMIT_FIRST": (
-            "你有一条新的流程待办",
+            "请处理一审流程",
             (
                 f"{sender_user.real_name}已向你提交一审任务。\n"
                 f"项目编号：{project_code}\n"
@@ -162,7 +161,7 @@ def build_workflow_message_templates(
             ),
         ),
         "SUBMIT_SECOND": (
-            "你有一条新的流程待办",
+            "请处理二审流程",
             (
                 f"{sender_user.real_name}已向你提交二审任务。\n"
                 f"项目编号：{project_code}\n"
@@ -175,7 +174,7 @@ def build_workflow_message_templates(
             ),
         ),
         "SUBMIT_THIRD": (
-            "你有一条新的流程待办",
+            "请处理三审流程",
             (
                 f"{sender_user.real_name}已向你提交三审任务。\n"
                 f"项目编号：{project_code}\n"
@@ -188,7 +187,7 @@ def build_workflow_message_templates(
             ),
         ),
         "FIRST_APPROVE": (
-            "你有一条新的流程待办",
+            "请处理二审流程",
             (
                 f"{sender_user.real_name}已完成一审，请继续办理二审提交流程。\n"
                 f"项目编号：{project_code}\n"
@@ -200,7 +199,7 @@ def build_workflow_message_templates(
             ),
         ),
         "SECOND_APPROVE": (
-            "你有一条新的流程待办",
+            "请处理三审流程",
             (
                 f"{sender_user.real_name}已完成二审，请继续办理三审提交流程。\n"
                 f"项目编号：{project_code}\n"
@@ -212,7 +211,7 @@ def build_workflow_message_templates(
             ),
         ),
         "THIRD_APPROVE": (
-            "你有一条新的流程待办",
+            "请处理报告出具",
             (
                 f"{sender_user.real_name}已完成三审，请继续办理报告出具准备。\n"
                 f"项目编号：{project_code}\n"
@@ -224,7 +223,7 @@ def build_workflow_message_templates(
             ),
         ),
         "FIRST_REJECT_RETURN": (
-            "你有一条流程退回待处理",
+            "请修改后重提一审",
             (
                 f"{sender_user.real_name}已退回一审材料，请修改后重新提交。\n"
                 f"项目编号：{project_code}\n"
@@ -236,7 +235,7 @@ def build_workflow_message_templates(
             ),
         ),
         "SECOND_REJECT_RETURN": (
-            "你有一条流程退回待处理",
+            "请修改后重提二审",
             (
                 f"{sender_user.real_name}已退回二审材料，请修改后重新提交。\n"
                 f"项目编号：{project_code}\n"
@@ -248,7 +247,7 @@ def build_workflow_message_templates(
             ),
         ),
         "THIRD_REJECT_RETURN": (
-            "你有一条流程退回待处理",
+            "请修改后重提三审",
             (
                 f"{sender_user.real_name}已退回三审材料，请修改后重新提交。\n"
                 f"项目编号：{project_code}\n"
@@ -260,7 +259,7 @@ def build_workflow_message_templates(
             ),
         ),
         "TRANSFER_PRINTROOM": (
-            "你有一条新的流程待办",
+            "请处理报告出具",
             (
                 f"{sender_user.real_name}已将流程转至你办理报告出具。\n"
                 f"项目编号：{project_code}\n"
@@ -272,7 +271,7 @@ def build_workflow_message_templates(
             ),
         ),
         "ROLLBACK_THIRD": (
-            "你有一条流程退回待处理",
+            "请处理三审退回事项",
             (
                 f"{sender_user.real_name}已将流程退回给你，请重新处理三审后续事项。\n"
                 f"项目编号：{project_code}\n"
@@ -284,7 +283,7 @@ def build_workflow_message_templates(
             ),
         ),
         "CONTRACT_ERROR": (
-            "你有一条流程退回待处理",
+            "请修改后重提合同",
             (
                 f"{sender_user.real_name}已将流程退回项目方，请修正合同相关内容后继续办理。\n"
                 f"项目编号：{project_code}\n"
@@ -296,7 +295,7 @@ def build_workflow_message_templates(
             ),
         ),
         "REPORT_ERROR": (
-            "你有一条新的流程待办",
+            "请处理报告问题",
             (
                 f"{sender_user.real_name}已将报告问题退回给你，请继续处理。\n"
                 f"项目编号：{project_code}\n"
@@ -308,7 +307,7 @@ def build_workflow_message_templates(
             ),
         ),
         "ISSUE_PAPER_REPORT": (
-            "你有一条新的流程待办",
+            "请处理后续流程",
             (
                 f"{sender_user.real_name}已完成报告出具，请继续办理后续流程。\n"
                 f"项目编号：{project_code}\n"
@@ -320,7 +319,7 @@ def build_workflow_message_templates(
             ),
         ),
         "SUBMIT_MAILING": (
-            "你有一条新的流程待办",
+            "请处理报告邮寄",
             (
                 f"{sender_user.real_name}已提交报告邮寄任务，请你填写邮寄信息。\n"
                 f"项目编号：{project_code}\n"
@@ -331,7 +330,7 @@ def build_workflow_message_templates(
             ),
         ),
         "RESUBMIT_MAILING": (
-            "你有一条新的流程待办",
+            "请处理报告邮寄",
             (
                 f"{sender_user.real_name}已重新提交报告邮寄任务，请你填写邮寄信息。\n"
                 f"项目编号：{project_code}\n"
@@ -342,7 +341,7 @@ def build_workflow_message_templates(
             ),
         ),
         "PRINT_ROOM_SUBMIT_EXPRESS": (
-            "你有一条流程待确认",
+            "请核对并确认邮寄",
             (
                 f"{sender_user.real_name}已填写快递信息，请你确认报告邮寄。\n"
                 f"项目编号：{project_code}\n"
@@ -355,7 +354,7 @@ def build_workflow_message_templates(
             ),
         ),
         "PROJECT_CONFIRM_MAILING": (
-            "你有一条新的流程待办",
+            "请处理开票或归档",
             (
                 f"{sender_user.real_name}已确认报告邮寄完成，请继续办理后续流程。\n"
                 f"项目编号：{project_code}\n"
@@ -367,7 +366,7 @@ def build_workflow_message_templates(
             ),
         ),
         "SUBMIT_INVOICE_INFO": (
-            "你有一条新的流程待办",
+            "请处理发票开具",
             (
                 f"{sender_user.real_name}已提交开票信息，请你办理开票。\n"
                 f"项目编号：{project_code}\n"
@@ -379,7 +378,7 @@ def build_workflow_message_templates(
             ),
         ),
         "REJECT_INVOICE_INFO": (
-            "你有一条流程退回待处理",
+            "请修改后重提开票信息",
             (
                 f"{sender_user.real_name}已退回开票信息，请修改后重新提交。\n"
                 f"项目编号：{project_code}\n"
@@ -391,7 +390,7 @@ def build_workflow_message_templates(
             ),
         ),
         "FINANCE_COMPLETE_INVOICE": (
-            "你有一条流程待确认",
+            "请核对并确认开票",
             (
                 f"{sender_user.real_name}已完成开票，请你确认开票结果。\n"
                 f"项目编号：{project_code}\n"
@@ -402,7 +401,7 @@ def build_workflow_message_templates(
             ),
         ),
         "PROJECT_CONFIRM_INVOICE": (
-            "你有一条新的流程待办",
+            "请处理后续流程",
             (
                 f"{sender_user.real_name}已确认发票结果，请继续办理后续流程。\n"
                 f"项目编号：{project_code}\n"
@@ -413,7 +412,7 @@ def build_workflow_message_templates(
             ),
         ),
         "PROJECT_RETURN_INVOICE": (
-            "你有一条流程退回待处理",
+            "发票已退回，请处理",
             (
                 f"{sender_user.real_name}已将发票退回给你，请重新处理。\n"
                 f"项目编号：{project_code}\n"
@@ -425,7 +424,7 @@ def build_workflow_message_templates(
             ),
         ),
         "WITHDRAW_INVOICE_INFO": (
-            "你有一条新的流程待办",
+            "请处理后续流程",
             (
                 f"{sender_user.real_name}已撤回开票信息，请继续办理后续流程。\n"
                 f"项目编号：{project_code}\n"
@@ -436,7 +435,7 @@ def build_workflow_message_templates(
             ),
         ),
         "ARCHIVE_SUBMIT_ONLINE": (
-            "你有一条新的流程待办",
+            "请处理归档审核",
             (
                 f"{sender_user.real_name}已提交归档审核，请你办理归档审核。\n"
                 f"项目编号：{project_code}\n"
@@ -448,7 +447,7 @@ def build_workflow_message_templates(
             ),
         ),
         "ARCHIVE_SUBMIT_OFFLINE": (
-            "你有一条新的流程待办",
+            "请处理归档审核",
             (
                 f"{sender_user.real_name}已提交线下归档审核，请你办理归档审核。\n"
                 f"项目编号：{project_code}\n"
@@ -460,7 +459,7 @@ def build_workflow_message_templates(
             ),
         ),
         "ARCHIVE_APPROVE": (
-            "你有一条新的流程待办",
+            "请处理归档完成",
             (
                 f"{sender_user.real_name}已完成归档审核，请继续办理归档完成操作。\n"
                 f"项目编号：{project_code}\n"
@@ -471,7 +470,7 @@ def build_workflow_message_templates(
             ),
         ),
         "ARCHIVE_REJECT": (
-            "你有一条流程退回待处理",
+            "请修改后重提归档材料",
             (
                 f"{sender_user.real_name}已退回归档材料，请修改后重新提交。\n"
                 f"项目编号：{project_code}\n"
@@ -483,7 +482,7 @@ def build_workflow_message_templates(
             ),
         ),
         "ARCHIVE_FINALIZE": (
-            "项目流程已进入下一环节",
+            "项目归档已完成",
             (
                 f"{sender_user.real_name}已完成归档，项目流程结束。\n"
                 f"项目编号：{project_code}\n"
@@ -495,10 +494,47 @@ def build_workflow_message_templates(
         ),
     }
 
+    cc_title_map = {
+        "WAIT_CONTRACT_UPLOAD_ASSIGNED": "合同初稿上传已发起",
+        "CONTRACT_UPLOAD_COMPLETED": "合同初稿已上传",
+        "SUBMIT_CONTRACT_REVIEW": "合同审核已提交",
+        "APPROVE_CONTRACT_REVIEW": "合同审核已完成",
+        "REJECT_CONTRACT_REVIEW": "合同初稿已退回",
+        "SUBMIT_FIRST": "一审任务已提交",
+        "SUBMIT_SECOND": "二审任务已提交",
+        "SUBMIT_THIRD": "三审任务已提交",
+        "FIRST_APPROVE": "一审已完成",
+        "SECOND_APPROVE": "二审已完成",
+        "THIRD_APPROVE": "三审已完成",
+        "FIRST_REJECT_RETURN": "一审材料已退回",
+        "SECOND_REJECT_RETURN": "二审材料已退回",
+        "THIRD_REJECT_RETURN": "三审材料已退回",
+        "TRANSFER_PRINTROOM": "报告出具已流转",
+        "ROLLBACK_THIRD": "三审后续已退回",
+        "CONTRACT_ERROR": "合同问题已退回",
+        "REPORT_ERROR": "报告问题已退回",
+        "ISSUE_PAPER_REPORT": "报告出具已完成",
+        "SUBMIT_MAILING": "报告邮寄已提交",
+        "RESUBMIT_MAILING": "报告邮寄已重新提交",
+        "PRINT_ROOM_SUBMIT_EXPRESS": "邮寄信息已填写",
+        "PROJECT_CONFIRM_MAILING": "报告邮寄已确认",
+        "SUBMIT_INVOICE_INFO": "开票信息已提交",
+        "REJECT_INVOICE_INFO": "开票信息已退回",
+        "FINANCE_COMPLETE_INVOICE": "发票已开具",
+        "PROJECT_CONFIRM_INVOICE": "开票结果已确认",
+        "PROJECT_RETURN_INVOICE": "发票已退回",
+        "WITHDRAW_INVOICE_INFO": "开票信息已撤回",
+        "ARCHIVE_SUBMIT_ONLINE": "归档审核已提交",
+        "ARCHIVE_SUBMIT_OFFLINE": "线下归档已提交",
+        "ARCHIVE_APPROVE": "归档审核已完成",
+        "ARCHIVE_REJECT": "归档材料已退回",
+        "ARCHIVE_FINALIZE": "项目归档已完成",
+    }
+
     title, content = templates.get(
         action_name,
         (
-            "你有一条新的流程待办",
+            "请处理流程任务",
             (
                 f"{sender_user.real_name}已将工单流转至你处理。\n"
                 f"动作：{action_name}\n"
@@ -511,6 +547,7 @@ def build_workflow_message_templates(
             ),
         ),
     )
+    cc_title = cc_title_map.get(action_name, "流程任务已流转")
 
     return WorkflowMessageTemplate(
         title=title,
