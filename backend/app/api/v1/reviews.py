@@ -84,12 +84,199 @@ ROUND_CURRENT_REVIEWER_ATTR = {
     "THIRD": "third_reviewer_id",
 }
 
+ROUND_NEXT = {
+    "FIRST": "SECOND",
+    "SECOND": "THIRD",
+}
+
+REVIEW_ROUND_SEQUENCE = {
+    "FIRST": 1,
+    "SECOND": 2,
+    "THIRD": 3,
+}
+
+REVIEW_FILE_CATEGORIES = {"REPORT_ZIP", "REVIEW_REPLY", "REVIEW_OPINION"}
+
 
 def _to_review_record_response(db: Session, record: ReviewRecord) -> ReviewRecordResponse:
     reviewer_name = db.query(User.real_name).filter(User.id == record.reviewer_user_id).scalar()
     data = ReviewRecordResponse.model_validate(record, from_attributes=True)
     data.reviewer_name = reviewer_name
+    data.comment = _strip_auto_comment_marker(record.comment)
+    source_record_id = _parse_source_record_id(record.comment)
+    if source_record_id:
+        source_record = db.query(ReviewRecord).filter(ReviewRecord.id == source_record_id).first()
+        if source_record:
+            data.source_record_id = source_record.id
+            data.source_round_comment = _strip_auto_comment_marker(source_record.comment)
+            data.source_round_reviewer_name = db.query(User.real_name).filter(User.id == source_record.reviewer_user_id).scalar()
+            data.auto_carried_from_previous = True
     return data
+
+
+def _parse_source_record_id(comment: str | None) -> int | None:
+    if not comment:
+        return None
+    marker = "[AUTO_FROM_RECORD:"
+    if marker not in comment:
+        return None
+    try:
+        value = comment.split(marker, 1)[1].split("]", 1)[0]
+        return int(value)
+    except (IndexError, ValueError):
+        return None
+
+
+def _strip_auto_comment_marker(comment: str | None) -> str | None:
+    if not comment:
+        return comment
+    marker = "[AUTO_FROM_RECORD:"
+    if marker not in comment:
+        return comment
+    prefix, _ = comment.split(marker, 1)
+    value = prefix.strip()
+    return value or None
+
+
+def _latest_submit_record(db: Session, work_order_id: int, review_round: str) -> ReviewRecord | None:
+    return (
+        db.query(ReviewRecord)
+        .filter(
+            ReviewRecord.work_order_id == work_order_id,
+            ReviewRecord.review_round == review_round,
+            ReviewRecord.action == "SUBMIT",
+        )
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+
+
+def _latest_round_files(db: Session, work_order_id: int, review_round: str, file_category: str) -> list[WorkOrderFile]:
+    rows = (
+        db.query(WorkOrderFile)
+        .filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.business_stage == f"REVIEW_{review_round}",
+            WorkOrderFile.file_category == file_category,
+        )
+        .order_by(WorkOrderFile.version_no.desc(), WorkOrderFile.id.desc())
+        .all()
+    )
+    latest_by_name: dict[str, WorkOrderFile] = {}
+    for row in rows:
+        if row.origin_file_name not in latest_by_name:
+            latest_by_name[row.origin_file_name] = row
+    return list(latest_by_name.values())
+
+
+def _clone_files_to_round(
+    db: Session,
+    *,
+    work_order_id: int,
+    from_round: str,
+    to_round: str,
+    uploaded_by: int,
+) -> None:
+    stage_to = f"REVIEW_{to_round}"
+    for file_category in ("REPORT_ZIP", "REVIEW_REPLY"):
+        source_files = _latest_round_files(db, work_order_id, from_round, file_category)
+        if not source_files:
+            continue
+        existing_latest = (
+            db.query(WorkOrderFile)
+            .filter(
+                WorkOrderFile.work_order_id == work_order_id,
+                WorkOrderFile.business_stage == stage_to,
+                WorkOrderFile.file_category == file_category,
+            )
+            .order_by(WorkOrderFile.version_no.desc())
+            .first()
+        )
+        next_version = 1 if not existing_latest else existing_latest.version_no + 1
+        db.query(WorkOrderFile).filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.business_stage == stage_to,
+            WorkOrderFile.file_category == file_category,
+            WorkOrderFile.is_current.is_(True),
+        ).update({"is_current": False})
+        for source_file in source_files:
+            db.add(
+                WorkOrderFile(
+                    work_order_id=source_file.work_order_id,
+                    file_category=source_file.file_category,
+                    business_stage=stage_to,
+                    version_no=next_version,
+                    is_current=True,
+                    origin_file_name=source_file.origin_file_name,
+                    storage_key=source_file.storage_key,
+                    file_size=source_file.file_size,
+                    uploaded_by=uploaded_by,
+                    uploaded_at=source_file.uploaded_at,
+                )
+            )
+            next_version += 1
+
+
+def _latest_report_file_owner_is_project_party(db: Session, work_order: WorkOrder, review_round: str) -> bool:
+    latest_report = (
+        db.query(WorkOrderFile)
+        .filter(
+            WorkOrderFile.work_order_id == work_order.id,
+            WorkOrderFile.business_stage == f"REVIEW_{review_round}",
+            WorkOrderFile.file_category == "REPORT_ZIP",
+        )
+        .order_by(WorkOrderFile.version_no.desc(), WorkOrderFile.id.desc())
+        .first()
+    )
+    if not latest_report:
+        return False
+    if latest_report.uploaded_by in {work_order.project_leader_id, work_order.initiator_user_id}:
+        return True
+    from app.models.project_member import ProjectMember
+
+    return db.query(ProjectMember.id).filter(
+        ProjectMember.project_id == work_order.project_id,
+        ProjectMember.user_id == latest_report.uploaded_by,
+    ).first() is not None
+
+
+def _auto_advance_if_needed(
+    db: Session,
+    *,
+    work_order: WorkOrder,
+    current_round: str,
+    current_reviewer: User,
+    project: Project,
+    approved_record: ReviewRecord,
+) -> tuple[WorkOrderStatus, int, str]:
+    next_round = ROUND_NEXT.get(current_round)
+    if not next_round:
+        return ROUND_APPROVED_STATUS[current_round], current_reviewer.id, f"{current_round}_APPROVE"
+    if not _latest_report_file_owner_is_project_party(db, work_order, current_round):
+        return ROUND_APPROVED_STATUS[current_round], work_order.project_leader_id, f"{current_round}_APPROVE"
+
+    next_reviewer_id = getattr(work_order, ROUND_CURRENT_REVIEWER_ATTR[next_round])
+    if not next_reviewer_id:
+        return ROUND_APPROVED_STATUS[current_round], work_order.project_leader_id, f"{current_round}_APPROVE"
+
+    _clone_files_to_round(
+        db,
+        work_order_id=work_order.id,
+        from_round=current_round,
+        to_round=next_round,
+        uploaded_by=_latest_submit_record(db, work_order.id, current_round).reviewer_user_id if _latest_submit_record(db, work_order.id, current_round) else work_order.project_leader_id,
+    )
+    db.add(
+        ReviewRecord(
+            work_order_id=work_order.id,
+            review_round=next_round,
+            reviewer_user_id=next_reviewer_id,
+            action="SUBMIT",
+            comment=f"来源于上一轮自动流转 [AUTO_FROM_RECORD:{approved_record.id}]",
+            acted_at=datetime.now(timezone.utc),
+        )
+    )
+    return ROUND_REVIEWING_STATUS[next_round], next_reviewer_id, f"SUBMIT_{next_round}"
 
 
 def _ensure_reviewer_has_round_role(db: Session, reviewer_user_id: int, review_round: str) -> None:
@@ -291,6 +478,7 @@ def submit_review(
         acted_at=datetime.now(timezone.utc),
     )
     db.add(record)
+    db.flush()
     create_workflow_log(
         db,
         work_order_id=work_order.id,
@@ -410,12 +598,8 @@ def decide_review(
     if from_status != reviewing_status:
         raise HTTPException(status_code=400, detail="当前状态不可审核")
 
-    if payload.action == "APPROVE":
-        to_status = ROUND_APPROVED_STATUS[payload.review_round]
-        next_handler = work_order.project_leader_id if payload.review_round != "THIRD" else current_user.id
-    else:
-        to_status = ROUND_REJECTED_STATUS[payload.review_round]
-        next_handler = work_order.project_leader_id
+    to_status = ROUND_REJECTED_STATUS[payload.review_round]
+    next_handler = work_order.project_leader_id
 
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
@@ -432,6 +616,25 @@ def decide_review(
         acted_at=datetime.now(timezone.utc),
     )
     db.add(record)
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if payload.action == "APPROVE":
+        default_status = ROUND_APPROVED_STATUS[payload.review_round]
+        if not can_transit(from_status, default_status):
+            raise HTTPException(status_code=400, detail="闈炴硶鐘舵€佽縼绉?")
+        to_status, next_handler, workflow_action = _auto_advance_if_needed(
+            db,
+            work_order=work_order,
+            current_round=payload.review_round,
+            current_reviewer=current_user,
+            project=project,
+            approved_record=record,
+        )
+    else:
+        workflow_action = f"{payload.review_round}_REJECT_RETURN"
+
+    work_order.current_status = to_status.value
+    work_order.current_handler_user_id = next_handler
+
     create_workflow_log(
         db,
         work_order_id=work_order.id,
@@ -441,13 +644,7 @@ def decide_review(
         operator_user_id=current_user.id,
         remark=payload.comment,
     )
-    project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if project:
-        workflow_action = (
-            f"{payload.review_round}_APPROVE"
-            if payload.action == "APPROVE"
-            else f"{payload.review_round}_REJECT_RETURN"
-        )
         send_workflow_notification(
             db,
             project=project,

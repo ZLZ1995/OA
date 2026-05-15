@@ -28,6 +28,7 @@ CONTRACT_DRAFT_FILE_CATEGORY = "CONTRACT_DRAFT"
 FINAL_CONTRACT_SCAN_FILE_CATEGORY = "FINAL_CONTRACT_SCAN"
 CONTRACT_DRAFT_STAGE = "CONTRACT_DRAFT"
 FINAL_CONTRACT_SCAN_STAGE = "FINAL_CONTRACT_SCAN"
+REVIEW_STAGE_PREFIX = "REVIEW_"
 
 
 def _user_name(db: Session, user_id: int) -> str | None:
@@ -58,7 +59,7 @@ def _ensure_project_contract_operator(db: Session, work_order: WorkOrder, curren
         return
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if project and project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=403, detail="外部项目仅项目创建人或负责人可操作合同")
+        raise HTTPException(status_code=403, detail="评估二部项目仅项目创建人或负责人可操作合同")
     is_member = db.query(ProjectMember.id).filter(
         ProjectMember.project_id == work_order.project_id,
         ProjectMember.user_id == current_user.id,
@@ -85,6 +86,16 @@ def _get_latest_file(
         .order_by(WorkOrderFile.version_no.desc())
         .first()
     )
+
+
+def _ensure_review_package_unlocked(work_order: WorkOrder, row: WorkOrderFile) -> None:
+    if work_order.current_status != WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value:
+        return
+    if row.file_category not in {"REPORT_ZIP", "REVIEW_REPLY"}:
+        return
+    if not row.business_stage.startswith(REVIEW_STAGE_PREFIX):
+        return
+    raise HTTPException(status_code=400, detail="报告资料包已在三审通过后锁定，请先撤回三审审核通过后再修改")
 
 
 @router.post("/upload", response_model=WorkOrderFileResponse, status_code=status.HTTP_201_CREATED)
@@ -131,6 +142,15 @@ def upload_file(
             raise HTTPException(status_code=400, detail="三审通过后才可上传合同扫描件")
         if current_user.id != work_order.third_reviewer_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
             raise HTTPException(status_code=403, detail="仅三审老师可上传合同扫描件")
+
+    latest_same_slot = _get_latest_file(
+        db,
+        work_order_id,
+        file_category=file_category,
+        business_stage=business_stage,
+    )
+    if latest_same_slot:
+        _ensure_review_package_unlocked(work_order, latest_same_slot)
 
     latest = (
         db.query(WorkOrderFile)
@@ -242,6 +262,8 @@ def replace_work_order_file(
             raise HTTPException(status_code=400, detail="当前状态不可替换合同扫描件")
         if current_user.id != work_order.third_reviewer_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
             raise HTTPException(status_code=403, detail="仅三审老师可替换合同扫描件")
+
+    _ensure_review_package_unlocked(work_order, row)
 
     old_path = Path(settings.local_storage_dir) / row.storage_key
     storage_key, file_size = save_upload_file(upload)

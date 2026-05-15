@@ -80,14 +80,28 @@
       </el-form-item>
 
       <el-form-item :label="showReviewerChangePanel ? '重新上传文件' : (isReplyFlow ? '意见回复文件' : '待审报告包')">
-        <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
-          <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
-        </el-upload>
-        <el-tag v-if="reusePreviousFile" type="info" effect="plain" style="margin-left: 12px">将沿用上轮已提交文件</el-tag>
-        <div class="file-list" v-if="submitFiles.length">
-          <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
-            {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
-          </el-tag>
+        <div class="review-upload-block">
+          <div class="review-upload-main">
+            <div class="review-upload-actions">
+              <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
+                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
+              </el-upload>
+              <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
+              <el-tag
+                v-if="records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT' && item.auto_carried_from_previous)"
+                type="success"
+                effect="plain"
+              >
+                来源于上一轮自动流转
+              </el-tag>
+            </div>
+            <div class="file-list" v-if="submitFiles.length">
+              <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
+                {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
+              </el-tag>
+            </div>
+          </div>
+          <ReviewUploadRequirementBox v-if="showReviewRequirementBox" />
         </div>
       </el-form-item>
       <el-form-item label="送审备注" v-if="canSubmitReview && !showReviewerChangePanel">
@@ -115,6 +129,19 @@
     <template v-if="canReview">
       <el-divider>审核处理</el-divider>
       <el-form label-width="120px">
+        <el-form-item
+          v-if="records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT' && item.source_round_comment)"
+          label="上一轮审核意见"
+        >
+          <div class="previous-review-card">
+            <div class="previous-review-meta">
+              {{ records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT')?.source_round_reviewer_name || '上一轮审核人' }}
+            </div>
+            <div>
+              {{ records.find(item => item.review_round === reviewRound && item.action === 'SUBMIT')?.source_round_comment }}
+            </div>
+          </div>
+        </el-form-item>
         <el-form-item label="审核意见">
           <el-input v-model="reviewComment" type="textarea" :rows="3" placeholder="请输入审核意见" />
         </el-form-item>
@@ -223,6 +250,7 @@ import type { ProjectFlowData } from '@/api/projectFlow'
 import { updateWorkOrder } from '@/api/workorders'
 import { transferPrintRoom } from '@/api/printRoom'
 import { listUserCandidates, type UserItem } from '@/api/users'
+import ReviewUploadRequirementBox from '@/components/common/ReviewUploadRequirementBox.vue'
 
 const props = defineProps<{ workOrderId?: number; canEdit: boolean; userRoles: string[]; flowInfo?: ProjectFlowData }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
@@ -240,6 +268,9 @@ interface ReviewRow {
   comment: string
   acted_at: string
   files: WorkOrderFileItem[]
+  sourceRoundComment?: string
+  sourceRoundReviewerName?: string
+  autoCarriedFromPrevious?: boolean
 }
 
 const auth = useAuthStore()
@@ -324,6 +355,7 @@ const opinionFiles = computed(() => files.value.filter(file => file.file_categor
 const formalReportFiles = computed(() => files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.business_stage === 'FORMAL_REPORT'))
 const contractDraftFiles = computed(() => files.value.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.business_stage === 'CONTRACT_DRAFT' && file.is_current))
 const finalContractFiles = computed(() => files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.business_stage === 'FINAL_CONTRACT_SCAN' && file.is_current))
+const showReviewRequirementBox = computed(() => !isReplyFlow.value && !showReviewerChangePanel.value)
 
 const reviewStatusText = computed(() => {
   if (isReplyFlow.value) return `${roundLabel(reviewRound.value)}意见已返回等待回复`
@@ -350,7 +382,10 @@ const reviewRows = computed<ReviewRow[]>(() => {
     roundLabel: recordRoundLabel(record),
     comment: recordCommentText(record),
     acted_at: record.acted_at,
-    files: filesForRecord(record)
+    files: filesForRecord(record),
+    sourceRoundComment: record.source_round_comment || undefined,
+    sourceRoundReviewerName: record.source_round_reviewer_name || undefined,
+    autoCarriedFromPrevious: Boolean(record.auto_carried_from_previous)
   }))
   const recordedReplyRounds = new Set(records.value.filter(record => record.action === 'SUBMIT').map(record => record.review_round))
   for (const file of files.value.filter(item => item.file_category === 'REVIEW_REPLY')) {
@@ -374,10 +409,10 @@ const REVIEW_STATUS_TEXT: Record<string, string> = {
   WAIT_FIRST_REVIEW_SUBMIT: '待上传文件',
   FIRST_REVIEWING: '一审审核中',
   FIRST_REVIEW_REJECTED: '一审意见已返回等待回复',
-  WAIT_SECOND_REVIEW_SUBMIT: '一审已通过，待提交二审',
+  WAIT_SECOND_REVIEW_SUBMIT: '二审待办',
   SECOND_REVIEWING: '二审审核中',
   SECOND_REVIEW_REJECTED: '二审意见已返回等待回复',
-  WAIT_THIRD_REVIEW_SUBMIT: '二审已通过，待提交三审',
+  WAIT_THIRD_REVIEW_SUBMIT: '三审待办',
   THIRD_REVIEWING: '三审审核中',
   THIRD_REVIEW_REJECTED: '三审意见已返回等待回复',
   THIRD_APPROVED_WAIT_PRINTROOM: '三审已通过，待补充正式报告与合同扫描件'
@@ -671,7 +706,28 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-left: 12px;
+}
+
+.review-upload-block {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.review-upload-main {
+  flex: 1;
+  min-width: 260px;
+  display: grid;
+  gap: 12px;
+}
+
+.review-upload-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .attachment-list {
@@ -710,5 +766,31 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.previous-review-card {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--zq-border-soft);
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #334155;
+}
+
+.previous-review-meta {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+@media (max-width: 900px) {
+  .review-upload-block {
+    flex-direction: column;
+  }
+
+  .review-upload-main {
+    width: 100%;
+    min-width: 100%;
+  }
 }
 </style>
