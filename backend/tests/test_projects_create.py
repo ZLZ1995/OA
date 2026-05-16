@@ -96,7 +96,7 @@ def test_complete_contract_upload_advances_to_review_submit() -> None:
     project = create_project(
         payload=ProjectCreate(
             project_code="ZQ-TEST-CONTRACT",
-            undertaking_unit="涓嫟",
+            undertaking_unit="中勤",
             project_name="Demo Project",
             client_name="Demo Client",
             business_user_id=user.id,

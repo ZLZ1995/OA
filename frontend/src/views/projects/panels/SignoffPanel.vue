@@ -83,7 +83,7 @@
       </div>
       <div class="signoff-actions">
         <el-button type="success" @click="onApproveSignoff">同意签发</el-button>
-        <el-button type="warning" plain @click="onReturnThird">报告需修改返回三审</el-button>
+        <el-button type="warning" plain @click="onReturnThird">报告需修改，返回三审</el-button>
         <el-button type="danger" plain @click="onReturnOwnerUpload">附件/合同错误，返回项目负责人</el-button>
       </div>
     </template>
@@ -91,8 +91,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type UploadFile } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage, type UploadFile } from 'element-plus'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import {

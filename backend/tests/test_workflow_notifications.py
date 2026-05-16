@@ -131,6 +131,48 @@ def test_workflow_notification_skips_self_transfer() -> None:
     assert db.query(UserNotification).count() == 0
 
 
+def test_workflow_notification_skips_self_transfer() -> None:
+    db = _build_session()
+    user = _seed_user(db, "leader", ["PROJECT_LEADER"])
+    project = Project(
+        project_code="P-WF-SELF",
+        undertaking_unit="中勤",
+        project_name="Workflow",
+        client_name="Client",
+        report_type="评估报告",
+        business_salesman="Sales",
+        business_user_id=user.id,
+        project_leader_id=user.id,
+        project_source="INTERNAL",
+    )
+    db.add(project)
+    db.flush()
+    work_order = WorkOrder(
+        work_order_no="WO-WF-SELF",
+        project_id=project.id,
+        title="Workflow Order",
+        current_status="WAIT_CONTRACT_UPLOAD",
+        current_handler_user_id=user.id,
+        initiator_user_id=user.id,
+        project_leader_id=user.id,
+        priority="MEDIUM",
+    )
+    db.add(work_order)
+    db.flush()
+
+    send_workflow_notification(
+        db,
+        project=project,
+        work_order=work_order,
+        sender_user=user,
+        receiver_user_id=user.id,
+        action_name="WAIT_CONTRACT_UPLOAD_ASSIGNED",
+    )
+    db.commit()
+
+    assert db.query(UserNotification).count() == 0
+
+
 def test_workflow_notification_stays_read_not_processed() -> None:
     db = _build_session()
     user = _seed_user(db, "leader", ["PROJECT_LEADER"])

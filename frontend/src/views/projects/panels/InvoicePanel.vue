@@ -31,6 +31,7 @@
         <el-descriptions-item label="项目金额">{{ formatAmount(projectAmount) }}</el-descriptions-item>
         <el-descriptions-item label="累计开票金额">{{ formatAmount(cumulativeAmount) }}</el-descriptions-item>
       </el-descriptions>
+    </template>
 
     <el-form label-width="112px">
       <el-form-item label="开票信息">
@@ -59,7 +60,7 @@
       <el-form-item label="开票金额">
         <el-input-number v-model="amount" :min="0" :precision="2" :disabled="!canSubmitInfo" />
       </el-form-item>
-      <el-form-item label="办理财务人员" v-if="!canFinance">
+      <el-form-item v-if="!canFinance" label="办理财务人员">
         <el-select v-model="financeHandlerId" :disabled="!canSubmitInfo" placeholder="请选择财务人员" style="width: 220px">
           <el-option v-for="user in financeUsers" :key="user.id" :label="user.real_name || user.username" :value="user.id" />
         </el-select>
@@ -71,7 +72,9 @@
           <el-button v-if="canProjectConfirm" type="success" @click="onProjectConfirm">确认完成</el-button>
           <el-button v-if="canProjectConfirm" type="danger" plain @click="onProjectReturn">退回修改</el-button>
           <el-button v-if="canFinance" @click="copyInfo">一键复制</el-button>
-          <el-button v-if="canFinance" type="warning" plain :disabled="!canFinanceProcess" @click="onReject">信息有误返回上一级</el-button>
+          <el-button v-if="canFinance" type="warning" plain :disabled="!canFinanceProcess" @click="onReject">
+            信息有误，返回上一级
+          </el-button>
         </el-space>
       </el-form-item>
     </el-form>
@@ -116,7 +119,6 @@
       </el-table-column>
       <el-table-column prop="updated_at" label="更新时间" />
     </el-table>
-    </template>
   </template>
 </template>
 
@@ -136,6 +138,7 @@ import {
 import { downloadWorkOrderFile, listWorkOrderFiles, replaceWorkOrderFile, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { listUserCandidates, type UserItem } from '@/api/users'
+import { isFinanceRoleInCurrentFlow } from './invoicePermissions'
 
 const props = defineProps<{
   workOrderId?: number
@@ -157,11 +160,7 @@ const financeHandlerId = ref<number>()
 const replaceInputs = new Map<number, HTMLInputElement>()
 
 const projectAmount = computed(() => props.flowInfo?.project.project_amount ?? null)
-const canFinance = computed(() => {
-  // Finance actions should follow the user's role in the current project flow,
-  // otherwise mixed-role accounts like ADMIN + FINANCE get forced into the finance branch.
-  return props.userRoleInProject === '财务'
-})
+const canFinance = computed(() => isFinanceRoleInCurrentFlow(props.userRoleInProject))
 const activeStatuses = ['SUBMITTED', 'FINANCE_COMPLETED', 'PROJECT_RETURNED', 'REJECTED']
 const countedStatuses = ['SUBMITTED', 'FINANCE_COMPLETED', 'PROJECT_RETURNED', 'ISSUED']
 const currentInvoice = computed(() => invoices.value.find(item => activeStatuses.includes(item.status)))
