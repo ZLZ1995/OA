@@ -105,6 +105,11 @@ const statusTagType = computed(() => {
   if (statusCode.value === 'CONTRACT_REVIEWING') return 'primary'
   return 'info'
 })
+const projectPartyIds = computed(() => {
+  const ids = new Set<number>()
+  if (props.flowInfo?.project.project_leader_id) ids.add(props.flowInfo.project.project_leader_id)
+  return ids
+})
 
 async function load() {
   if (!props.workOrderId) {
@@ -116,7 +121,7 @@ async function load() {
     const files = (await listWorkOrderFiles(props.workOrderId)).items
     contracts.value = files.filter(file => file.business_stage === 'CONTRACT_DRAFT' || file.file_category === 'CONTRACT_DRAFT')
     reviewerId.value = props.flowInfo?.contract_reviewer_id || reviewerId.value
-    reviewerOptions.value = (await listUserCandidates('CONTRACT_REVIEWER')).items
+    reviewerOptions.value = (await listUserCandidates('CONTRACT_REVIEWER')).items.filter(user => !projectPartyIds.value.has(user.id))
   } finally {
     loading.value = false
   }

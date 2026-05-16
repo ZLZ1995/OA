@@ -25,6 +25,7 @@ export interface ProjectFlowData {
     project_source: 'INTERNAL' | 'EXTERNAL'
     project_source_display: string
     external_project_leader_name?: string | null
+    project_leader_id?: number | null
     project_leader_display_name?: string | null
     display_project_leader_name?: string | null
     contract_no?: string | null

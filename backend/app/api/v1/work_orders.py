@@ -14,6 +14,7 @@ from app.schemas.work_order import (
     WorkOrderResponse,
     WorkOrderUpdate,
 )
+from app.services.project_role_conflict_service import get_project_party_user_ids, validate_not_project_party, validate_signers_not_reviewers
 from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/work-orders", tags=["工单"])
@@ -192,6 +193,32 @@ def update_work_order(
     elif "ADMIN" not in role_codes and not ({"SALES", "PROJECT_LEADER"} & role_codes):
         if not data or set(data) - signer_keys - contract_keys - mailing_keys:
             raise HTTPException(status_code=403, detail="无权修改该工单")
+
+    if "contract_reviewer_id" in data and data["contract_reviewer_id"]:
+        validate_not_project_party(
+            data["contract_reviewer_id"],
+            get_project_party_user_ids(db, row.project_id, row),
+            "合同审核人",
+        )
+    if "signer_one" in data or "signer_two" in data:
+        reviewer_names = set()
+        if row.first_reviewer_id:
+            first_name = db.query(User.real_name).filter(User.id == row.first_reviewer_id).scalar()
+            if first_name:
+                reviewer_names.add(first_name.strip())
+        if row.second_reviewer_id:
+            second_name = db.query(User.real_name).filter(User.id == row.second_reviewer_id).scalar()
+            if second_name:
+                reviewer_names.add(second_name.strip())
+        if row.third_reviewer_id:
+            third_name = db.query(User.real_name).filter(User.id == row.third_reviewer_id).scalar()
+            if third_name:
+                reviewer_names.add(third_name.strip())
+        validate_signers_not_reviewers(
+            reviewer_names,
+            data.get("signer_one", row.signer_one),
+            data.get("signer_two", row.signer_two),
+        )
 
     for key, value in data.items():
         setattr(row, key, value)

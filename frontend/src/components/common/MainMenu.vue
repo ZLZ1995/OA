@@ -8,17 +8,25 @@
       </div>
     </div>
     <el-menu :default-active="active" class="menu" router>
-      <el-menu-item v-for="item in visibleMenus" :key="item.key" :index="item.path">
-        <span class="menu-item-title">
-          <span>{{ item.title }}</span>
-          <el-badge
-            v-if="item.key === 'notifications' && unreadCount > 0"
-            :value="unreadCount"
-            :max="99"
-            class="menu-badge"
-          />
-        </span>
-      </el-menu-item>
+      <template v-for="item in visibleMenus" :key="item.key">
+        <el-sub-menu v-if="item.children?.length" :index="item.key">
+          <template #title>{{ item.title }}</template>
+          <el-menu-item v-for="child in item.children" :key="child.key" :index="child.path">
+            {{ child.title }}
+          </el-menu-item>
+        </el-sub-menu>
+        <el-menu-item v-else :index="item.path">
+          <span class="menu-item-title">
+            <span>{{ item.title }}</span>
+            <el-badge
+              v-if="item.key === 'notifications' && unreadCount > 0"
+              :value="unreadCount"
+              :max="99"
+              class="menu-badge"
+            />
+          </span>
+        </el-menu-item>
+      </template>
     </el-menu>
     <div class="menu-actions">
       <el-button plain class="feedback-btn" @click="feedbackVisible = true">问题反馈</el-button>
@@ -53,8 +61,20 @@ import { useAuthStore } from '@/store/auth'
 import { createIssueFeedback } from '@/api/issueFeedbacks'
 import { useNotificationStore } from '@/store/notification'
 
-const BUSINESS_MENUS = [{ key: 'dashboard', title: '项目工作台', path: '/workbench' }]
-const SHARED_MENUS = [{ key: 'notifications', title: '消息中心', path: '/notifications' }]
+type MenuItem = { key: string; title: string; path?: string; children?: Array<{ key: string; title: string; path: string }> }
+
+const BUSINESS_MENUS: MenuItem[] = [{ key: 'dashboard', title: '项目工作台', path: '/workbench' }]
+const HELP_MENU: MenuItem = {
+  key: 'help-center',
+  title: '帮助中心',
+  children: [
+    { key: 'help-overview', title: '流程图总览', path: '/help/overview' },
+    { key: 'help-business-flow', title: '整体业务流程', path: '/help/business-flow' },
+    { key: 'help-role-flow', title: '角色流程图', path: '/help/role-flow' },
+    { key: 'help-manual', title: '使用说明', path: '/help/manual' },
+  ],
+}
+const SHARED_MENUS: MenuItem[] = [{ key: 'notifications', title: '消息中心', path: '/notifications' }, HELP_MENU]
 const ADMIN_MENUS = [
   { key: 'accounts', title: '账号管理', path: '/accounts' },
   { key: 'termination-approvals', title: '终止/废止审核', path: '/termination-approvals' },
@@ -70,7 +90,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const notifications = useNotificationStore()
 const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
-const visibleMenus = computed(() => (isAdmin.value ? [...SHARED_MENUS, ...ADMIN_MENUS] : [...BUSINESS_MENUS, ...SHARED_MENUS]))
+const visibleMenus = computed<MenuItem[]>(() => (isAdmin.value ? [...SHARED_MENUS, ...ADMIN_MENUS] : [...BUSINESS_MENUS, ...SHARED_MENUS]))
 const active = computed(() => route.path)
 const unreadCount = computed(() => notifications.unreadCount)
 const feedbackVisible = ref(false)
@@ -161,6 +181,14 @@ async function submitFeedback() {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+}
+
+.menu :deep(.el-sub-menu__title) {
+  height: 44px;
+  margin: 6px 10px;
+  border-radius: 6px;
+  color: #475569;
+  font-weight: 600;
 }
 
 .menu :deep(.el-menu-item.is-active) {

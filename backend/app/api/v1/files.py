@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
 from app.schemas.file import WorkOrderFileListResponse, WorkOrderFileResponse
+from app.services.archive_sync_service import SIGNOFF_SYNC_SOURCE_TYPE, is_signoff_source_category, refresh_archive_synced_file_by_source
 from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
 from app.storage.local_storage import save_upload_file
 from app.workflows.states import WorkOrderStatus
@@ -35,6 +36,11 @@ def _user_name(db: Session, user_id: int) -> str | None:
 
 
 def _to_file_response(db: Session, row: WorkOrderFile) -> WorkOrderFileResponse:
+    display_label = None
+    if row.source_type == SIGNOFF_SYNC_SOURCE_TYPE:
+        display_label = "签发同步文件"
+    elif row.file_category == "ELECTRONIC_DRAFT":
+        display_label = "电子底稿"
     return WorkOrderFileResponse(
         id=row.id,
         work_order_id=row.work_order_id,
@@ -48,6 +54,10 @@ def _to_file_response(db: Session, row: WorkOrderFile) -> WorkOrderFileResponse:
         uploaded_by=row.uploaded_by,
         uploaded_by_name=_user_name(db, row.uploaded_by),
         uploaded_at=row.uploaded_at,
+        source_type=row.source_type,
+        source_file_id=row.source_file_id,
+        locked=row.locked,
+        display_label=display_label,
     )
 
 
@@ -56,9 +66,6 @@ def _ensure_project_contract_operator(db: Session, work_order: WorkOrder, curren
         return
     if current_user.id in {work_order.project_leader_id, work_order.initiator_user_id}:
         return
-    project = db.query(Project).filter(Project.id == work_order.project_id).first()
-    if project and project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=403, detail="评估二部项目仅项目创建人或负责人可操作合同")
     is_member = db.query(ProjectMember.id).filter(
         ProjectMember.project_id == work_order.project_id,
         ProjectMember.user_id == current_user.id,
@@ -123,6 +130,8 @@ def _ensure_upload_permission(
     current_user: User,
     file_category: str,
 ) -> None:
+    if file_category == "ELECTRONIC_DRAFT":
+        return
     if file_category == CONTRACT_DRAFT_FILE_CATEGORY:
         if work_order.current_status in {WorkOrderStatus.CONTRACT_REVIEWING.value, WorkOrderStatus.CONTRACT_APPROVED.value}:
             raise HTTPException(status_code=400, detail="合同初稿在审核中或已通过，已锁定")
@@ -224,6 +233,9 @@ def upload_file(
         file_size=file_size,
         uploaded_by=current_user.id,
         uploaded_at=datetime.now(timezone.utc),
+        source_type="MANUAL",
+        source_file_id=None,
+        locked=False,
     )
     db.add(row)
 
@@ -238,6 +250,9 @@ def upload_file(
         project = db.query(Project).filter(Project.id == work_order.project_id).first()
         if project:
             upsert_conflict_snapshot_and_detect(db, project, work_order, row.uploaded_at)
+    if is_signoff_source_category(file_category):
+        db.flush()
+        refresh_archive_synced_file_by_source(db, row)
 
     db.commit()
     db.refresh(row)
@@ -285,6 +300,8 @@ def replace_work_order_file(
     row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="文件不存在")
+    if row.locked:
+        raise HTTPException(status_code=400, detail="该文件已锁定，不允许替换")
 
     work_order = db.query(WorkOrder).filter(WorkOrder.id == row.work_order_id).first()
     if not work_order:
@@ -323,6 +340,8 @@ def replace_work_order_file(
     row.uploaded_at = datetime.now(timezone.utc)
     if old_path.exists():
         old_path.unlink()
+    if is_signoff_source_category(row.file_category):
+        refresh_archive_synced_file_by_source(db, row)
 
     db.commit()
     db.refresh(row)

@@ -97,6 +97,12 @@ def ensure_work_order_file_columns(db: Session) -> None:
     existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('work_order_files')")).fetchall()}
     if "file_size" not in existing_columns:
         db.execute(text("ALTER TABLE work_order_files ADD COLUMN file_size INTEGER NULL"))
+    if "source_type" not in existing_columns:
+        db.execute(text("ALTER TABLE work_order_files ADD COLUMN source_type VARCHAR(32) DEFAULT 'MANUAL' NOT NULL"))
+    if "source_file_id" not in existing_columns:
+        db.execute(text("ALTER TABLE work_order_files ADD COLUMN source_file_id INTEGER NULL"))
+    if "locked" not in existing_columns:
+        db.execute(text("ALTER TABLE work_order_files ADD COLUMN locked BOOLEAN DEFAULT FALSE NOT NULL"))
     db.commit()
 
 

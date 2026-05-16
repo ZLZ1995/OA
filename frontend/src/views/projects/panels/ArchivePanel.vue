@@ -21,8 +21,17 @@
         <el-upload :auto-upload="false" :on-change="onDraftSelected" :show-file-list="false">
           <el-button type="primary">上传电子底稿</el-button>
         </el-upload>
-        <div v-if="draftFiles.length" class="download-list">
-          <div v-for="file in draftFiles" :key="file.id" class="download-item">
+        <div v-if="archiveSyncFiles.length" class="download-list archive-group">
+          <div class="group-title">签发同步文件</div>
+          <div v-for="file in archiveSyncFiles" :key="file.id" class="download-item">
+            <span>{{ file.origin_file_name }}</span>
+            <el-tag size="small" type="info">{{ file.display_label || '签发同步文件' }}</el-tag>
+            <el-button type="primary" link @click="download(file)">下载</el-button>
+          </div>
+        </div>
+        <div v-if="electronicDraftFiles.length" class="download-list archive-group">
+          <div class="group-title">电子底稿</div>
+          <div v-for="file in electronicDraftFiles" :key="file.id" class="download-item">
             <span>{{ file.origin_file_name }}</span>
             <el-button type="primary" link @click="download(file)">下载</el-button>
             <el-button type="warning" link @click="triggerReplace(file.id)">更改文件</el-button>
@@ -39,7 +48,7 @@
         <el-button type="success" @click="onFinalize">归档</el-button>
       </el-form-item>
       <el-form-item v-else>
-        <el-button type="primary" :disabled="!reviewerId || draftFiles.length === 0" @click="submitOnline">发送电子底稿</el-button>
+        <el-button type="primary" :disabled="!reviewerId" @click="submitOnline">发送电子底稿</el-button>
         <el-button type="success" :disabled="!reviewerId" @click="submitOffline">已线下提交纸质底稿</el-button>
       </el-form-item>
     </template>
@@ -52,8 +61,17 @@
         <el-input :model-value="archiveSubmitterName" disabled />
       </el-form-item>
       <el-form-item label="电子底稿">
-        <div v-if="draftFiles.length" class="download-list">
-          <div v-for="file in draftFiles" :key="file.id" class="download-item">
+        <div v-if="archiveSyncFiles.length" class="download-list archive-group">
+          <div class="group-title">签发同步文件</div>
+          <div v-for="file in archiveSyncFiles" :key="file.id" class="download-item">
+            <span>{{ file.origin_file_name }}</span>
+            <el-tag size="small" type="info">{{ file.display_label || '签发同步文件' }}</el-tag>
+            <el-button type="primary" link @click="download(file)">下载</el-button>
+          </div>
+        </div>
+        <div v-if="electronicDraftFiles.length" class="download-list archive-group">
+          <div class="group-title">电子底稿</div>
+          <div v-for="file in electronicDraftFiles" :key="file.id" class="download-item">
             <span>{{ file.origin_file_name }}</span>
             <el-button type="primary" link @click="download(file)">下载</el-button>
           </div>
@@ -85,7 +103,8 @@ const emit = defineEmits<{ (e: 'changed'): void }>()
 
 const archiveManagers = ref<UserItem[]>([])
 const members = ref<ProjectMemberItem[]>([])
-const draftFiles = ref<WorkOrderFileItem[]>([])
+const archiveSyncFiles = ref<WorkOrderFileItem[]>([])
+const electronicDraftFiles = ref<WorkOrderFileItem[]>([])
 const reviewerId = ref<number>()
 const remark = ref('')
 const replaceInputs = new Map<number, HTMLInputElement>()
@@ -94,17 +113,23 @@ const canArchiveManager = computed(() => props.userRoles.some(role => ['ARCHIVE_
 const memberNames = computed(() => members.value.map(item => item.real_name).join('、') || '-')
 const signerNames = computed(() => [props.flowInfo?.signer_one, props.flowInfo?.signer_two].filter(Boolean).join('、') || '-')
 const archiveSubmitterName = computed(() => members.value.find(item => item.user_id === props.flowInfo?.archive_submitter_id)?.real_name || '-')
+const projectPartyIds = computed(() => {
+  const ids = new Set<number>()
+  if (props.flowInfo?.project.project_leader_id) ids.add(props.flowInfo.project.project_leader_id)
+  members.value.forEach(item => ids.add(item.user_id))
+  return ids
+})
 
 async function load() {
   if (props.projectId) {
     members.value = (await listProjectMembers(props.projectId)).items
   }
-  archiveManagers.value = (await listUserCandidates('ARCHIVE_MANAGER')).items
+  archiveManagers.value = (await listUserCandidates('ARCHIVE_MANAGER')).items.filter(user => !projectPartyIds.value.has(user.id))
   reviewerId.value = props.flowInfo?.archive_reviewer_id || reviewerId.value
   if (props.workOrderId) {
-    draftFiles.value = (await listWorkOrderFiles(props.workOrderId)).items.filter(
-      file => file.file_category === 'ELECTRONIC_DRAFT' || file.business_stage === 'ARCHIVE'
-    )
+    const files = (await listWorkOrderFiles(props.workOrderId)).items.filter(file => file.business_stage === 'ARCHIVE')
+    archiveSyncFiles.value = files.filter(file => file.source_type === 'SIGNOFF_SYNC')
+    electronicDraftFiles.value = files.filter(file => file.file_category === 'ELECTRONIC_DRAFT' && file.source_type !== 'SIGNOFF_SYNC')
   }
 }
 
@@ -117,7 +142,6 @@ async function onDraftSelected(file: UploadFile) {
 
 async function submitOnline() {
   if (!props.workOrderId || !reviewerId.value) return
-  if (!draftFiles.value.length) return ElMessage.warning('请先上传电子底稿')
   try {
     await submitArchive({ work_order_id: props.workOrderId, reviewer_user_id: reviewerId.value, submission_type: 'ONLINE' })
     ElMessage.success('已提交底稿，待审查')
@@ -189,6 +213,15 @@ watch(() => [props.projectId, props.workOrderId, props.flowInfo?.archive_reviewe
 .download-list {
   display: grid;
   gap: 6px;
+}
+
+.archive-group {
+  margin-top: 8px;
+}
+
+.group-title {
+  font-size: 13px;
+  color: #64748b;
 }
 
 .download-item {

@@ -81,23 +81,6 @@ FLOW_STEPS = [
     "已归档",
 ]
 
-EXTERNAL_FLOW_STEPS = [
-    "项目创建",
-    "合同初稿上传",
-    "合同初稿审核",
-    "报告送审",
-    "一审",
-    "二审",
-    "三审",
-    "外部审核确认",
-    "外部审核复核",
-    "签发审核",
-    "报告出具",
-    "报告邮寄",
-    "发票开具",
-    "报告归档",
-    "已归档",
-]
 
 
 def is_system_admin(user: User) -> bool:
@@ -118,16 +101,13 @@ def get_project_leader_display_name(project: Project, leader_name: str | None = 
 
 
 def get_flow_steps(project: Project) -> list[str]:
-    return EXTERNAL_FLOW_STEPS if normalize_project_source(project.project_source) == "EXTERNAL" else FLOW_STEPS
+    return FLOW_STEPS
 
 
 def normalize_project_step(status: str | None, archived: bool, project_source: str = "INTERNAL") -> str:
     if archived:
         return "已归档"
-    project_source = normalize_project_source(project_source)
     step = STATUS_TO_STEP.get(status or "", "项目创建")
-    if project_source == "EXTERNAL" and step == "项目组成员":
-        return "合同初稿上传"
     return step
 
 

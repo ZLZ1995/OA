@@ -302,8 +302,6 @@ def _prepare_project_payload(payload: ProjectCreate, current_user: User) -> dict
     data["report_type"] = normalize_report_type(data.get("report_type"))
     data["project_source"] = normalize_project_source(data.get("project_source"))
     data["external_project_leader_name"] = normalize_external_project_leader_name(data.get("external_project_leader_name"))
-    if data["project_source"] == "EXTERNAL":
-        data["project_leader_id"] = current_user.id
     return data
 
 
@@ -354,7 +352,7 @@ def create_project(
     db.add(row)
     db.flush()
 
-    initial_status = WorkOrderStatus.WORK_ORDER_CREATED.value if row.project_source == "INTERNAL" else WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value
+    initial_status = WorkOrderStatus.WORK_ORDER_CREATED.value
     work_order = WorkOrder(
         work_order_no=row.project_code,
         project_id=row.id,
@@ -419,8 +417,6 @@ def update_project(
         data["external_project_leader_name"] = normalize_external_project_leader_name(data["external_project_leader_name"])
     project_source = data.get("project_source", normalize_project_source(row.project_source))
     external_leader = data.get("external_project_leader_name", normalize_external_project_leader_name(row.external_project_leader_name))
-    if project_source == "EXTERNAL" and not external_leader:
-        raise HTTPException(status_code=400, detail="评估二部项目必须填写项目负责人")
     if project_source != "EXTERNAL":
         data["external_project_leader_name"] = None
 

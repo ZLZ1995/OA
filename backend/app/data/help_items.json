@@ -1,0 +1,41 @@
+{
+  "menu": [
+    { "key": "overview", "title": "流程图总览" },
+    { "key": "business-flow", "title": "整体业务流程" },
+    { "key": "role-flow", "title": "角色流程图" },
+    { "key": "manual", "title": "使用说明" }
+  ],
+  "sections": {
+    "overview": {
+      "title": "流程图总览",
+      "items": [
+        { "key": "overview-1", "title": "整体业务流程总览图", "image_url": "", "description": "从立项到归档的全链路总览。", "sort_order": 1 },
+        { "key": "overview-2", "title": "整体业务流程细化图", "image_url": "", "description": "展示主要判断、回退与并行环节。", "sort_order": 2 },
+        { "key": "overview-3", "title": "角色流程图集合", "image_url": "", "description": "按阶段查看角色处理动作。", "sort_order": 3 }
+      ]
+    },
+    "business-flow": {
+      "title": "整体业务流程",
+      "items": [
+        { "key": "business-overview", "title": "整体业务流程总览图", "image_url": "", "description": "用于培训、汇报、实施总览。", "sort_order": 1 },
+        { "key": "business-detail", "title": "整体业务流程细化图", "image_url": "", "description": "展示主链、回退、外部审核与签发归档。", "sort_order": 2 }
+      ]
+    },
+    "role-flow": {
+      "title": "角色流程图",
+      "items": [
+        { "key": "role-project-init", "title": "立项与项目建档", "image_url": "", "description": "展示创建人与项目负责人如何完成项目建档。", "sort_order": 1 },
+        { "key": "role-contract", "title": "合同与合同审核", "image_url": "", "description": "展示项目方与合同审核人的闭环。", "sort_order": 2 },
+        { "key": "role-review", "title": "多轮评审", "image_url": "", "description": "展示一审、二审、三审、外部复核与签发。", "sort_order": 3 },
+        { "key": "role-issue-mail", "title": "出具与邮寄", "image_url": "", "description": "展示文印室与项目方的协作。", "sort_order": 4 },
+        { "key": "role-invoice-archive", "title": "开票与归档", "image_url": "", "description": "展示财务、档案管理员与项目方的闭环。", "sort_order": 5 }
+      ]
+    },
+    "manual": {
+      "title": "使用说明",
+      "items": [
+        { "key": "manual-overall", "title": "总体说明", "image_url": "", "description": "先按整体流程理解系统，再按角色查看各自职责。", "sort_order": 1 }
+      ]
+    }
+  }
+}

@@ -423,6 +423,11 @@ const formalReportFiles = computed(() => files.value.filter(file => file.file_ca
 const contractDraftFiles = computed(() => files.value.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.business_stage === 'CONTRACT_DRAFT' && file.is_current))
 const finalContractFiles = computed(() => files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.business_stage === 'FINAL_CONTRACT_SCAN' && file.is_current))
 const showReviewRequirementBox = computed(() => !isReplyFlow.value && !showReviewerChangePanel.value)
+const projectPartyIds = computed(() => {
+  const ids = new Set<number>()
+  if (props.flowInfo?.project?.project_leader_id) ids.add(props.flowInfo.project.project_leader_id)
+  return ids
+})
 
 const reviewStatusText = computed(() => {
   if (isReplyFlow.value) return `${roundLabel(reviewRound.value)}意见已返回等待回复`
@@ -584,9 +589,14 @@ async function loadCandidates() {
     userOptions.value = []
     return
   }
-  userOptions.value = (await listReviewCandidates(props.workOrderId, reviewRound.value)).items.filter(
-    user => user.user_id !== currentRoundReviewerId.value
-  )
+  userOptions.value = (await listReviewCandidates(props.workOrderId, reviewRound.value)).items.filter(user => {
+    if (user.user_id === currentRoundReviewerId.value) return false
+    if (projectPartyIds.value.has(user.user_id)) return false
+    if (reviewRound.value === 'FIRST' && [props.flowInfo?.second_reviewer_id, props.flowInfo?.third_reviewer_id].includes(user.user_id)) return false
+    if (reviewRound.value === 'SECOND' && [props.flowInfo?.first_reviewer_id, props.flowInfo?.third_reviewer_id].includes(user.user_id)) return false
+    if (reviewRound.value === 'THIRD' && [props.flowInfo?.first_reviewer_id, props.flowInfo?.second_reviewer_id].includes(user.user_id)) return false
+    return true
+  })
   if (pendingReviewerChange.value) {
     changeReviewerUserId.value = pendingReviewerChange.value.reviewer_user_id
     isReviewerChangePanelOpen.value = true

@@ -9,6 +9,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
+from app.services.archive_sync_service import sync_signoff_files_to_archive
 from app.services.workflow_log_service import create_workflow_log
 from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
@@ -228,6 +229,7 @@ def approve_signoff(
     work_order.current_status = WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
     work_order.current_handler_user_id = work_order.print_room_handler_id
     work_order.signoff_status = "APPROVED"
+    sync_signoff_files_to_archive(db, work_order, current_user.id)
     create_workflow_log(
         db,
         work_order_id=work_order.id,

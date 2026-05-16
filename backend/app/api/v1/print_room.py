@@ -20,6 +20,7 @@ from app.schemas.print_room import (
     PrintRoomRollbackRequest,
     TransferPrintRoomRequest,
 )
+from app.services.project_role_conflict_service import get_project_party_user_ids, validate_support_role_not_project_party
 from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.states import WorkOrderStatus
@@ -40,9 +41,6 @@ def _has_current_final_contract_scan(db: Session, work_order_id: int) -> bool:
 def _ensure_project_operator(db: Session, work_order: WorkOrder, user_id: int) -> None:
     if work_order.project_leader_id == user_id or work_order.initiator_user_id == user_id:
         return
-    project = db.query(Project).filter(Project.id == work_order.project_id).first()
-    if project and project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=403, detail="评估二部项目仅创建人或负责人可处理该流程")
     is_member = db.query(ProjectMember.id).filter(
         ProjectMember.project_id == work_order.project_id,
         ProjectMember.user_id == user_id,
@@ -86,6 +84,11 @@ def transfer_to_print_room(
         raise HTTPException(status_code=400, detail="请填写签字评估师和报告出具数量")
     if not _has_current_final_contract_scan(db, work_order.id):
         raise HTTPException(status_code=400, detail="请先上传合同扫描件后再转发文印室")
+    validate_support_role_not_project_party(
+        payload.handler_user_id,
+        get_project_party_user_ids(db, work_order.project_id, work_order),
+        "??????",
+    )
     handler = db.query(User).filter(User.id == payload.handler_user_id, User.is_active.is_(True)).first()
     if not handler or not any(item.role.code == "PRINT_ROOM" for item in handler.roles):
         raise HTTPException(status_code=400, detail="请选择有效的文印室人员")

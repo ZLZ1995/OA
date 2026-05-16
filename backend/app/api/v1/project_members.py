@@ -14,6 +14,7 @@ from app.schemas.project_member import (
     ProjectMemberResponse,
     ProjectMemberUpdate,
 )
+from app.services.project_role_conflict_service import validate_member_not_conflicting_with_assigned_roles
 from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
 
@@ -35,15 +36,17 @@ def _to_response(item: ProjectMember, user: User) -> ProjectMemberResponse:
 
 
 def _parse_member_role(member_role: str) -> str:
-    db_role = ROLE_MAP.get(member_role)
-    if not db_role:
-        raise HTTPException(status_code=400, detail="成员角色仅支持：项目负责人、项目组成员")
-    return db_role
+    normalized = member_role.strip()
+    db_role = ROLE_MAP.get(normalized)
+    if db_role:
+        return db_role
+    if "负责人" in normalized:
+        return "LEADER"
+    return "MEMBER"
 
 
 def _ensure_internal_project(project: Project) -> None:
-    if project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=400, detail="评估二部项目不允许维护项目组成员")
+    return None
 
 
 @router.get("", response_model=ProjectMemberListResponse)
@@ -86,6 +89,13 @@ def batch_create_project_member(
         if existing_leader and existing_leader.user_id != payload.user_ids[0]:
             raise HTTPException(status_code=400, detail="当前项目已有项目负责人，请先更换原负责人")
 
+    work_order = (
+        db.query(WorkOrder)
+        .filter(WorkOrder.project_id == payload.project_id)
+        .order_by(WorkOrder.id.desc())
+        .first()
+    )
+
     created: list[tuple[ProjectMember, User]] = []
     for user_id in payload.user_ids:
         exists = (
@@ -98,6 +108,7 @@ def batch_create_project_member(
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             continue
+        validate_member_not_conflicting_with_assigned_roles(user_id, work_order)
         row = ProjectMember(project_id=payload.project_id, user_id=user_id, member_role=db_role)
         db.add(row)
         db.flush()
