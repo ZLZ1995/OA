@@ -140,13 +140,26 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         )
         role_pool_filters.append(Project.id.in_(pending_delete_project_ids))
 
+    archived_delete_project_ids: set[int] = set()
+    if "ADMIN" in role_codes:
+        archived_delete_project_ids = {
+            item[0]
+            for item in db.query(ProjectDeleteRequest.project_id)
+            .filter(
+                ProjectDeleteRequest.status == "PENDING",
+                ProjectDeleteRequest.approver_user_id == current_user.id,
+                ProjectDeleteRequest.project_id.is_not(None),
+            )
+            .all()
+        }
+
     todo_rows = (
         db.query(Project, WorkOrder)
         .join(WorkOrder, WorkOrder.project_id == Project.id)
         .filter(
             Project.deleted_at.is_(None),
-            Project.archived_at.is_(None),
-            or_(Project.termination_status.is_(None), Project.termination_status != "APPROVED"),
+            or_(Project.archived_at.is_(None), Project.id.in_(archived_delete_project_ids)),
+            or_(Project.termination_status.is_(None), Project.termination_status != "APPROVED", Project.id.in_(archived_delete_project_ids)),
             or_(
                 WorkOrder.current_handler_user_id == current_user.id,
                 WorkOrder.project_leader_id == current_user.id,

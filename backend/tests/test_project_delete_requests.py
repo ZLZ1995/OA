@@ -187,3 +187,55 @@ def test_admin_export_allows_reapply_after_rejected_delete_request() -> None:
 
     assert rows[0]["delete_request_status"] == "REJECTED"
     assert rows[0]["can_admin_delete"] is True
+
+
+def test_project_leader_can_request_delete_for_archived_project_without_member_row() -> None:
+    from app.api.v1.project_delete_requests import request_project_delete
+
+    db = _build_session()
+    leader = _seed_user(db, "leader")
+    approver = _seed_user(db, "admin", ["ADMIN"])
+    project, work_order = _seed_project(db, leader, status="ARCHIVED")
+    project.archived_at = datetime.now()
+    work_order.current_status = "ARCHIVED"
+    db.commit()
+
+    result = request_project_delete(
+        project_id=project.id,
+        payload=ProjectDeleteRequestCreate(approver_user_id=approver.id, reason="archived project delete"),
+        db=db,
+        current_user=leader,
+    )
+
+    assert result.status == "PENDING"
+    assert result.approver_user_id == approver.id
+
+
+def test_admin_workbench_shows_pending_delete_for_archived_project() -> None:
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader = _seed_user(db, "leader")
+    approver = _seed_user(db, "admin", ["ADMIN"])
+    project, work_order = _seed_project(db, leader, status="ARCHIVED")
+    project.archived_at = datetime.now()
+    work_order.current_status = "ARCHIVED"
+    db.add(
+        ProjectDeleteRequest(
+            project_id=project.id,
+            project_no=project.project_code,
+            project_name=project.project_name,
+            client_name=project.client_name,
+            current_step="待确认删除",
+            requester_user_id=leader.id,
+            approver_user_id=approver.id,
+            status="PENDING",
+            requested_at=datetime.now(),
+        )
+    )
+    db.commit()
+
+    result = get_workbench(db=db, current_user=approver)
+
+    assert [item.id for item in result.todo_projects] == [project.id]
+    assert result.todo_projects[0].can_approve_delete is True

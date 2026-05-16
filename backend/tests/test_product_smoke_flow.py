@@ -163,6 +163,26 @@ def test_smoke_02_project_members_complete_moves_to_contract_upload() -> None:
     assert db.query(ProjectMember).filter(ProjectMember.project_id == project.id).count() == 2
 
 
+def test_smoke_02a_project_member_leader_role_is_persisted_as_leader() -> None:
+    from app.api.v1.project_members import batch_create_project_member
+
+    db = _build_session()
+    users, project, _ = _create_project_bundle(db)
+
+    batch_create_project_member(
+        payload=ProjectMemberBatchCreate(project_id=project.id, user_ids=[users["leader"].id], member_role="项目负责人"),
+        db=db,
+        _={"ADMIN", "PROJECT_LEADER"},
+    )
+
+    leader_member = (
+        db.query(ProjectMember)
+        .filter(ProjectMember.project_id == project.id, ProjectMember.user_id == users["leader"].id)
+        .one()
+    )
+    assert leader_member.member_role == "LEADER"
+
+
 def test_smoke_03_contract_review_approval_moves_to_report_submit() -> None:
     from app.api.v1.contract_reviews import approve_contract_review, submit_contract_review
 

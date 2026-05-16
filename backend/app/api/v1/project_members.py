@@ -20,6 +20,8 @@ from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/project-members", tags=["项目成员"])
 ROLE_MAP = {"项目负责人": "LEADER", "项目组成员": "MEMBER"}
+LEADER_ROLE_ALIASES = {"LEADER", "PROJECT_LEADER", "项目负责人"}
+MEMBER_ROLE_ALIASES = {"MEMBER", "PROJECT_MEMBER", "项目组成员"}
 ROLE_LABEL_MAP = {"LEADER": "项目负责人", "MEMBER": "项目组成员"}
 
 
@@ -37,11 +39,15 @@ def _to_response(item: ProjectMember, user: User) -> ProjectMemberResponse:
 
 def _parse_member_role(member_role: str) -> str:
     normalized = member_role.strip()
-    db_role = ROLE_MAP.get(normalized)
-    if db_role:
-        return db_role
+    normalized_upper = normalized.upper()
+    if normalized in LEADER_ROLE_ALIASES or normalized_upper in LEADER_ROLE_ALIASES:
+        return "LEADER"
+    if normalized in MEMBER_ROLE_ALIASES or normalized_upper in MEMBER_ROLE_ALIASES:
+        return "MEMBER"
     if "负责人" in normalized:
         return "LEADER"
+    if "成员" in normalized:
+        return "MEMBER"
     return "MEMBER"
 
 

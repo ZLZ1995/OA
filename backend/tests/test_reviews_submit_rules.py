@@ -520,6 +520,13 @@ def test_first_review_route_back_to_project_leader_after_approve() -> None:
     assert result.action == "CHANGE_REVIEWER"
 
 
+def test_first_review_reviewer_select_status_maps_to_second_review_step() -> None:
+    from app.services.project_flow import normalize_project_step
+
+    assert normalize_project_step("FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND", archived=False) == "二审"
+    assert normalize_project_step("SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD", archived=False) == "三审"
+
+
 def test_project_leader_can_submit_second_review_without_reupload_after_first_approved() -> None:
     from app.api.v1.reviews import submit_review
 

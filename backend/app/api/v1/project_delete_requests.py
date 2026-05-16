@@ -112,11 +112,12 @@ def request_project_delete(
         raise HTTPException(status_code=400, detail="请选择有效的管理员共同认证")
     ensure_admin_approver_not_self(current_user.id, payload.approver_user_id)
 
+    is_project_leader = project.project_leader_id == current_user.id or (work_order and work_order.project_leader_id == current_user.id)
     is_member = db.query(ProjectMember.id).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == current_user.id).first() is not None
-    is_project_owner = project.project_leader_id == current_user.id or is_member
+    is_project_owner = is_project_leader or is_member
 
-    if is_project_owner and not _is_archive_project(project, work_order):
-        if can_project_owner_delete_direct(work_order):
+    if is_project_owner:
+        if not _is_archive_project(project, work_order) and can_project_owner_delete_direct(work_order):
             raise HTTPException(status_code=400, detail="当前项目状态可直接删除，无需管理员确认")
     elif _is_admin(current_user):
         if not _is_archive_project(project, work_order):
