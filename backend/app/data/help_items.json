@@ -2,115 +2,115 @@
   "menu": [
     {
       "key": "overview",
-      "title": "?????"
+      "title": "流程图总览"
     },
     {
       "key": "business-flow",
-      "title": "??????"
+      "title": "整体业务流程"
     },
     {
       "key": "role-flow",
-      "title": "?????"
+      "title": "角色流程图"
     },
     {
       "key": "manual",
-      "title": "????"
+      "title": "使用说明"
     }
   ],
   "sections": {
     "overview": {
-      "title": "?????",
+      "title": "流程图总览",
       "items": [
         {
           "key": "overview-1",
-          "title": "?????????",
+          "title": "整体流程总览",
           "image_url": "/api/v1/help/assets/overall-overview.png",
-          "description": "?????????????",
+          "description": "展示项目从创建、评审、签发、出具到归档的完整主流程，便于快速了解系统全貌。",
           "sort_order": 1
         },
         {
           "key": "overview-2",
-          "title": "?????????",
+          "title": "流程节点明细",
           "image_url": "/api/v1/help/assets/overall-detail.png",
-          "description": "???????????????",
+          "description": "按业务环节拆解主要节点，帮助项目成员快速理解当前阶段、下一步动作和责任归属。",
           "sort_order": 2
         },
         {
           "key": "overview-3",
-          "title": "???????",
+          "title": "评审角色关系",
           "image_url": "/api/v1/help/assets/role-review.png",
-          "description": "????????????",
+          "description": "说明一审、二审、三审及后续支持角色之间的衔接关系和职责边界。",
           "sort_order": 3
         }
       ]
     },
     "business-flow": {
-      "title": "??????",
+      "title": "整体业务流程",
       "items": [
         {
           "key": "business-overview",
-          "title": "?????????",
+          "title": "主流程总览",
           "image_url": "/api/v1/help/assets/overall-overview.png",
-          "description": "?????????????",
+          "description": "用于查看项目主流程的大图，适合在培训、交接或排查流程卡点时快速查阅。",
           "sort_order": 1
         },
         {
           "key": "business-detail",
-          "title": "?????????",
+          "title": "业务流程细化",
           "image_url": "/api/v1/help/assets/overall-detail.png",
-          "description": "??????????????????",
+          "description": "展示合同上传、审核流转、签发、文印、邮寄、开票、归档等业务节点的具体衔接。",
           "sort_order": 2
         }
       ]
     },
     "role-flow": {
-      "title": "?????",
+      "title": "角色流程图",
       "items": [
         {
           "key": "role-project-init",
-          "title": "???????",
+          "title": "项目创建与立项",
           "image_url": "/api/v1/help/assets/role-project-init.png",
-          "description": "????????????????????",
+          "description": "说明项目创建人、项目负责人在项目初始化阶段的职责和可执行动作。",
           "sort_order": 1
         },
         {
           "key": "role-contract",
-          "title": "???????",
+          "title": "合同上传与审核",
           "image_url": "/api/v1/help/assets/role-contract.png",
-          "description": "???????????????",
+          "description": "展示项目方与合同审核人在合同初稿上传、提交审核、退回修改等环节的协作关系。",
           "sort_order": 2
         },
         {
           "key": "role-review",
-          "title": "????",
+          "title": "评审流程",
           "image_url": "/api/v1/help/assets/role-review.png",
-          "description": "???????????????????",
+          "description": "说明一审、二审、三审以及外部复核场景下的责任角色和流转顺序。",
           "sort_order": 3
         },
         {
           "key": "role-issue-mail",
-          "title": "?????",
+          "title": "出具与邮寄",
           "image_url": "/api/v1/help/assets/role-issue-mail.png",
-          "description": "?????????????",
+          "description": "展示首席签发、文印处理、报告出具和邮寄确认等阶段的角色分工。",
           "sort_order": 4
         },
         {
           "key": "role-invoice-archive",
-          "title": "?????",
+          "title": "开票与归档",
           "image_url": "/api/v1/help/assets/role-invoice-archive.png",
-          "description": "??????????????????",
+          "description": "说明财务与档案管理员在开票、确认、归档审核、最终归档中的职责关系。",
           "sort_order": 5
         }
       ]
     },
     "manual": {
-      "title": "????",
+      "title": "使用说明",
       "items": [
         {
           "key": "manual-overall",
-          "title": "????",
+          "title": "帮助中心说明",
           "image_url": "",
-          "description": "??????????????????????",
+          "description": "帮助中心用于集中展示流程图、角色分工和系统使用说明，建议结合项目流程页和工作台一起查看。",
           "sort_order": 1
         }
       ]
