@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.base import Base
 from app.models.project import Project
 from app.models.project_member import ProjectMember
+from app.models.print_room_record import PrintRoomRecord
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
@@ -316,6 +317,15 @@ def test_smoke_06_invoice_and_archive_complete_business_chain() -> None:
     )
     complete_invoice(invoice.id, db=db, current_user=users["finance"], _={"FINANCE"})
     confirm_invoice(invoice.id, db=db, current_user=users["leader"], role_codes={"PROJECT_LEADER"})
+    db.add(
+        PrintRoomRecord(
+            work_order_id=work_order.id,
+            handled_by=users["print_room"].id,
+            paper_report_no="R-ARCHIVE-SMOKE-001",
+            copy_count=2,
+        )
+    )
+    db.commit()
 
     submit_archive(
         payload=ArchiveSubmitRequest(work_order_id=work_order.id, reviewer_user_id=users["archive"].id, submission_type="ONLINE", remark="提交归档"),

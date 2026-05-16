@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.archive import Archive
+from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.role import Role
@@ -72,6 +73,16 @@ def _ensure_archive_reviewer(db: Session, user_id: int) -> None:
         raise HTTPException(status_code=400, detail="请选择有效的档案管理员")
 
 
+def _ensure_print_room_completed(db: Session, work_order: WorkOrder) -> None:
+    issued_record = (
+        db.query(PrintRoomRecord)
+        .filter(PrintRoomRecord.work_order_id == work_order.id)
+        .first()
+    )
+    if not issued_record:
+        raise HTTPException(status_code=400, detail="未完成文印（出具纸质报告）前，不允许进入归档环节")
+
+
 @router.post("/submit")
 def submit_archive(
     payload: ArchiveSubmitRequest,
@@ -82,6 +93,7 @@ def submit_archive(
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     _ensure_project_operator(db, work_order, current_user)
+    _ensure_print_room_completed(db, work_order)
     _ensure_archive_reviewer(db, payload.reviewer_user_id)
     validate_support_role_not_project_party(
         payload.reviewer_user_id,

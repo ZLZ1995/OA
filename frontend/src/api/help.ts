@@ -27,3 +27,7 @@ export async function getHelpItem(itemKey: string) {
   const { data } = await http.get(`/help/items/${itemKey}`)
   return data as HelpContentItem & { section: string }
 }
+
+export function getHelpManualDownloadUrl() {
+  return `${http.defaults.baseURL}/help/manual/download`
+}
