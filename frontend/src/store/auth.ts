@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { me } from '@/api/auth'
+import { useWorkspaceStore } from './workspace'
 
 interface UserProfile {
   id: number
@@ -39,10 +40,12 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem('token')
     },
     clearAuth() {
+      const workspace = useWorkspaceStore()
       this.token = ''
       this.user = null
       localStorage.removeItem('token')
       localStorage.removeItem('access_token')
+      workspace.clearWorkspace()
     },
     setUser(user: UserProfile) {
       this.user = user

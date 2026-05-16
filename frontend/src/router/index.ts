@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 import { pinia } from '@/store/pinia'
+import { useWorkspaceStore } from '@/store/workspace'
 import AppLayout from '@/layout/AppLayout.vue'
 
 function detectRouterBase() {
@@ -77,6 +78,7 @@ router.onError((error, to) => {
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore(pinia)
+  const workspace = useWorkspaceStore(pinia)
 
   try {
     if (to.path === '/login') {
@@ -91,9 +93,27 @@ router.beforeEach(async (to) => {
     if (!profile) {
       return `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
-    const isAdmin = (profile.roles || []).includes('ADMIN')
+    const roles = profile.roles || []
+    const isAdmin = roles.includes('ADMIN')
+    const canChooseWorkspace = workspace.supportsWorkspaceChoice(roles)
+    const resolvedWorkspace = workspace.initializeForRoles(roles)
     const adminOnlyPaths = ['/accounts', '/project-exports', '/termination-approvals', '/project-delete-approvals', '/project-conflicts', '/issue-feedbacks']
-    if (adminOnlyPaths.includes(to.path) && !isAdmin) return '/workbench'
+    const isAdminPath = adminOnlyPaths.includes(to.path)
+
+    if (isAdminPath && !isAdmin) return '/workbench'
+
+    if (canChooseWorkspace && !resolvedWorkspace) {
+      return `/login?redirect=${encodeURIComponent(to.fullPath)}`
+    }
+
+    if (resolvedWorkspace === 'business' && isAdminPath) {
+      return '/workbench'
+    }
+
+    if (resolvedWorkspace === 'admin' && to.path === '/workbench') {
+      return '/accounts'
+    }
+
     return true
   } catch {
     auth.clearAuth()
