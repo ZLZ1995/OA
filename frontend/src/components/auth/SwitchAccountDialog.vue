@@ -69,6 +69,10 @@ function getErrorMessage(err: unknown): string {
   return '登录失败，请稍后重试'
 }
 
+function resolveTargetPath(roles: string[]) {
+  return roles.includes('ADMIN') ? '/accounts' : '/workbench'
+}
+
 async function onLogin() {
   if (!form.username.trim() || !form.password) {
     ElMessage.warning('请输入账号和密码')
@@ -87,10 +91,13 @@ async function onLogin() {
 
     const profile = await me()
     auth.setUser(profile)
-    const isAdmin = (profile.roles || []).includes('ADMIN')
+    const targetPath = resolveTargetPath(profile.roles || [])
+
     emit('update:modelValue', false)
-    await router.replace(isAdmin ? '/accounts' : '/workbench')
     ElMessage.success('账号切换成功')
+
+    await router.replace(targetPath)
+    window.location.replace(targetPath)
   } catch (err) {
     auth.clearAuth()
     ElMessage.error(getErrorMessage(err))

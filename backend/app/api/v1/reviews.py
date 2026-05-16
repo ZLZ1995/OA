@@ -133,6 +133,8 @@ REVIEW_ROUND_SEQUENCE = {
 
 REVIEW_FILE_CATEGORIES = {"REPORT_ZIP", "REVIEW_REPLY", "REVIEW_OPINION"}
 STATE_OWNED_EVAL_NATURE = "国有资产评估业务"
+AUTO_FROM_RECORD_MARKER = "[AUTO_FROM_RECORD:"
+PASSED_TO_MARKER = "[PASSED_TO_ROUND:"
 
 
 def _to_review_record_response(db: Session, record: ReviewRecord) -> ReviewRecordResponse:
@@ -878,7 +880,7 @@ def decide_review(
     if payload.action == "APPROVE":
         default_status = ROUND_REVIEWER_SELECT_STATUS.get(payload.review_round, ROUND_APPROVED_STATUS[payload.review_round])
         if not can_transit(from_status, default_status):
-            raise HTTPException(status_code=400, detail="??????")
+            raise HTTPException(status_code=400, detail="非法状态迁移")
         if payload.review_round in {"FIRST", "SECOND"}:
             next_round = ROUND_NEXT[payload.review_round]
             if _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):

@@ -488,6 +488,11 @@ function resolveTodoLabel(row: WorkbenchProjectItem) {
 }
 
 function goProject(id: number, row?: WorkbenchProjectItem) {
+  if (!row) {
+    router.push(`/projects/${id}/flow`)
+    return
+  }
+
   const todoPanel = row ? resolveTodoPanel(row) : undefined
   if (!todoPanel) {
     router.push(`/projects/${id}/flow`)

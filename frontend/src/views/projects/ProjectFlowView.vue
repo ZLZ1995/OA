@@ -49,6 +49,7 @@
           :can-edit="canProjectOperate"
           :can-operate="canProjectOperate"
           :user-roles="userRoles"
+          :user-role-in-project="flow.user_role_in_project"
           @changed="onPanelChanged"
           @navigate="onPanelNavigate"
         />
