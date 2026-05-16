@@ -184,6 +184,11 @@ const statusAlertType = computed(() => {
   return 'info'
 })
 const statusText = computed(() => currentInvoice.value ? invoiceStatusLabel(currentInvoice.value.status) : '')
+const projectPartyIds = computed(() => {
+  const ids = new Set<number>()
+  if (props.flowInfo?.project.project_leader_id) ids.add(props.flowInfo.project.project_leader_id)
+  return ids
+})
 
 async function load() {
   if (!props.workOrderId) return
@@ -204,7 +209,7 @@ async function load() {
 }
 
 async function loadFinanceUsers() {
-  financeUsers.value = (await listUserCandidates('FINANCE')).items
+  financeUsers.value = (await listUserCandidates('FINANCE')).items.filter(user => !projectPartyIds.value.has(user.id))
   if (!financeHandlerId.value && financeUsers.value.length === 1) {
     financeHandlerId.value = financeUsers.value[0].id
   }

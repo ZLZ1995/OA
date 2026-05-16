@@ -25,6 +25,7 @@ from app.schemas.review import (
     ReviewSubmitRequest,
 )
 from app.services.project_conflicts import assert_project_can_submit_review
+from app.services.project_role_conflict_service import get_project_party_user_ids, validate_not_project_party, validate_reviewer_round_conflict
 from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.guards import filter_candidates, validate_reviewer_avoidance
@@ -611,6 +612,13 @@ def submit_review(
     )
 
     _ensure_reviewer_has_round_role(db, target_reviewer_id, payload.review_round)
+    if payload.review_round in {"FIRST", "SECOND", "THIRD"}:
+        validate_not_project_party(
+            target_reviewer_id,
+            get_project_party_user_ids(db, work_order.project_id, work_order, project),
+            f"{payload.review_round}???",
+        )
+        validate_reviewer_round_conflict(target_reviewer_id, work_order, payload.review_round)
 
     first_reviewer_id = target_reviewer_id if payload.review_round == "FIRST" else work_order.first_reviewer_id
     second_reviewer_id = target_reviewer_id if payload.review_round == "SECOND" else work_order.second_reviewer_id
@@ -710,6 +718,13 @@ def change_reviewer_after_reject(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     _ensure_reviewer_has_round_role(db, payload.reviewer_user_id, payload.review_round)
+    if payload.review_round in {"FIRST", "SECOND", "THIRD"}:
+        validate_not_project_party(
+            payload.reviewer_user_id,
+            get_project_party_user_ids(db, work_order.project_id, work_order, project),
+            f"{payload.review_round}???",
+        )
+        validate_reviewer_round_conflict(payload.reviewer_user_id, work_order, payload.review_round)
     candidate_first = payload.reviewer_user_id if payload.review_round == "FIRST" else work_order.first_reviewer_id
     candidate_second = payload.reviewer_user_id if payload.review_round == "SECOND" else work_order.second_reviewer_id
     candidate_third = payload.reviewer_user_id if payload.review_round == "THIRD" else work_order.third_reviewer_id

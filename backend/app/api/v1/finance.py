@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.schemas.invoice import InvoiceCreate, InvoiceListResponse, InvoiceResponse, InvoiceUpdate
+from app.services.project_role_conflict_service import get_project_party_user_ids, validate_support_role_not_project_party
 from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 
@@ -118,6 +119,11 @@ def create_invoice(
     if not payload.invoice_info or not payload.invoice_type:
         raise HTTPException(status_code=400, detail="请填写开票信息和发票类型")
     _assert_finance_handler(db, payload.finance_handler_id)
+    validate_support_role_not_project_party(
+        payload.finance_handler_id,
+        get_project_party_user_ids(db, work_order.project_id, work_order, project),
+        "?????",
+    )
 
     row = _latest_invoice(db, payload.work_order_id)
     if row and row.status in ACTIVE_INVOICE_STATUSES:

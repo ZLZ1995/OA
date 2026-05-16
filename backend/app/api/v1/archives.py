@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.schemas.archive import ArchiveCreate, ArchiveDecisionRequest, ArchiveListResponse, ArchiveResponse, ArchiveSubmitRequest, ArchiveUpdate
+from app.services.project_role_conflict_service import get_project_party_user_ids, validate_support_role_not_project_party
 from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.states import WorkOrderStatus
@@ -82,6 +83,11 @@ def submit_archive(
         raise HTTPException(status_code=404, detail="工单不存在")
     _ensure_project_operator(db, work_order, current_user)
     _ensure_archive_reviewer(db, payload.reviewer_user_id)
+    validate_support_role_not_project_party(
+        payload.reviewer_user_id,
+        get_project_party_user_ids(db, work_order.project_id, work_order),
+        "?????",
+    )
     if payload.submission_type not in {"ONLINE", "OFFLINE"}:
         raise HTTPException(status_code=400, detail="底稿提交方式不正确")
     from_status = WorkOrderStatus(work_order.current_status)

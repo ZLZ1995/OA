@@ -113,12 +113,18 @@ const canArchiveManager = computed(() => props.userRoles.some(role => ['ARCHIVE_
 const memberNames = computed(() => members.value.map(item => item.real_name).join('、') || '-')
 const signerNames = computed(() => [props.flowInfo?.signer_one, props.flowInfo?.signer_two].filter(Boolean).join('、') || '-')
 const archiveSubmitterName = computed(() => members.value.find(item => item.user_id === props.flowInfo?.archive_submitter_id)?.real_name || '-')
+const projectPartyIds = computed(() => {
+  const ids = new Set<number>()
+  if (props.flowInfo?.project.project_leader_id) ids.add(props.flowInfo.project.project_leader_id)
+  members.value.forEach(item => ids.add(item.user_id))
+  return ids
+})
 
 async function load() {
   if (props.projectId) {
     members.value = (await listProjectMembers(props.projectId)).items
   }
-  archiveManagers.value = (await listUserCandidates('ARCHIVE_MANAGER')).items
+  archiveManagers.value = (await listUserCandidates('ARCHIVE_MANAGER')).items.filter(user => !projectPartyIds.value.has(user.id))
   reviewerId.value = props.flowInfo?.archive_reviewer_id || reviewerId.value
   if (props.workOrderId) {
     const files = (await listWorkOrderFiles(props.workOrderId)).items.filter(file => file.business_stage === 'ARCHIVE')

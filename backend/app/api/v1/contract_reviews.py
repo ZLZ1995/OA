@@ -18,6 +18,7 @@ from app.schemas.contract_review import (
     ContractReviewRecordResponse,
     ContractReviewSubmitRequest,
 )
+from app.services.project_role_conflict_service import get_project_party_user_ids, validate_not_project_party
 from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
 from app.workflows.states import WorkOrderStatus
@@ -142,6 +143,11 @@ def submit_contract_review(
         raise HTTPException(status_code=404, detail="工单不存在")
     _ensure_project_operator(db, work_order, current_user)
     _ensure_contract_reviewer(db, payload.reviewer_user_id)
+    validate_not_project_party(
+        payload.reviewer_user_id,
+        get_project_party_user_ids(db, work_order.project_id, work_order),
+        "?????",
+    )
 
     contract_file = _get_current_contract_file(db, work_order.id)
     if not contract_file:
