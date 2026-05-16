@@ -518,3 +518,115 @@ def test_first_review_route_back_to_project_leader_after_approve() -> None:
     assert work_order.current_status == "FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND"
     assert work_order.current_handler_user_id == work_order.project_leader_id
     assert result.action == "CHANGE_REVIEWER"
+
+
+def test_project_leader_can_submit_second_review_without_reupload_after_first_approved() -> None:
+    from app.api.v1.reviews import submit_review
+
+    db = _build_session()
+    leader, first_reviewer, _, work_order = _seed_basic(db)
+    second_reviewer = User(username="reviewer_second", password_hash="x", real_name="ReviewerSecond", is_active=True)
+    db.add(second_reviewer)
+    db.flush()
+
+    first_role = db.query(Role).filter(Role.code == "FIRST_REVIEWER").first()
+    second_role = Role(code="SECOND_REVIEWER", name="二审", description="", is_system_fixed=True)
+    assert first_role is not None
+    db.add(second_role)
+    db.flush()
+    db.add(UserRole(user_id=first_reviewer.id, role_id=first_role.id))
+    db.add(UserRole(user_id=second_reviewer.id, role_id=second_role.id))
+
+    work_order.current_status = "FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND"
+    work_order.current_handler_user_id = leader.id
+    work_order.first_reviewer_id = first_reviewer.id
+    db.add(
+        WorkOrderFile(
+            work_order_id=work_order.id,
+            file_category="REPORT_ZIP",
+            business_stage="REVIEW_SECOND",
+            version_no=1,
+            is_current=True,
+            origin_file_name="report-second.zip",
+            storage_key="report-second.zip",
+            file_size=100,
+            uploaded_by=leader.id,
+            uploaded_at=work_order.created_at,
+        )
+    )
+    db.commit()
+
+    result = submit_review(
+        payload=ReviewSubmitRequest(
+            work_order_id=work_order.id,
+            review_round="SECOND",
+            reviewer_user_id=second_reviewer.id,
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert result.review_round == "SECOND"
+    assert result.reviewer_user_id == second_reviewer.id
+    assert work_order.current_status == "SECOND_REVIEWING"
+    assert work_order.current_handler_user_id == second_reviewer.id
+
+
+def test_project_leader_can_submit_third_review_without_reupload_after_second_approved() -> None:
+    from app.api.v1.reviews import submit_review
+
+    db = _build_session()
+    leader, first_reviewer, _, work_order = _seed_basic(db)
+    second_reviewer = User(username="reviewer_second", password_hash="x", real_name="ReviewerSecond", is_active=True)
+    third_reviewer = User(username="reviewer_third", password_hash="x", real_name="ReviewerThird", is_active=True)
+    db.add_all([second_reviewer, third_reviewer])
+    db.flush()
+
+    first_role = db.query(Role).filter(Role.code == "FIRST_REVIEWER").first()
+    second_role = Role(code="SECOND_REVIEWER", name="二审", description="", is_system_fixed=True)
+    third_role = Role(code="THIRD_REVIEWER", name="三审", description="", is_system_fixed=True)
+    assert first_role is not None
+    db.add_all([second_role, third_role])
+    db.flush()
+    db.add(UserRole(user_id=first_reviewer.id, role_id=first_role.id))
+    db.add(UserRole(user_id=second_reviewer.id, role_id=second_role.id))
+    db.add(UserRole(user_id=third_reviewer.id, role_id=third_role.id))
+
+    work_order.current_status = "SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD"
+    work_order.current_handler_user_id = leader.id
+    work_order.first_reviewer_id = first_reviewer.id
+    work_order.second_reviewer_id = second_reviewer.id
+    db.add(
+        WorkOrderFile(
+            work_order_id=work_order.id,
+            file_category="REPORT_ZIP",
+            business_stage="REVIEW_THIRD",
+            version_no=1,
+            is_current=True,
+            origin_file_name="report-third.zip",
+            storage_key="report-third.zip",
+            file_size=100,
+            uploaded_by=leader.id,
+            uploaded_at=work_order.created_at,
+        )
+    )
+    db.commit()
+
+    result = submit_review(
+        payload=ReviewSubmitRequest(
+            work_order_id=work_order.id,
+            review_round="THIRD",
+            reviewer_user_id=third_reviewer.id,
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert result.review_round == "THIRD"
+    assert result.reviewer_user_id == third_reviewer.id
+    assert work_order.current_status == "THIRD_REVIEWING"
+    assert work_order.current_handler_user_id == third_reviewer.id

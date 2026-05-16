@@ -40,10 +40,12 @@ ROUND_SUBMIT_STATUS = {
         WorkOrderStatus.FIRST_REVIEW_REJECTED,
     },
     "SECOND": {
+        WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND,
         WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
         WorkOrderStatus.SECOND_REVIEW_REJECTED,
     },
     "THIRD": {
+        WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD,
         WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
         WorkOrderStatus.THIRD_REVIEW_REJECTED,
     },
