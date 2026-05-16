@@ -35,15 +35,17 @@ def _to_response(item: ProjectMember, user: User) -> ProjectMemberResponse:
 
 
 def _parse_member_role(member_role: str) -> str:
-    db_role = ROLE_MAP.get(member_role)
-    if not db_role:
-        raise HTTPException(status_code=400, detail="成员角色仅支持：项目负责人、项目组成员")
-    return db_role
+    normalized = member_role.strip()
+    db_role = ROLE_MAP.get(normalized)
+    if db_role:
+        return db_role
+    if "负责人" in normalized:
+        return "LEADER"
+    return "MEMBER"
 
 
 def _ensure_internal_project(project: Project) -> None:
-    if project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=400, detail="评估二部项目不允许维护项目组成员")
+    return None
 
 
 @router.get("", response_model=ProjectMemberListResponse)

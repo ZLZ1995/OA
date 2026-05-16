@@ -7,6 +7,7 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.files import router as files_router
 from app.api.v1.finance import router as finance_router
 from app.api.v1.health import router as health_router
+from app.api.v1.help import router as help_router
 from app.api.v1.issue_feedbacks import router as issue_feedbacks_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.print_room import router as print_room_router
@@ -29,6 +30,7 @@ from app.api.v1.workbench import router as workbench_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
+api_router.include_router(help_router)
 api_router.include_router(auth_router)
 api_router.include_router(users_router)
 api_router.include_router(ws_notifications_router)

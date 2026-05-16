@@ -40,9 +40,6 @@ def _has_current_final_contract_scan(db: Session, work_order_id: int) -> bool:
 def _ensure_project_operator(db: Session, work_order: WorkOrder, user_id: int) -> None:
     if work_order.project_leader_id == user_id or work_order.initiator_user_id == user_id:
         return
-    project = db.query(Project).filter(Project.id == work_order.project_id).first()
-    if project and project.project_source == "EXTERNAL":
-        raise HTTPException(status_code=403, detail="评估二部项目仅创建人或负责人可处理该流程")
     is_member = db.query(ProjectMember.id).filter(
         ProjectMember.project_id == work_order.project_id,
         ProjectMember.user_id == user_id,

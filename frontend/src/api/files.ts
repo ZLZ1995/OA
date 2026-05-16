@@ -13,6 +13,10 @@ export interface WorkOrderFileItem {
   uploaded_by: number
   uploaded_by_name?: string | null
   uploaded_at: string
+  source_type: string
+  source_file_id?: number | null
+  locked: boolean
+  display_label?: string | null
 }
 
 export async function uploadWorkOrderFile(payload: {

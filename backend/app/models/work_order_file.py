@@ -18,3 +18,6 @@ class WorkOrderFile(Base):
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     uploaded_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False, default="MANUAL")
+    source_file_id: Mapped[int | None] = mapped_column(ForeignKey("work_order_files.id"), nullable=True)
+    locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

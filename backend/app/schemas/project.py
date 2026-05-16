@@ -47,10 +47,7 @@ class ProjectBase(BaseModel):
         if self.project_source not in PROJECT_SOURCES:
             raise ValueError("项目来源不合法")
         self.external_project_leader_name = normalize_external_project_leader_name(self.external_project_leader_name)
-        if self.project_source == "EXTERNAL":
-            if not self.external_project_leader_name:
-                raise ValueError("评估二部项目必须填写项目负责人")
-        else:
+        if self.project_source != "EXTERNAL":
             self.external_project_leader_name = None
         self.business_salesman = self.business_salesman.strip()
         return self

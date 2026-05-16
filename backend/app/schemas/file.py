@@ -16,6 +16,10 @@ class WorkOrderFileResponse(BaseModel):
     uploaded_by: int
     uploaded_by_name: str | None = None
     uploaded_at: datetime
+    source_type: str = "MANUAL"
+    source_file_id: int | None = None
+    locked: bool = False
+    display_label: str | None = None
 
 
 class WorkOrderFileListResponse(BaseModel):
