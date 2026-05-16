@@ -42,7 +42,10 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
         WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
         WorkOrderStatus.FIRST_REVIEWING,
     },
-    WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND: {WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT},
+    WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND: {
+        WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
+        WorkOrderStatus.SECOND_REVIEWING,
+    },
     WorkOrderStatus.FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND: {
         WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
         WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND,
@@ -58,7 +61,10 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
         WorkOrderStatus.WAIT_SECOND_REVIEW_SUBMIT,
         WorkOrderStatus.SECOND_REVIEWING,
     },
-    WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD: {WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT},
+    WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD: {
+        WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
+        WorkOrderStatus.THIRD_REVIEWING,
+    },
     WorkOrderStatus.SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD: {
         WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT,
         WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD,

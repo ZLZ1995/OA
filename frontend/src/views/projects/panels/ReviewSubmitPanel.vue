@@ -83,10 +83,11 @@
         <div class="review-upload-block">
           <div class="review-upload-main">
             <div class="review-upload-actions">
-              <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile || isLockedCarryForwardStage">
-                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked || isLockedCarryForwardStage">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
+              <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile || isLockedCarryForwardStage || canCarryForwardApprovedFile">
+                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked || isLockedCarryForwardStage || canCarryForwardApprovedFile">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
               </el-upload>
               <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
+              <el-tag v-else-if="canCarryForwardApprovedFile" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
               <el-tag v-else-if="isLockedCarryForwardStage" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
             </div>
             <div class="file-list" v-if="submitFiles.length">
@@ -103,7 +104,7 @@
       </el-form-item>
       <el-form-item>
         <el-space wrap>
-          <el-button v-if="!showReviewerChangePanel" type="primary" :disabled="!canSubmitReview || (!reusePreviousFile && submitFiles.length === 0)" @click="onSubmit">
+          <el-button v-if="!showReviewerChangePanel" type="primary" :disabled="!canSubmitReview || requiresManualUploadBeforeSubmit" @click="onSubmit">
             {{ isReplyFlow ? '提交审核意见回复' : '提交审核' }}
           </el-button>
           <el-button v-if="canChangeReviewer && !showReviewerChangePanel" type="warning" plain @click="openReviewerChangePanel">
@@ -348,7 +349,13 @@ const hasChangedReviewer = computed(() => Boolean(pendingReviewerChange.value))
 const isReviewLocked = computed(() => Boolean(props.flowInfo?.review_submit_locked))
 const canChangeReviewer = computed(() => canSubmitReview.value && isReplyFlow.value && !isReviewLocked.value)
 const reusePreviousFile = computed(() => isReplyFlow.value && replyFileMode.value === 'REUSE')
+const canCarryForwardApprovedFile = computed(() => isLeaderSelectNextStage.value && !isReplyFlow.value)
 const showReviewerChangePanel = computed(() => canChangeReviewer.value && isReviewerChangePanelOpen.value)
+const requiresManualUploadBeforeSubmit = computed(() =>
+  !reusePreviousFile.value &&
+  !canCarryForwardApprovedFile.value &&
+  submitFiles.value.length === 0
+)
 const canSubmitReviewerChange = computed(() =>
   canSubmitReview.value &&
   Boolean(changeReviewerUserId.value || pendingReviewerChange.value?.reviewer_user_id) &&
@@ -419,6 +426,7 @@ const showReviewRequirementBox = computed(() => !isReplyFlow.value && !showRevie
 
 const reviewStatusText = computed(() => {
   if (isReplyFlow.value) return `${roundLabel(reviewRound.value)}意见已返回等待回复`
+  if (canCarryForwardApprovedFile.value) return '待提交审核'
   if (isSubmitStatus(statusCode.value)) {
     return submitFiles.value.length ? '待提交审核' : '待上传文件'
   }
@@ -672,7 +680,7 @@ async function onTransferPrintRoom() {
 async function onSubmit() {
   const targetReviewerId = isReplyFlow.value ? currentRoundReviewerId.value : reviewerUserId.value
   if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
-  if (!reusePreviousFile.value && !submitFiles.value.length) return ElMessage.warning(isReplyFlow.value ? '请先上传审核意见回复，或选择沿用上轮文件' : '请先上传待审报告')
+  if (requiresManualUploadBeforeSubmit.value) return ElMessage.warning(isReplyFlow.value ? '请先上传审核意见回复，或选择沿用上轮文件' : '请先上传待审报告')
   await submitReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, reviewer_user_id: targetReviewerId, comment: comment.value || undefined })
   ElMessage.success(isReplyFlow.value ? '审核意见回复已提交' : '提交审核成功')
   comment.value = ''
