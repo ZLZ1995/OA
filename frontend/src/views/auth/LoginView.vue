@@ -57,6 +57,21 @@
         <el-button type="primary" :loading="resetLoading" @click="onResetPassword">保存并验证</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="workspaceVisible"
+      title="选择工作区"
+      width="420px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+    >
+      <p class="workspace-tip">请选择进入管理员工作区或业务工作区。</p>
+      <template #footer>
+        <el-button type="primary" @click="enterWorkspace('admin')">进入管理员工作区</el-button>
+        <el-button @click="enterWorkspace('business')">进入业务工作区</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -66,16 +81,19 @@ import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { login, me, resetPassword } from '@/api/auth'
 import { useAuthStore } from '@/store/auth'
+import { type WorkspaceMode, useWorkspaceStore } from '@/store/workspace'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const workspace = useWorkspaceStore()
 const loading = ref(false)
 const form = reactive({ username: '', password: '' })
 const resetVisible = ref(false)
 const resetLoading = ref(false)
 const resetForm = reactive({ username: '', old_password: '', new_password: '' })
 const passwordPattern = /^[A-Za-z0-9]{6,8}$/
+const workspaceVisible = ref(false)
 
 function getErrorMessage(err: unknown): string {
   if (typeof err === 'object' && err !== null) {
@@ -112,10 +130,10 @@ function getResetErrorMessage(err: unknown): string {
     }
     const detail = maybeError.response?.data?.detail
     if (typeof detail === 'string') return detail
-    if (Array.isArray(detail)) return detail.map(item => item.msg).filter(Boolean).join('；') || '密码更改失败'
-    return maybeError.response?.data?.message || maybeError.message || '密码更改失败'
+    if (Array.isArray(detail)) return detail.map(item => item.msg).filter(Boolean).join('；') || '密码修改失败'
+    return maybeError.response?.data?.message || maybeError.message || '密码修改失败'
   }
-  return '密码更改失败'
+  return '密码修改失败'
 }
 
 function openResetDialog() {
@@ -134,19 +152,51 @@ async function onResetPassword() {
   resetLoading.value = true
   try {
     await resetPassword(resetForm)
-    ElMessage.success('密码更改成功')
+    ElMessage.success('密码修改成功')
     resetVisible.value = false
     form.username = resetForm.username
     form.password = ''
   } catch (err) {
-    ElMessage.error(`密码更改失败：${getResetErrorMessage(err)}`)
+    ElMessage.error(`密码修改失败：${getResetErrorMessage(err)}`)
   } finally {
     resetLoading.value = false
   }
 }
 
+function resolveTargetPath(mode: WorkspaceMode) {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+  if (redirect) {
+    return redirect
+  }
+  return mode === 'admin' ? '/accounts' : '/workbench'
+}
+
+async function navigateTo(targetPath: string) {
+  await router.replace(targetPath)
+  if (router.currentRoute.value.path === '/login') {
+    window.location.assign(targetPath)
+    return
+  }
+  ElMessage.success('登录成功')
+}
+
+async function enterWorkspace(mode: WorkspaceMode) {
+  const profile = auth.user
+  if (!profile || !workspace.canAccessWorkspace(profile.roles || [], mode)) {
+    workspaceVisible.value = false
+    loading.value = false
+    auth.clearAuth()
+    ElMessage.error('当前账号的工作区状态无效，请重新登录')
+    return
+  }
+
+  workspace.setWorkspace(mode)
+  workspaceVisible.value = false
+  loading.value = false
+  await navigateTo(resolveTargetPath(mode))
+}
+
 async function onLogin() {
-  let redirectTo = '/workbench'
   loading.value = true
   auth.clearAuth()
 
@@ -164,23 +214,22 @@ async function onLogin() {
     const profile = await me()
     auth.setUser(profile)
 
-    const isAdmin = (profile.roles || []).includes('ADMIN')
-    redirectTo = typeof route.query.redirect === 'string'
-      ? route.query.redirect
-      : (isAdmin ? '/accounts' : '/workbench')
-    await router.replace(redirectTo)
-
-    if (router.currentRoute.value.path === '/login') {
-      window.location.assign(redirectTo)
+    if (workspace.supportsWorkspaceChoice(profile.roles || [])) {
+      workspace.clearWorkspace()
+      workspaceVisible.value = true
       return
     }
 
-    ElMessage.success('登录成功')
+    const resolvedWorkspace = workspace.initializeForRoles(profile.roles || [])
+    const targetMode = resolvedWorkspace ?? 'business'
+    await navigateTo(resolveTargetPath(targetMode))
   } catch (err) {
     auth.clearAuth()
     ElMessage.error(`登录后加载用户信息失败：${getErrorMessage(err)}`)
   } finally {
-    loading.value = false
+    if (!workspaceVisible.value) {
+      loading.value = false
+    }
   }
 }
 </script>
@@ -351,6 +400,12 @@ async function onLogin() {
   color: #909399;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.workspace-tip {
+  margin: 0;
+  color: #475569;
+  line-height: 1.7;
 }
 
 @media (max-width: 860px) {

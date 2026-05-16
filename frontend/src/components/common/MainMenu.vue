@@ -60,6 +60,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 import { createIssueFeedback } from '@/api/issueFeedbacks'
 import { useNotificationStore } from '@/store/notification'
+import { useWorkspaceStore } from '@/store/workspace'
 
 type MenuItem = { key: string; title: string; path?: string; children?: Array<{ key: string; title: string; path: string }> }
 
@@ -75,7 +76,7 @@ const HELP_MENU: MenuItem = {
   ],
 }
 const SHARED_MENUS: MenuItem[] = [{ key: 'notifications', title: '消息中心', path: '/notifications' }, HELP_MENU]
-const ADMIN_MENUS = [
+const ADMIN_MENUS: MenuItem[] = [
   { key: 'accounts', title: '账号管理', path: '/accounts' },
   { key: 'termination-approvals', title: '终止/废止审核', path: '/termination-approvals' },
   { key: 'project-delete-approvals', title: '项目删除审核', path: '/project-delete-approvals' },
@@ -89,8 +90,12 @@ defineProps<{ compact?: boolean }>()
 const route = useRoute()
 const auth = useAuthStore()
 const notifications = useNotificationStore()
+const workspace = useWorkspaceStore()
 const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
-const visibleMenus = computed<MenuItem[]>(() => (isAdmin.value ? [...SHARED_MENUS, ...ADMIN_MENUS] : [...BUSINESS_MENUS, ...SHARED_MENUS]))
+const visibleMenus = computed<MenuItem[]>(() => {
+  const inAdminWorkspace = workspace.currentWorkspace === 'admin' && isAdmin.value
+  return inAdminWorkspace ? [...SHARED_MENUS, ...ADMIN_MENUS] : [...BUSINESS_MENUS, ...SHARED_MENUS]
+})
 const active = computed(() => route.path)
 const unreadCount = computed(() => notifications.unreadCount)
 const feedbackVisible = ref(false)
