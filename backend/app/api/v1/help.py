@@ -12,6 +12,7 @@ router = APIRouter(prefix="/help", tags=["help"])
 
 HELP_CONFIG_PATH = Path(__file__).resolve().parents[2] / "data" / "help_items.json"
 HELP_ASSETS_DIR = Path(__file__).resolve().parents[2] / "data" / "help-assets"
+HELP_MANUAL_DOC_PATH = Path(__file__).resolve().parents[3] / "docs" / "OA系统内部培训使用手册.docx"
 
 
 def _load_help_config() -> dict:
@@ -77,3 +78,14 @@ def get_help_asset(filename: str) -> FileResponse:
     if not path.exists() or path.parent != HELP_ASSETS_DIR.resolve():
         raise HTTPException(status_code=404, detail="帮助图片不存在")
     return FileResponse(path=str(path), media_type="image/png", filename=path.name)
+
+
+@router.get("/manual/download")
+def download_help_manual(_: User = Depends(get_current_user)) -> FileResponse:
+    if not HELP_MANUAL_DOC_PATH.exists():
+        raise HTTPException(status_code=404, detail="培训手册不存在")
+    return FileResponse(
+        path=str(HELP_MANUAL_DOC_PATH),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=HELP_MANUAL_DOC_PATH.name,
+    )
