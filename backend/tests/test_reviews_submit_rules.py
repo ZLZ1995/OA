@@ -447,6 +447,48 @@ def test_first_review_approve_auto_advances_to_second_when_project_party_uploade
     assert cloned_file.origin_file_name == "report-v1.zip"
 
 
+def test_first_review_approve_does_not_clone_review_opinion_or_reply_files() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    second_reviewer = User(username="reviewer_second", password_hash="x", real_name="ReviewerSecond", is_active=True)
+    db.add(second_reviewer)
+    db.flush()
+    second_role = Role(code="SECOND_REVIEWER", name="二审", description="", is_system_fixed=True)
+    db.add(second_role)
+    db.flush()
+    db.add(UserRole(user_id=second_reviewer.id, role_id=second_role.id))
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    work_order.second_reviewer_id = second_reviewer.id
+    db.commit()
+    _add_review_file(db, work_order, uploaded_by=leader.id, filename="report-v1.zip")
+    _add_review_file(db, work_order, category="REVIEW_OPINION", uploaded_by=reviewer.id, filename="first-opinion.docx")
+    _add_review_file(db, work_order, category="REVIEW_REPLY", uploaded_by=leader.id, filename="first-reply.docx")
+
+    decide_review(
+        payload=ReviewDecisionRequest(work_order_id=work_order.id, review_round="FIRST", action="APPROVE"),
+        db=db,
+        current_user=reviewer,
+        _={"FIRST_REVIEWER"},
+    )
+
+    cloned_communication_files = db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order.id,
+        WorkOrderFile.business_stage == "REVIEW_SECOND",
+        WorkOrderFile.file_category.in_(["REVIEW_OPINION", "REVIEW_REPLY"]),
+    ).all()
+    cloned_report = db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order.id,
+        WorkOrderFile.business_stage == "REVIEW_SECOND",
+        WorkOrderFile.file_category == "REPORT_ZIP",
+    ).first()
+    assert cloned_report is not None
+    assert cloned_communication_files == []
+
+
 def test_third_review_approve_moves_to_owner_signoff_upload_for_non_state_owned_project() -> None:
     from app.api.v1.reviews import decide_review
 

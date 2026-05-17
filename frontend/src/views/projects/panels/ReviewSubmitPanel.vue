@@ -130,8 +130,8 @@
                 title="退回修改后重新送审时，审核意见回复文件或送审备注至少填写一项。"
                 show-icon
               />
-              <div class="file-row-list" v-if="reviewCommunicationFiles.length">
-                <div v-for="file in reviewCommunicationFiles" :key="file.id" class="file-row">
+              <div class="file-row-list" v-if="visibleReviewCommunicationFiles.length">
+                <div v-for="file in visibleReviewCommunicationFiles" :key="file.id" class="file-row">
                   <div class="file-row-main">
                     <span class="file-name">{{ file.origin_file_name }}</span>
                     <span class="file-meta">{{ reviewFileTypeLabel(file) }} · {{ roundLabel(roundFromStage(file.business_stage) || reviewRound) }} · {{ formatFileSize(file.file_size) }}</span>
@@ -511,10 +511,27 @@ const currentReportPackageFiles = computed(() => reviewPackageFiles.value.filter
 const replyFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_REPLY' && file.business_stage === reviewStage(reviewRound.value)))
 const currentReplyFiles = computed(() => replyFiles.value.filter(file => file.is_current))
 const submitFiles = computed(() => currentReportPackageFiles.value)
-const previousOpinionReferenceFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
+const previousReviewRound = computed<ReviewRound | undefined>(() => {
+  if (reviewRound.value === 'SECOND') return 'FIRST'
+  if (reviewRound.value === 'THIRD') return 'SECOND'
+  if (reviewRound.value === 'EXTERNAL_SECOND') return 'EXTERNAL_FIRST'
+  if (reviewRound.value === 'EXTERNAL_THIRD') return 'EXTERNAL_SECOND'
+  return undefined
+})
+const previousOpinionReferenceFiles = computed(() => {
+  if (!previousReviewRound.value) return []
+  return dedupeReviewCommunicationFiles(files.value.filter(file =>
+    file.file_category === 'REVIEW_OPINION' &&
+    file.business_stage === reviewStage(previousReviewRound.value as ReviewRound) &&
+    file.is_current
+  ))
+})
 const opinionFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
 const reviewCommunicationFiles = computed(() => files.value
   .filter(file => ['REVIEW_OPINION', 'REVIEW_REPLY'].includes(file.file_category) && file.business_stage.startsWith('REVIEW_') && file.is_current)
+  .sort((a, b) => new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime())
+)
+const visibleReviewCommunicationFiles = computed(() => dedupeReviewCommunicationFiles(reviewCommunicationFiles.value)
   .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())
 )
 const formalReportFiles = computed(() => files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.business_stage === 'FORMAL_REPORT'))
@@ -644,6 +661,24 @@ function roundFromStage(stage: string): ReviewRound | undefined {
   if (stage === 'REVIEW_EXTERNAL_SECOND') return 'EXTERNAL_SECOND'
   if (stage === 'REVIEW_EXTERNAL_THIRD') return 'EXTERNAL_THIRD'
   return undefined
+}
+
+function reviewCommunicationFileKey(file: WorkOrderFileItem) {
+  return [
+    file.file_category,
+    file.source_file_id || file.storage_key,
+    file.origin_file_name,
+    file.file_size || 0
+  ].join('|')
+}
+
+function dedupeReviewCommunicationFiles(fileList: WorkOrderFileItem[]) {
+  const map = new Map<string, WorkOrderFileItem>()
+  for (const file of fileList) {
+    const key = reviewCommunicationFileKey(file)
+    if (!map.has(key)) map.set(key, file)
+  }
+  return Array.from(map.values())
 }
 
 function recordRoundLabel(record: ReviewRecordItem) {

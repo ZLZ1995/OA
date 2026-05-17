@@ -299,7 +299,7 @@ def _clone_files_to_round(
     uploaded_by: int,
 ) -> None:
     stage_to = f"REVIEW_{to_round}"
-    clone_categories = ("REPORT_ZIP", "EXTERNAL_AUDIT_OPINION") if from_round.startswith("EXTERNAL") else ("REPORT_ZIP", "REVIEW_REPLY")
+    clone_categories = ("REPORT_ZIP", "EXTERNAL_AUDIT_OPINION") if from_round.startswith("EXTERNAL") else ("REPORT_ZIP",)
     for file_category in clone_categories:
         source_files = _latest_round_files(db, work_order_id, from_round, file_category)
         if not source_files:
@@ -337,53 +337,6 @@ def _clone_files_to_round(
                 )
             )
             next_version += 1
-
-
-def _clone_opinion_files_to_round(
-    db: Session,
-    *,
-    work_order_id: int,
-    from_round: str,
-    to_round: str,
-    uploaded_by: int,
-) -> None:
-    stage_to = f"REVIEW_{to_round}"
-    source_files = _latest_round_files(db, work_order_id, from_round, "REVIEW_OPINION")
-    if not source_files:
-        return
-    existing_latest = (
-        db.query(WorkOrderFile)
-        .filter(
-            WorkOrderFile.work_order_id == work_order_id,
-            WorkOrderFile.business_stage == stage_to,
-            WorkOrderFile.file_category == "REVIEW_OPINION",
-        )
-        .order_by(WorkOrderFile.version_no.desc())
-        .first()
-    )
-    next_version = 1 if not existing_latest else existing_latest.version_no + 1
-    db.query(WorkOrderFile).filter(
-        WorkOrderFile.work_order_id == work_order_id,
-        WorkOrderFile.business_stage == stage_to,
-        WorkOrderFile.file_category == "REVIEW_OPINION",
-        WorkOrderFile.is_current.is_(True),
-    ).update({"is_current": False})
-    for source_file in source_files:
-        db.add(
-            WorkOrderFile(
-                work_order_id=source_file.work_order_id,
-                file_category=source_file.file_category,
-                business_stage=stage_to,
-                version_no=next_version,
-                is_current=True,
-                origin_file_name=source_file.origin_file_name,
-                storage_key=source_file.storage_key,
-                file_size=source_file.file_size,
-                uploaded_by=uploaded_by,
-                uploaded_at=source_file.uploaded_at,
-            )
-        )
-        next_version += 1
 
 
 def _latest_report_file_owner_is_project_party(db: Session, work_order: WorkOrder, review_round: str) -> bool:
@@ -477,13 +430,6 @@ def _auto_advance_if_needed(
         return ROUND_APPROVED_STATUS[current_round], work_order.project_leader_id, f"{current_round}_APPROVE"
 
     _clone_files_to_round(
-        db,
-        work_order_id=work_order.id,
-        from_round=current_round,
-        to_round=next_round,
-        uploaded_by=current_reviewer.id,
-    )
-    _clone_opinion_files_to_round(
         db,
         work_order_id=work_order.id,
         from_round=current_round,
@@ -956,13 +902,6 @@ def route_approved_review(
                 to_round=next_round,
                 uploaded_by=current_user.id,
             )
-            _clone_opinion_files_to_round(
-                db,
-                work_order_id=work_order.id,
-                from_round=payload.review_round,
-                to_round=next_round,
-                uploaded_by=current_user.id,
-            )
         db.add(
             ReviewRecord(
                 work_order_id=work_order.id,
@@ -1165,13 +1104,6 @@ def decide_review(
                     to_round=next_round,
                     uploaded_by=current_user.id,
                 )
-                _clone_opinion_files_to_round(
-                    db,
-                    work_order_id=work_order.id,
-                    from_round=payload.review_round,
-                    to_round=next_round,
-                    uploaded_by=current_user.id,
-                )
                 record.comment = _append_passed_to_marker(record.comment, next_round)
             to_status = ROUND_REVIEWER_SELECT_STATUS[payload.review_round]
             next_handler = current_user.id
@@ -1180,13 +1112,6 @@ def decide_review(
             next_round = ROUND_NEXT[payload.review_round]
             if _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):
                 _clone_files_to_round(
-                    db,
-                    work_order_id=work_order.id,
-                    from_round=payload.review_round,
-                    to_round=next_round,
-                    uploaded_by=current_user.id,
-                )
-                _clone_opinion_files_to_round(
                     db,
                     work_order_id=work_order.id,
                     from_round=payload.review_round,
