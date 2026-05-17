@@ -12,7 +12,7 @@ from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.models.review_record import ReviewRecord
 from app.models.work_order_file import WorkOrderFile
-from app.schemas.review import ReviewApprovalRoutingRequest, ReviewAssigneeChangeRequest, ReviewDecisionRequest, ReviewSubmitRequest
+from app.schemas.review import ReviewApprovalRoutingRequest, ReviewAssigneeChangeRequest, ReviewDecisionRequest, ReviewRecallRoutingRequest, ReviewSubmitRequest
 
 def _build_session() -> Session:
     engine = create_engine("sqlite:///:memory:")
@@ -637,3 +637,93 @@ def test_project_leader_can_submit_third_review_without_reupload_after_second_ap
     assert result.reviewer_user_id == third_reviewer.id
     assert work_order.current_status == "THIRD_REVIEWING"
     assert work_order.current_handler_user_id == third_reviewer.id
+
+
+def test_external_second_candidates_are_fixed_to_original_second_reviewer() -> None:
+    from app.api.v1.reviews import list_review_candidates
+
+    db = _build_session()
+    leader, reviewer, project, work_order = _seed_basic(db)
+    second_reviewer = User(username="reviewer_second", password_hash="x", real_name="ReviewerSecond", is_active=True)
+    db.add(second_reviewer)
+    db.flush()
+    second_role = Role(code="SECOND_REVIEWER", name="二审", description="", is_system_fixed=True)
+    db.add(second_role)
+    db.flush()
+    db.add(UserRole(user_id=second_reviewer.id, role_id=second_role.id))
+    work_order.current_status = "EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    work_order.second_reviewer_id = second_reviewer.id
+    db.commit()
+
+    result = list_review_candidates(
+        work_order_id=work_order.id,
+        review_round="EXTERNAL_SECOND",
+        db=db,
+        current_user=reviewer,
+        role_codes={"FIRST_REVIEWER"},
+    )
+
+    assert [(item.user_id, item.real_name) for item in result.items] == [(second_reviewer.id, "ReviewerSecond")]
+
+
+def test_external_first_approve_enters_recall_or_second_state() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    work_order.current_status = "EXTERNAL_FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    db.commit()
+
+    decide_review(
+        payload=ReviewDecisionRequest(
+            work_order_id=work_order.id,
+            review_round="EXTERNAL_FIRST",
+            action="APPROVE",
+        ),
+        db=db,
+        current_user=reviewer,
+        _={"FIRST_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == "EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND"
+    assert work_order.current_handler_user_id == reviewer.id
+
+
+def test_recall_routed_second_review_returns_to_first_reviewer_selection_state() -> None:
+    from app.api.v1.reviews import recall_routed_review
+
+    db = _build_session()
+    leader, first_reviewer, _, work_order = _seed_basic(db)
+    second_reviewer = User(username="reviewer_second", password_hash="x", real_name="ReviewerSecond", is_active=True)
+    db.add(second_reviewer)
+    db.flush()
+    second_role = Role(code="SECOND_REVIEWER", name="二审", description="", is_system_fixed=True)
+    db.add(second_role)
+    db.flush()
+    db.add(UserRole(user_id=second_reviewer.id, role_id=second_role.id))
+    work_order.current_status = "SECOND_REVIEWING"
+    work_order.current_handler_user_id = second_reviewer.id
+    work_order.first_reviewer_id = first_reviewer.id
+    work_order.second_reviewer_id = second_reviewer.id
+    db.commit()
+
+    result = recall_routed_review(
+        payload=ReviewRecallRoutingRequest(
+            work_order_id=work_order.id,
+            review_round="SECOND",
+            comment="撤回转交二审",
+        ),
+        db=db,
+        current_user=first_reviewer,
+        role_codes={"FIRST_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    assert result.action == "CHANGE_REVIEWER"
+    assert work_order.current_status == "FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND"
+    assert work_order.current_handler_user_id == first_reviewer.id

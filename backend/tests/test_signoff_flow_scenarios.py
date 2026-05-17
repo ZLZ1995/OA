@@ -12,7 +12,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
-from app.schemas.review import ReviewDecisionRequest, ReviewSubmitRequest
+from app.schemas.review import ReviewDecisionRequest, ReviewRecallRoutingRequest, ReviewSubmitRequest
 
 
 def _build_session() -> Session:
@@ -184,8 +184,34 @@ def test_external_first_review_approve_moves_to_external_second() -> None:
         _={"FIRST_REVIEWER"},
     )
     db.refresh(work_order)
-    assert work_order.current_status == "EXTERNAL_SECOND_REVIEWING"
-    assert work_order.current_handler_user_id == second.id
+    assert work_order.current_status == "EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND"
+    assert work_order.current_handler_user_id == first.id
+
+
+def test_external_second_recall_returns_to_external_first_selection_state() -> None:
+    from app.api.v1.reviews import recall_routed_review
+
+    db = _build_session()
+    _, _, first, second, _, work_order = _seed_bundle(db, "国有资产评估业务")
+    work_order.current_status = "EXTERNAL_SECOND_REVIEWING"
+    work_order.current_handler_user_id = second.id
+    db.commit()
+
+    result = recall_routed_review(
+        payload=ReviewRecallRoutingRequest(
+            work_order_id=work_order.id,
+            review_round="EXTERNAL_SECOND",
+            comment="撤回外审二级复核",
+        ),
+        db=db,
+        current_user=first,
+        role_codes={"FIRST_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    assert result.action == "CHANGE_REVIEWER"
+    assert work_order.current_status == "EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND"
+    assert work_order.current_handler_user_id == first.id
 
 
 def test_external_third_review_approve_moves_to_owner_signoff_upload() -> None:
