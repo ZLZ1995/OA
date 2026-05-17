@@ -120,15 +120,54 @@ const canSignoff = computed(() =>
   (!props.flowInfo?.chief_appraiser_user_id || props.flowInfo?.chief_appraiser_user_id === currentUserId.value)
 )
 
-const reviewPackageFiles = computed(() => files.value.filter(file => file.file_category === 'REPORT_ZIP'))
-const formalReportFiles = computed(() => files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.is_current))
-const contractFiles = computed(() => files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.is_current))
+const REVIEW_REPORT_STAGE_PRIORITY = [
+  'REVIEW_EXTERNAL_THIRD',
+  'REVIEW_THIRD',
+  'REVIEW_EXTERNAL_SECOND',
+  'REVIEW_SECOND',
+  'REVIEW_EXTERNAL_FIRST',
+  'REVIEW_FIRST',
+]
+
+const reviewPackageFiles = computed(() => {
+  const reportFiles = files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.is_current)
+  const stage = REVIEW_REPORT_STAGE_PRIORITY.find(item => reportFiles.some(file => file.business_stage === item))
+  if (!stage) return []
+  return latestFilesByOriginal(reportFiles.filter(file => file.business_stage === stage))
+})
+const formalReportFiles = computed(() => latestFilesByOriginal(files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.is_current)))
+const contractFiles = computed(() => latestFilesByOriginal(files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.is_current)))
 
 const signoffStatusText = computed(() => {
   if (props.flowInfo?.current_work_order_status === 'WAIT_OWNER_SIGNOFF_UPLOAD') return '待上传报告附件与合同扫描件'
   if (props.flowInfo?.current_work_order_status === 'SIGNOFF_REVIEWING') return '签发审核中'
   return props.flowInfo?.current_work_order_status || '-'
 })
+
+function fileIdentity(file: WorkOrderFileItem) {
+  return [
+    file.source_file_id || file.storage_key,
+    file.origin_file_name,
+    file.file_size || 0,
+  ].join('|')
+}
+
+function latestFilesByOriginal(fileList: WorkOrderFileItem[]) {
+  const sorted = [...fileList].sort((a, b) => {
+    const timeDiff = new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()
+    if (timeDiff !== 0) return timeDiff
+    return b.id - a.id
+  })
+  const result: WorkOrderFileItem[] = []
+  const seen = new Set<string>()
+  for (const file of sorted) {
+    const key = fileIdentity(file)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(file)
+  }
+  return result
+}
 
 async function loadFiles() {
   if (!props.workOrderId) {
