@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -35,7 +36,11 @@ def _get_chief_appraiser(db: Session) -> User | None:
         db.query(User)
         .join(UserRole, UserRole.user_id == User.id)
         .join(Role, Role.id == UserRole.role_id)
-        .filter(User.is_active.is_(True), Role.code == "CHIEF_APPRAISER")
+        .filter(
+            User.is_active.is_(True),
+            User.username != settings.initial_admin_username,
+            Role.code == "CHIEF_APPRAISER",
+        )
         .order_by(User.id.asc())
         .first()
     )
@@ -50,6 +55,7 @@ def _resolve_signoff_chief_appraiser(db: Session, work_order: WorkOrder) -> User
             .filter(
                 User.id == work_order.chief_appraiser_user_id,
                 User.is_active.is_(True),
+                User.username != settings.initial_admin_username,
                 Role.code == "CHIEF_APPRAISER",
             )
             .first()

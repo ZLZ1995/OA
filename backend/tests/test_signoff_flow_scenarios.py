@@ -283,3 +283,32 @@ def test_enter_signoff_review_uses_assigned_chief_appraiser_and_workbench_todo()
     assert work_order.chief_appraiser_user_id == assigned_chief.id
     assert [item.id for item in assigned_workbench.todo_projects] == [work_order.project_id]
     assert other_workbench.todo_projects == []
+
+
+def test_enter_signoff_review_ignores_hidden_super_admin_chief_role() -> None:
+    from app.api.v1.signoff import enter_signoff_review
+    from app.api.v1.workbench import get_workbench
+    from app.api.v1.users import list_user_candidates
+
+    db = _build_session()
+    leader, _, _, _, _, work_order = _seed_bundle(db, "非国有资产评估业务")
+    admin_role = _seed_role(db, "ADMIN", "管理员")
+    chief_role = _seed_role(db, "CHIEF_APPRAISER", "首席评估师")
+    super_admin = _seed_user(db, "zhongqin123", "系统管理员", [admin_role, chief_role])
+    fusheng = _seed_user(db, "fusheng", "付胜", [chief_role])
+    work_order.current_status = "WAIT_OWNER_SIGNOFF_UPLOAD"
+    work_order.current_handler_user_id = leader.id
+    db.commit()
+
+    candidates = list_user_candidates("CHIEF_APPRAISER", db=db, _=leader)
+    enter_signoff_review(work_order.id, db=db, current_user=leader, _={"PROJECT_LEADER"})
+
+    db.refresh(work_order)
+    fusheng_workbench = get_workbench(db=db, current_user=fusheng)
+    super_admin_workbench = get_workbench(db=db, current_user=super_admin)
+    assert [item.username for item in candidates.items] == ["fusheng"]
+    assert work_order.current_status == "SIGNOFF_REVIEWING"
+    assert work_order.current_handler_user_id == fusheng.id
+    assert work_order.chief_appraiser_user_id == fusheng.id
+    assert [item.id for item in fusheng_workbench.todo_projects] == [work_order.project_id]
+    assert super_admin_workbench.todo_projects == []

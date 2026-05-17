@@ -71,7 +71,11 @@ def list_user_candidates(
         db.query(User)
         .join(UserRole, UserRole.user_id == User.id)
         .join(Role, Role.id == UserRole.role_id)
-        .filter(Role.code == role_code, User.is_active.is_(True))
+        .filter(
+            Role.code == role_code,
+            User.is_active.is_(True),
+            User.username != SUPER_ADMIN_USERNAME,
+        )
         .order_by(User.id.asc())
         .all()
     )
