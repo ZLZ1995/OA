@@ -45,8 +45,8 @@
       </el-form-item>
       <el-form-item label="项目来源">
         <el-radio-group v-model="form.project_source">
-          <el-radio-button label="INTERNAL">评估一部</el-radio-button>
-          <el-radio-button label="EXTERNAL">评估二部</el-radio-button>
+          <el-radio-button value="INTERNAL">评估一部</el-radio-button>
+          <el-radio-button value="EXTERNAL">评估二部</el-radio-button>
         </el-radio-group>
       </el-form-item>
       <el-form-item label="项目负责人">

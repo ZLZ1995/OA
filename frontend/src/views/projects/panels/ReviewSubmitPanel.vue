@@ -63,8 +63,8 @@
         />
         <el-form-item label="报告文件处理">
           <el-radio-group v-model="replyFileMode" :disabled="!canSubmitReview">
-            <el-radio-button label="REUPLOAD">重新上传文件</el-radio-button>
-            <el-radio-button label="REUSE">沿用上轮文件</el-radio-button>
+            <el-radio-button value="REUPLOAD">重新上传文件</el-radio-button>
+            <el-radio-button value="REUSE">沿用上轮文件</el-radio-button>
           </el-radio-group>
         </el-form-item>
       </template>

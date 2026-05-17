@@ -59,8 +59,8 @@
         <el-col :span="8">
           <el-form-item :label="t.projectSource">
             <el-radio-group v-model="form.project_source">
-              <el-radio-button label="INTERNAL">{{ t.departmentOne }}</el-radio-button>
-              <el-radio-button label="EXTERNAL">{{ t.departmentTwo }}</el-radio-button>
+              <el-radio-button value="INTERNAL">{{ t.departmentOne }}</el-radio-button>
+              <el-radio-button value="EXTERNAL">{{ t.departmentTwo }}</el-radio-button>
             </el-radio-group>
           </el-form-item>
         </el-col>

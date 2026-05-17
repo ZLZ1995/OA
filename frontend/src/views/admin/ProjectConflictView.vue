@@ -46,8 +46,8 @@
       <el-form label-width="110px">
         <el-form-item label="保留项目">
           <el-radio-group v-model="decision.kept_project_id">
-            <el-radio v-if="current" :label="current.project_a.project_id">{{ current.project_a.project_no }} {{ current.project_a.project_name }}</el-radio>
-            <el-radio v-if="current" :label="current.project_b.project_id">{{ current.project_b.project_no }} {{ current.project_b.project_name }}</el-radio>
+            <el-radio v-if="current" :value="current.project_a.project_id">{{ current.project_a.project_no }} {{ current.project_a.project_name }}</el-radio>
+            <el-radio v-if="current" :value="current.project_b.project_id">{{ current.project_b.project_no }} {{ current.project_b.project_name }}</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="处理说明">
