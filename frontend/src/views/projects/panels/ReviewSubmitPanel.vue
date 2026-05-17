@@ -210,8 +210,8 @@
         </el-form-item>
         <el-form-item>
           <el-space>
-            <el-button type="success" @click="onDecision('APPROVE')">审核通过</el-button>
-            <el-button type="danger" plain @click="onDecision('REJECT_RETURN')">返回修改</el-button>
+            <el-button type="success" :loading="decisionSubmitting" :disabled="decisionSubmitting" @click="onDecision('APPROVE')">审核通过</el-button>
+            <el-button type="danger" plain :loading="decisionSubmitting" :disabled="decisionSubmitting" @click="onDecision('REJECT_RETURN')">返回修改</el-button>
           </el-space>
         </el-form-item>
       </el-form>
@@ -388,6 +388,7 @@ const isReviewerChangePanelOpen = ref(false)
 const comment = ref('')
 const changeReviewerComment = ref('')
 const reviewComment = ref('')
+const decisionSubmitting = ref(false)
 const signerOne = ref('')
 const signerTwo = ref('')
 const formalReportCount = ref(1)
@@ -929,19 +930,33 @@ async function onSubmitWithReviewerChange() {
 
 async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
   if (!props.workOrderId) return
+  if (decisionSubmitting.value) return
   if (action === 'REJECT_RETURN' && !reviewComment.value.trim() && !opinionFiles.value.some(file => file.is_current)) {
     return ElMessage.warning('返回修改时，审核意见文件或审核备注必须填写一项')
   }
-  await decideReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, action, comment: reviewComment.value || undefined })
-  if (action === 'APPROVE' && ['FIRST', 'SECOND', 'EXTERNAL_FIRST', 'EXTERNAL_SECOND'].includes(reviewRound.value)) {
-    const routedRound = reviewRound.value as 'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND'
-    await openRoutingDialog(routedRound)
-  } else {
-    ElMessage.success(action === 'APPROVE' ? '审核通过' : '已退回修改')
+  const confirmText = action === 'APPROVE'
+    ? `确认${roundLabel(reviewRound.value)}审核通过？`
+    : `确认${roundLabel(reviewRound.value)}返回修改？项目负责人将重新上传修改后的待审资料包。`
+  await ElMessageBox.confirm(confirmText, '确认审核操作', {
+    type: action === 'APPROVE' ? 'success' : 'warning',
+    confirmButtonText: action === 'APPROVE' ? '确认通过' : '确认返回修改',
+    cancelButtonText: '取消'
+  })
+  decisionSubmitting.value = true
+  try {
+    await decideReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, action, comment: reviewComment.value || undefined })
+    if (action === 'APPROVE' && ['FIRST', 'SECOND', 'EXTERNAL_FIRST', 'EXTERNAL_SECOND'].includes(reviewRound.value)) {
+      const routedRound = reviewRound.value as 'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND'
+      await openRoutingDialog(routedRound)
+    } else {
+      ElMessage.success(action === 'APPROVE' ? '审核通过' : '已退回修改')
+    }
+    reviewComment.value = ''
+    await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
+    emit('changed')
+  } finally {
+    decisionSubmitting.value = false
   }
-  reviewComment.value = ''
-  await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
-  emit('changed')
 }
 
 async function openRoutingDialog(round: 'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND') {

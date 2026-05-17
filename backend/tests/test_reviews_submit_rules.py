@@ -515,6 +515,34 @@ def test_third_review_approve_moves_to_owner_signoff_upload_for_non_state_owned_
     assert work_order.current_handler_user_id == work_order.project_leader_id
 
 
+def test_third_review_reject_returns_to_project_leader_for_resubmission() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    work_order.current_status = "THIRD_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.third_reviewer_id = reviewer.id
+    db.commit()
+
+    result = decide_review(
+        payload=ReviewDecisionRequest(
+            work_order_id=work_order.id,
+            review_round="THIRD",
+            action="REJECT_RETURN",
+            comment="按审核意见修改",
+        ),
+        db=db,
+        current_user=reviewer,
+        _={"THIRD_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    assert result.action == "REJECT_RETURN"
+    assert work_order.current_status == "THIRD_REVIEW_REJECTED"
+    assert work_order.current_handler_user_id == leader.id
+
+
 def test_workbench_shows_current_reviewer_todo_even_when_user_created_project() -> None:
     from app.api.v1.workbench import get_workbench
 
@@ -683,6 +711,14 @@ def test_first_review_reviewer_select_status_maps_to_second_review_step() -> Non
 
     assert normalize_project_step("FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND", archived=False) == "二审"
     assert normalize_project_step("SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD", archived=False) == "三审"
+
+
+def test_signoff_upload_status_maps_to_signoff_step() -> None:
+    from app.services.project_flow import normalize_project_step
+
+    assert normalize_project_step("WAIT_OWNER_SIGNOFF_UPLOAD", archived=False) == "签发审核"
+    assert normalize_project_step("SIGNOFF_REVIEWING", archived=False) == "签发审核"
+    assert normalize_project_step("THIRD_APPROVED_WAIT_PRINTROOM", archived=False) == "报告出具"
 
 
 def test_project_leader_can_submit_second_review_without_reupload_after_first_approved() -> None:
