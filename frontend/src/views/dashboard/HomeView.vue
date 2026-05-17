@@ -370,9 +370,17 @@ async function remove(row: WorkbenchProjectItem) {
     ElMessage.warning('已归档项目不可删除')
     return
   }
-  await deleteProject(row.id)
-  ElMessage.success('项目已删除')
-  await load()
+  try {
+    await deleteProject(row.id)
+    ElMessage.success('项目已删除')
+    await load()
+  } catch (error: any) {
+    if (error?.response?.status === 400) {
+      await openDeleteDialog(row.id, row.project_name)
+      return
+    }
+    throw error
+  }
 }
 
 async function openDeleteDialog(projectId: number, projectName: string) {
