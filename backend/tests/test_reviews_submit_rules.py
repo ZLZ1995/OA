@@ -586,6 +586,56 @@ def test_project_leader_cannot_choose_route_after_first_review_approve() -> None
     assert exc_info.value.status_code == 403
 
 
+def test_first_reviewer_directly_routes_to_second_reviewer_after_approve() -> None:
+    from app.api.v1.reviews import decide_review, route_approved_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    second_reviewer = User(username="reviewer_second", password_hash="x", real_name="ReviewerSecond", is_active=True)
+    db.add(second_reviewer)
+    db.flush()
+    second_role = Role(code="SECOND_REVIEWER", name="二审", description="", is_system_fixed=True)
+    db.add(second_role)
+    db.flush()
+    db.add(UserRole(user_id=second_reviewer.id, role_id=second_role.id))
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    db.commit()
+    _add_review_file(db, work_order, uploaded_by=leader.id, filename="report-approved.zip")
+
+    approve = decide_review(
+        payload=ReviewDecisionRequest(work_order_id=work_order.id, review_round="FIRST", action="APPROVE"),
+        db=db,
+        current_user=reviewer,
+        _={"FIRST_REVIEWER"},
+    )
+    assert approve.action == "APPROVE"
+
+    route_approved_review(
+        payload=ReviewApprovalRoutingRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            route_mode="REVIEWER_SELECT_NEXT",
+            reviewer_user_id=second_reviewer.id,
+        ),
+        db=db,
+        current_user=reviewer,
+        role_codes={"FIRST_REVIEWER"},
+    )
+
+    db.refresh(work_order)
+    submit_record = db.query(ReviewRecord).filter(
+        ReviewRecord.work_order_id == work_order.id,
+        ReviewRecord.review_round == "SECOND",
+        ReviewRecord.action == "SUBMIT",
+    ).first()
+    assert work_order.current_status == "SECOND_REVIEWING"
+    assert work_order.current_handler_user_id == second_reviewer.id
+    assert work_order.second_reviewer_id == second_reviewer.id
+    assert submit_record is not None
+
+
 def test_first_review_reviewer_select_status_maps_to_second_review_step() -> None:
     from app.services.project_flow import normalize_project_step
 

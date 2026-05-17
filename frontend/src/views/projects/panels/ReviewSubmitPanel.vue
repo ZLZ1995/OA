@@ -528,6 +528,13 @@ const routingNextRound = computed<ReviewRound>(() => {
   return 'EXTERNAL_THIRD'
 })
 const routingNextRoundLabel = computed(() => roundLabel(routingNextRound.value))
+const reviewerSelectSourceRound = computed<'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND' | undefined>(() => {
+  if (statusCode.value === 'FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND') return 'FIRST'
+  if (statusCode.value === 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD') return 'SECOND'
+  if (statusCode.value === 'EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND') return 'EXTERNAL_FIRST'
+  if (statusCode.value === 'EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD') return 'EXTERNAL_SECOND'
+  return undefined
+})
 const projectPartyIds = computed(() => {
   const ids = new Set<number>()
   if (props.flowInfo?.project?.project_leader_id) ids.add(props.flowInfo.project.project_leader_id)
@@ -816,6 +823,20 @@ async function onTransferPrintRoom() {
 async function onSubmit() {
   const targetReviewerId = isReplyFlow.value ? currentRoundReviewerId.value : reviewerUserId.value
   if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
+  if (reviewerSelectSourceRound.value) {
+    await routeApprovedReview({
+      work_order_id: props.workOrderId,
+      review_round: reviewerSelectSourceRound.value,
+      route_mode: 'REVIEWER_SELECT_NEXT',
+      reviewer_user_id: targetReviewerId,
+      comment: comment.value || undefined
+    })
+    ElMessage.success(`已直接转交${roundLabel(reviewRound.value)}`)
+    comment.value = ''
+    await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
+    emit('changed')
+    return
+  }
   if (requiresManualUploadBeforeSubmit.value) return ElMessage.warning('请先上传待审报告资料包')
   if (isReplyFlow.value && !currentReplyFiles.value.length && !comment.value.trim()) {
     return ElMessage.warning('退回修改后重新送审时，审核意见回复文件或送审备注至少填写一项')
