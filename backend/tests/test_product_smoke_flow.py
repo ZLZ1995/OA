@@ -214,7 +214,7 @@ def test_smoke_03_contract_review_approval_moves_to_report_submit() -> None:
 
 
 def test_smoke_04_review_and_signoff_move_to_print_room() -> None:
-    from app.api.v1.reviews import decide_review, submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review, decide_review
     from app.api.v1.signoff import approve_signoff, enter_signoff_review
 
     db = _build_session()

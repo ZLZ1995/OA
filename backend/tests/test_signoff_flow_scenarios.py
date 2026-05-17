@@ -143,7 +143,7 @@ def test_real_scenario_state_owned_project_moves_to_owner_external_confirm() -> 
 
 
 def test_external_first_review_approve_moves_to_external_second() -> None:
-    from app.api.v1.reviews import decide_review, submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review, decide_review
 
     db = _build_session()
     leader, _, first, second, _, work_order = _seed_bundle(db, "国有资产评估业务")
@@ -257,3 +257,29 @@ def test_final_real_scenario_owner_upload_enters_signoff_and_approves() -> None:
     db.refresh(work_order)
     assert work_order.current_status == "THIRD_APPROVED_WAIT_PRINTROOM"
     assert work_order.current_handler_user_id == print_room.id
+
+
+def test_enter_signoff_review_uses_assigned_chief_appraiser_and_workbench_todo() -> None:
+    from app.api.v1.signoff import enter_signoff_review
+    from app.api.v1.workbench import get_workbench
+
+    db = _build_session()
+    leader, _, _, _, _, work_order = _seed_bundle(db, "非国有资产评估业务")
+    chief_role = _seed_role(db, "CHIEF_APPRAISER", "首席评估师")
+    other_chief = _seed_user(db, "other_chief", "OtherChief", [chief_role])
+    assigned_chief = _seed_user(db, "fusheng", "付胜", [chief_role])
+    work_order.current_status = "WAIT_OWNER_SIGNOFF_UPLOAD"
+    work_order.current_handler_user_id = leader.id
+    work_order.chief_appraiser_user_id = assigned_chief.id
+    db.commit()
+
+    enter_signoff_review(work_order.id, db=db, current_user=leader, _={"PROJECT_LEADER"})
+
+    db.refresh(work_order)
+    assigned_workbench = get_workbench(db=db, current_user=assigned_chief)
+    other_workbench = get_workbench(db=db, current_user=other_chief)
+    assert work_order.current_status == "SIGNOFF_REVIEWING"
+    assert work_order.current_handler_user_id == assigned_chief.id
+    assert work_order.chief_appraiser_user_id == assigned_chief.id
+    assert [item.id for item in assigned_workbench.todo_projects] == [work_order.project_id]
+    assert other_workbench.todo_projects == []

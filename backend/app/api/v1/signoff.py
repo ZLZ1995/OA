@@ -41,6 +41,24 @@ def _get_chief_appraiser(db: Session) -> User | None:
     )
 
 
+def _resolve_signoff_chief_appraiser(db: Session, work_order: WorkOrder) -> User | None:
+    if work_order.chief_appraiser_user_id:
+        assigned = (
+            db.query(User)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .filter(
+                User.id == work_order.chief_appraiser_user_id,
+                User.is_active.is_(True),
+                Role.code == "CHIEF_APPRAISER",
+            )
+            .first()
+        )
+        if assigned:
+            return assigned
+    return _get_chief_appraiser(db)
+
+
 @router.post("/work-orders/{work_order_id}/request-owner-confirm")
 def request_owner_external_audit_confirm(
     work_order_id: int,
@@ -180,7 +198,7 @@ def enter_signoff_review(
     if work_order.current_status != WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value:
         raise HTTPException(status_code=400, detail="当前状态不可进入签发审核")
 
-    chief = _get_chief_appraiser(db)
+    chief = _resolve_signoff_chief_appraiser(db, work_order)
     if chief is None:
         raise HTTPException(status_code=400, detail="系统未配置首席评估师账号")
 

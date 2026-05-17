@@ -152,7 +152,15 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
     if "CONTRACT_REVIEWER" in role_codes or "ADMIN" in role_codes:
         role_pool_filters.append(WorkOrder.contract_reviewer_id == current_user.id)
     if "CHIEF_APPRAISER" in role_codes or "ADMIN" in role_codes:
-        role_pool_filters.append(WorkOrder.chief_appraiser_user_id == current_user.id)
+        role_pool_filters.append(
+            and_(
+                WorkOrder.current_status == "SIGNOFF_REVIEWING",
+                or_(
+                    WorkOrder.chief_appraiser_user_id == current_user.id,
+                    WorkOrder.current_handler_user_id == current_user.id,
+                ),
+            )
+        )
     if "PRINT_ROOM" in role_codes or "ADMIN" in role_codes:
         role_pool_filters.append(
             and_(
