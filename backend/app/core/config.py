@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60 * 8
 
     local_storage_dir: str = "/data/asset-valuation/uploads"
+    public_api_base_url: str | None = None
 
     initial_admin_username: str = "zhongqin123"
     initial_admin_password: str = "zhongqin123"

@@ -83,12 +83,13 @@
         <div class="review-upload-block">
           <div class="review-upload-main">
             <div class="review-upload-actions">
-              <el-upload :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile || isLockedCarryForwardStage || canCarryForwardApprovedFile">
-                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked || isLockedCarryForwardStage || canCarryForwardApprovedFile">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
+              <el-upload v-if="!isReportUploadLocked" :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
+                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
               </el-upload>
               <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
               <el-tag v-else-if="canCarryForwardApprovedFile" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
               <el-tag v-else-if="isLockedCarryForwardStage" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
+              <el-tag v-else-if="isReportUploadLocked" type="warning" effect="plain">待审材料已锁定，不能重新上传</el-tag>
             </div>
             <div class="file-list" v-if="submitFiles.length">
               <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
@@ -106,6 +107,9 @@
         <el-space wrap>
           <el-button v-if="!showReviewerChangePanel" type="primary" :disabled="!canSubmitReview || requiresManualUploadBeforeSubmit" @click="onSubmit">
             {{ isReplyFlow ? '提交审核意见回复' : '提交审核' }}
+          </el-button>
+          <el-button v-if="canRecallRouting" type="danger" plain @click="onRecallRouting">
+            撤回转交
           </el-button>
           <el-button v-if="canChangeReviewer && !showReviewerChangePanel" type="warning" plain @click="openReviewerChangePanel">
             更换审核人
@@ -271,7 +275,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
-import { changeReviewAssignee, decideReview, listReviewCandidates, listReviews, routeApprovedReview, submitReview, withdrawLatestReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
+import { changeReviewAssignee, decideReview, listReviewCandidates, listReviews, recallRoutedReview, routeApprovedReview, submitReview, withdrawLatestReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
 import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import { useAuthStore } from '@/store/auth'
 import type { ProjectFlowData } from '@/api/projectFlow'
@@ -333,8 +337,17 @@ const isReviewSubmitter = computed(() => {
 })
 const isReplyFlow = computed(() => ['FIRST_REVIEW_REJECTED', 'SECOND_REVIEW_REJECTED', 'THIRD_REVIEW_REJECTED'].includes(statusCode.value))
 const isLockedCarryForwardStage = computed(() => ['WAIT_SECOND_REVIEW_SUBMIT', 'WAIT_THIRD_REVIEW_SUBMIT', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))
-const isReviewerSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND', 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD'].includes(statusCode.value))
-const isLeaderSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD'].includes(statusCode.value))
+const isReviewerSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND', 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD', 'EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND', 'EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD'].includes(statusCode.value))
+const isLeaderSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))
+const isReportUploadLocked = computed(() => reusePreviousFile.value || isLockedCarryForwardStage.value || canCarryForwardApprovedFile.value)
+const canRecallRouting = computed(() => {
+  if (!currentUserId.value) return false
+  if (reviewRound.value === 'SECOND') return statusCode.value === 'SECOND_REVIEWING' && props.flowInfo?.first_reviewer_id === currentUserId.value
+  if (reviewRound.value === 'THIRD') return statusCode.value === 'THIRD_REVIEWING' && props.flowInfo?.second_reviewer_id === currentUserId.value
+  if (reviewRound.value === 'EXTERNAL_SECOND') return statusCode.value === 'EXTERNAL_SECOND_REVIEWING' && props.flowInfo?.first_reviewer_id === currentUserId.value
+  if (reviewRound.value === 'EXTERNAL_THIRD') return statusCode.value === 'EXTERNAL_THIRD_REVIEWING' && props.flowInfo?.second_reviewer_id === currentUserId.value
+  return false
+})
 const latestSubmitAt = computed(() => {
   const latest = records.value
     .filter(record => record.review_round === reviewRound.value && record.action === 'SUBMIT')
@@ -745,14 +758,35 @@ async function onSubmitWithReviewerChange() {
 async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
   if (!props.workOrderId) return
   await decideReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, action, comment: reviewComment.value || undefined })
-  if (action === 'APPROVE' && (reviewRound.value === 'FIRST' || reviewRound.value === 'SECOND')) {
+  if (action === 'APPROVE' && ['FIRST', 'SECOND', 'EXTERNAL_FIRST', 'EXTERNAL_SECOND'].includes(reviewRound.value)) {
+    const nextRoundLabel = reviewRound.value === 'FIRST'
+      ? '二审'
+      : reviewRound.value === 'SECOND'
+        ? '三审'
+        : reviewRound.value === 'EXTERNAL_FIRST'
+          ? '外审二级复核'
+          : '外审三级复核'
+    const routeConfirmText = reviewRound.value === 'FIRST'
+      ? '确认转交给选定人员进行二审吗？'
+      : reviewRound.value === 'SECOND'
+        ? '确认转交给选定人员进行三审吗？'
+        : reviewRound.value === 'EXTERNAL_FIRST'
+          ? '确认转交给固定外审二级复核人员吗？'
+          : '确认转交给固定外审三级复核人员吗？'
+    const returnLeaderText = reviewRound.value === 'FIRST'
+      ? '确认转交给项目负责人处理并选择二审老师吗？'
+      : reviewRound.value === 'SECOND'
+        ? '确认转交给项目负责人处理并选择三审老师吗？'
+        : reviewRound.value === 'EXTERNAL_FIRST'
+          ? '确认转交给项目负责人处理并继续推进外审二级复核吗？'
+          : '确认转交给项目负责人处理并继续推进外审三级复核吗？'
     try {
       await ElMessageBox.confirm(
-        reviewRound.value === 'FIRST' ? '???????????????????' : '???????????????????',
-        '????',
+        routeConfirmText,
+        `转交${nextRoundLabel}`,
         {
-          confirmButtonText: '??',
-          cancelButtonText: '?????????',
+          confirmButtonText: '直接转交',
+          cancelButtonText: '转交项目负责人',
           distinguishCancelAndClose: true,
           type: 'warning'
         }
@@ -762,21 +796,30 @@ async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
         review_round: reviewRound.value,
         route_mode: 'REVIEWER_SELECT_NEXT'
       })
-      ElMessage.success('????????????')
+      ElMessage.success(`已转交${nextRoundLabel}`)
     } catch (error) {
       if (error === 'cancel') {
+        await ElMessageBox.confirm(
+          returnLeaderText,
+          '转交项目负责人',
+          {
+            confirmButtonText: '确认转交',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
         await routeApprovedReview({
           work_order_id: props.workOrderId,
           review_round: reviewRound.value,
           route_mode: 'RETURN_TO_PROJECT_LEADER'
         })
-        ElMessage.success('?????????????????')
+        ElMessage.success('已转交项目负责人')
       } else if (error !== 'close') {
         throw error
       }
     }
   } else {
-    ElMessage.success(action === 'APPROVE' ? '????' : '?????')
+    ElMessage.success(action === 'APPROVE' ? '审核通过' : '已退回修改')
   }
   reviewComment.value = ''
   await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
@@ -801,6 +844,33 @@ async function onMarkHasExternalAudit() {
   if (!props.workOrderId) return
   await markHasExternalAudit(props.workOrderId)
   ElMessage.success('已进入外部审核复核准备流程')
+  emit('changed')
+}
+
+async function onRecallRouting() {
+  if (!props.workOrderId) return
+  const targetLabel = reviewRound.value === 'SECOND'
+    ? '二审转交'
+    : reviewRound.value === 'THIRD'
+      ? '三审转交'
+      : reviewRound.value === 'EXTERNAL_SECOND'
+        ? '外审二级复核转交'
+        : '外审三级复核转交'
+  await ElMessageBox.confirm(
+    `确认撤回${targetLabel}吗？撤回后流程将回到上一审核/复核人员处。`,
+    '撤回转交',
+    {
+      confirmButtonText: '确认撤回',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  )
+  await recallRoutedReview({
+    work_order_id: props.workOrderId,
+    review_round: reviewRound.value as 'SECOND' | 'THIRD' | 'EXTERNAL_SECOND' | 'EXTERNAL_THIRD',
+  })
+  ElMessage.success('已撤回转交')
+  await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
   emit('changed')
 }
 

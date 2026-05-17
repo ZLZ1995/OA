@@ -19,6 +19,7 @@ from app.schemas.review import (
     ReviewCandidateListResponse,
     ReviewCandidateResponse,
     ReviewDecisionRequest,
+    ReviewRecallRoutingRequest,
     ReviewAssigneeChangeRequest,
     ReviewRecordListResponse,
     ReviewRecordResponse,
@@ -118,6 +119,20 @@ ROUND_CURRENT_REVIEWER_ATTR = {
     "EXTERNAL_THIRD": "third_reviewer_id",
 }
 
+ROUND_PREVIOUS_REVIEWER_ATTR = {
+    "SECOND": "first_reviewer_id",
+    "THIRD": "second_reviewer_id",
+    "EXTERNAL_SECOND": "first_reviewer_id",
+    "EXTERNAL_THIRD": "second_reviewer_id",
+}
+
+ROUND_RECALL_TARGET_STATUS = {
+    "SECOND": WorkOrderStatus.FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND,
+    "THIRD": WorkOrderStatus.SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD,
+    "EXTERNAL_SECOND": WorkOrderStatus.EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND,
+    "EXTERNAL_THIRD": WorkOrderStatus.EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD,
+}
+
 ROUND_NEXT = {
     "FIRST": "SECOND",
     "SECOND": "THIRD",
@@ -204,6 +219,8 @@ def _append_passed_to_marker(comment: str | None, next_round: str) -> str:
 ROUND_REVIEWER_SELECT_STATUS = {
     "FIRST": WorkOrderStatus.FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND,
     "SECOND": WorkOrderStatus.SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD,
+    "EXTERNAL_FIRST": WorkOrderStatus.EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND,
+    "EXTERNAL_SECOND": WorkOrderStatus.EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD,
 }
 
 
@@ -212,7 +229,11 @@ def _round_leader_wait_status(review_round: str) -> WorkOrderStatus:
         return WorkOrderStatus.FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND
     if review_round == "SECOND":
         return WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD
-    raise HTTPException(status_code=400, detail="仅一审、二审支持下一轮选人分流")
+    if review_round == "EXTERNAL_FIRST":
+        return WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT
+    if review_round == "EXTERNAL_SECOND":
+        return WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT
+    raise HTTPException(status_code=400, detail="仅支持带下一轮转交流程的审核阶段")
 
 
 def _latest_submit_record(db: Session, work_order_id: int, review_round: str) -> ReviewRecord | None:
@@ -539,7 +560,7 @@ def list_review_candidates(
     review_round: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "ADMIN")),
+    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "FIRST_REVIEWER", "SECOND_REVIEWER", "ADMIN")),
 ) -> ReviewCandidateListResponse:
     if review_round not in ROUND_ROLE_CODE:
         raise HTTPException(status_code=400, detail="非法审核轮次")
@@ -547,8 +568,14 @@ def list_review_candidates(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    if "ADMIN" not in role_codes and not _is_project_party(db, work_order, current_user):
-        raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可查看审核候选人")
+    if "ADMIN" not in role_codes:
+        can_view_as_project_party = _is_project_party(db, work_order, current_user)
+        can_view_as_current_reviewer = current_user.id in {
+            work_order.first_reviewer_id,
+            work_order.second_reviewer_id,
+        }
+        if not can_view_as_project_party and not can_view_as_current_reviewer:
+            raise HTTPException(status_code=403, detail="仅项目负责人、项目组成员或当前审核老师可查看审核候选人")
 
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if not project:
@@ -558,7 +585,21 @@ def list_review_candidates(
         "FIRST": work_order.first_reviewer_id,
         "SECOND": work_order.second_reviewer_id,
         "THIRD": work_order.third_reviewer_id,
+        "EXTERNAL_FIRST": work_order.first_reviewer_id,
+        "EXTERNAL_SECOND": work_order.second_reviewer_id,
+        "EXTERNAL_THIRD": work_order.third_reviewer_id,
     }[review_round]
+
+    if review_round == "EXTERNAL_SECOND":
+        reviewer = db.query(User).filter(User.id == work_order.second_reviewer_id, User.is_active.is_(True)).first()
+        return ReviewCandidateListResponse(
+            items=[ReviewCandidateResponse(user_id=reviewer.id, username=reviewer.username, real_name=reviewer.real_name)] if reviewer else []
+        )
+    if review_round == "EXTERNAL_THIRD":
+        reviewer = db.query(User).filter(User.id == work_order.third_reviewer_id, User.is_active.is_(True)).first()
+        return ReviewCandidateListResponse(
+            items=[ReviewCandidateResponse(user_id=reviewer.id, username=reviewer.username, real_name=reviewer.real_name)] if reviewer else []
+        )
 
     excluded_user_ids = {
         work_order.project_leader_id,
@@ -783,20 +824,31 @@ def route_approved_review(
         reviewer_select_status = WorkOrderStatus.FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND
         reviewer_id = work_order.first_reviewer_id
         next_round = "SECOND"
-    else:
+    elif payload.review_round == "SECOND":
         approved_status = WorkOrderStatus.SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD
         reviewer_select_status = WorkOrderStatus.SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD
         reviewer_id = work_order.second_reviewer_id
         next_round = "THIRD"
+    elif payload.review_round == "EXTERNAL_FIRST":
+        approved_status = WorkOrderStatus.EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND
+        reviewer_select_status = WorkOrderStatus.EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND
+        reviewer_id = work_order.first_reviewer_id
+        next_round = "EXTERNAL_SECOND"
+    else:
+        approved_status = WorkOrderStatus.EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD
+        reviewer_select_status = WorkOrderStatus.EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD
+        reviewer_id = work_order.second_reviewer_id
+        next_round = "EXTERNAL_THIRD"
 
     if payload.route_mode == "REVIEWER_SELECT_NEXT":
         if reviewer_id != current_user.id and "ADMIN" not in role_codes:
             raise HTTPException(status_code=403, detail="仅当前审核老师可直接选择下一轮审核人")
         if WorkOrderStatus(work_order.current_status) != approved_status:
             raise HTTPException(status_code=400, detail="当前状态不可进入审核人选下一轮")
-        if not can_transit(approved_status, reviewer_select_status):
+        target_status = reviewer_select_status
+        if not can_transit(approved_status, target_status):
             raise HTTPException(status_code=400, detail="非法状态流转")
-        work_order.current_status = reviewer_select_status.value
+        work_order.current_status = target_status.value
         work_order.current_handler_user_id = reviewer_id
         action_name = f"{payload.review_round}_APPROVE_REVIEWER_SELECT_{next_round}"
     else:
@@ -840,6 +892,80 @@ def route_approved_review(
             sender_user=current_user,
             receiver_user_id=receiver,
             action_name=action_name,
+            comment=payload.comment,
+            biz_id=record.id,
+        )
+    db.commit()
+    db.refresh(record)
+    return _to_review_record_response(db, record)
+
+
+@router.post("/recall-routing", response_model=ReviewRecordResponse)
+def recall_routed_review(
+    payload: ReviewRecallRoutingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    role_codes: set[str] = Depends(require_roles("FIRST_REVIEWER", "SECOND_REVIEWER", "ADMIN")),
+) -> ReviewRecordResponse:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    previous_reviewer_attr = ROUND_PREVIOUS_REVIEWER_ATTR.get(payload.review_round)
+    if not previous_reviewer_attr:
+        raise HTTPException(status_code=400, detail="当前轮次不支持撤回转交")
+    previous_reviewer_id = getattr(work_order, previous_reviewer_attr)
+    current_reviewer_id = getattr(work_order, ROUND_CURRENT_REVIEWER_ATTR[payload.review_round])
+    recall_status = ROUND_RECALL_TARGET_STATUS[payload.review_round]
+
+    if previous_reviewer_id != current_user.id and "ADMIN" not in role_codes:
+        raise HTTPException(status_code=403, detail="仅上一级审核/复核人员可撤回转交")
+
+    if WorkOrderStatus(work_order.current_status) != ROUND_REVIEWING_STATUS[payload.review_round]:
+        raise HTTPException(status_code=400, detail="仅下一级人员尚未审核通过前可撤回转交")
+
+    latest_approve = (
+        db.query(ReviewRecord)
+        .filter(
+            ReviewRecord.work_order_id == work_order.id,
+            ReviewRecord.review_round == payload.review_round,
+            ReviewRecord.action == "APPROVE",
+        )
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+    if latest_approve:
+        raise HTTPException(status_code=400, detail="下一级已确认通过，不能撤回转交")
+
+    work_order.current_status = recall_status.value
+    work_order.current_handler_user_id = previous_reviewer_id
+    record = ReviewRecord(
+        work_order_id=work_order.id,
+        review_round=payload.review_round,
+        reviewer_user_id=current_user.id,
+        action="CHANGE_REVIEWER",
+        comment=payload.comment or "撤回转交",
+        acted_at=datetime.now(timezone.utc),
+    )
+    db.add(record)
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=ROUND_REVIEWING_STATUS[payload.review_round].value,
+        to_status=recall_status.value,
+        action_type=f"RECALL_ROUTING_{payload.review_round}",
+        operator_user_id=current_user.id,
+        remark=payload.comment,
+    )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=previous_reviewer_id,
+            action_name=f"RECALL_ROUTING_{payload.review_round}",
             comment=payload.comment,
             biz_id=record.id,
         )
@@ -899,6 +1025,27 @@ def decide_review(
         if not can_transit(from_status, default_status):
             raise HTTPException(status_code=400, detail="非法状态迁移")
         if payload.review_round in {"FIRST", "SECOND"}:
+            next_round = ROUND_NEXT[payload.review_round]
+            if _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):
+                _clone_files_to_round(
+                    db,
+                    work_order_id=work_order.id,
+                    from_round=payload.review_round,
+                    to_round=next_round,
+                    uploaded_by=current_user.id,
+                )
+                _clone_opinion_files_to_round(
+                    db,
+                    work_order_id=work_order.id,
+                    from_round=payload.review_round,
+                    to_round=next_round,
+                    uploaded_by=current_user.id,
+                )
+                record.comment = _append_passed_to_marker(record.comment, next_round)
+            to_status = ROUND_REVIEWER_SELECT_STATUS[payload.review_round]
+            next_handler = current_user.id
+            workflow_action = f"{payload.review_round}_APPROVE_WAIT_REVIEWER_SELECT_{next_round}"
+        elif payload.review_round in {"EXTERNAL_FIRST", "EXTERNAL_SECOND"}:
             next_round = ROUND_NEXT[payload.review_round]
             if _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):
                 _clone_files_to_round(

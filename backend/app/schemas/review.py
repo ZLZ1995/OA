@@ -19,8 +19,14 @@ class ReviewDecisionRequest(BaseModel):
 
 class ReviewApprovalRoutingRequest(BaseModel):
     work_order_id: int
-    review_round: str = Field(pattern="^(FIRST|SECOND)$")
+    review_round: str = Field(pattern="^(FIRST|SECOND|EXTERNAL_FIRST|EXTERNAL_SECOND)$")
     route_mode: str = Field(pattern="^(REVIEWER_SELECT_NEXT|RETURN_TO_PROJECT_LEADER)$")
+    comment: str | None = None
+
+
+class ReviewRecallRoutingRequest(BaseModel):
+    work_order_id: int
+    review_round: str = Field(pattern="^(SECOND|THIRD|EXTERNAL_SECOND|EXTERNAL_THIRD)$")
     comment: str | None = None
 
 

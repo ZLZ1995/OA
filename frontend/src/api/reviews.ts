@@ -39,11 +39,20 @@ export async function decideReview(payload: {
 
 export async function routeApprovedReview(payload: {
   work_order_id: number
-  review_round: 'FIRST' | 'SECOND'
+  review_round: 'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND'
   route_mode: 'REVIEWER_SELECT_NEXT' | 'RETURN_TO_PROJECT_LEADER'
   comment?: string
 }) {
   const { data } = await http.post('/reviews/approve-routing', payload)
+  return data as ReviewRecordItem
+}
+
+export async function recallRoutedReview(payload: {
+  work_order_id: number
+  review_round: 'SECOND' | 'THIRD' | 'EXTERNAL_SECOND' | 'EXTERNAL_THIRD'
+  comment?: string
+}) {
+  const { data } = await http.post('/reviews/recall-routing', payload)
   return data as ReviewRecordItem
 }
 
