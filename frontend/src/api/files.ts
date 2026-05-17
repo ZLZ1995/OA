@@ -54,6 +54,10 @@ export async function listWorkOrderFiles(workOrderId: number) {
   return data as { items: WorkOrderFileItem[] }
 }
 
+export async function deleteWorkOrderFile(fileId: number) {
+  await http.delete(`/files/${fileId}`)
+}
+
 export async function completeContractUpload(workOrderId: number) {
   const { data } = await http.post(`/files/work-orders/${workOrderId}/complete-contract`)
   return data as { status: string }

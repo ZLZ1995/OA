@@ -263,6 +263,33 @@ def _latest_round_files(db: Session, work_order_id: int, review_round: str, file
     )
 
 
+def _has_current_round_file(db: Session, work_order_id: int, review_round: str, file_category: str) -> bool:
+    return (
+        db.query(WorkOrderFile.id)
+        .filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.business_stage == f"REVIEW_{review_round}",
+            WorkOrderFile.file_category == file_category,
+            WorkOrderFile.is_current.is_(True),
+        )
+        .first()
+        is not None
+    )
+
+
+def _latest_rejection_record(db: Session, work_order_id: int, review_round: str) -> ReviewRecord | None:
+    return (
+        db.query(ReviewRecord)
+        .filter(
+            ReviewRecord.work_order_id == work_order_id,
+            ReviewRecord.review_round == review_round,
+            ReviewRecord.action == "REJECT_RETURN",
+        )
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+
+
 def _clone_files_to_round(
     db: Session,
     *,
@@ -454,14 +481,14 @@ def _auto_advance_if_needed(
         work_order_id=work_order.id,
         from_round=current_round,
         to_round=next_round,
-        uploaded_by=clone_uploaded_by,
+        uploaded_by=current_reviewer.id,
     )
     _clone_opinion_files_to_round(
         db,
         work_order_id=work_order.id,
         from_round=current_round,
         to_round=next_round,
-        uploaded_by=clone_uploaded_by,
+        uploaded_by=current_reviewer.id,
     )
     next_reviewer_id = getattr(work_order, ROUND_CURRENT_REVIEWER_ATTR[next_round])
     if not next_reviewer_id:
@@ -685,6 +712,14 @@ def submit_review(
         raise HTTPException(status_code=400, detail=f"当前状态不可发起{payload.review_round}审")
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
+    if not _has_current_round_file(db, work_order.id, payload.review_round, "REPORT_ZIP"):
+        raise HTTPException(status_code=400, detail="请先上传待审报告资料包")
+
+    latest_rejection = _latest_rejection_record(db, work_order.id, payload.review_round)
+    if latest_rejection and from_status == ROUND_REJECTED_STATUS[payload.review_round]:
+        has_reply_file = _has_current_round_file(db, work_order.id, payload.review_round, "REVIEW_REPLY")
+        if not has_reply_file and not (payload.comment and payload.comment.strip()):
+            raise HTTPException(status_code=400, detail="退回修改后重新送审时，审核意见回复文件或送审备注必须填写一项")
 
     if payload.review_round in {"FIRST", "EXTERNAL_FIRST"}:
         work_order.first_reviewer_id = target_reviewer_id
@@ -840,26 +875,96 @@ def route_approved_review(
         reviewer_id = work_order.second_reviewer_id
         next_round = "EXTERNAL_THIRD"
 
+    from_status_for_log = WorkOrderStatus(work_order.current_status)
+
     if payload.route_mode == "REVIEWER_SELECT_NEXT":
         if reviewer_id != current_user.id and "ADMIN" not in role_codes:
             raise HTTPException(status_code=403, detail="仅当前审核老师可直接选择下一轮审核人")
-        if WorkOrderStatus(work_order.current_status) != approved_status:
+        if WorkOrderStatus(work_order.current_status) != reviewer_select_status:
             raise HTTPException(status_code=400, detail="当前状态不可进入审核人选下一轮")
-        target_status = reviewer_select_status
-        if not can_transit(approved_status, target_status):
+        if not payload.reviewer_user_id:
+            raise HTTPException(status_code=400, detail="请在转交弹窗中选择下一轮审核老师")
+        project = db.query(Project).filter(Project.id == work_order.project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        _ensure_reviewer_has_round_role(db, payload.reviewer_user_id, next_round)
+        if next_round in {"SECOND", "THIRD"}:
+            validate_not_project_party(
+                payload.reviewer_user_id,
+                get_project_party_user_ids(db, work_order.project_id, work_order, project),
+                f"{next_round}审核人",
+            )
+            validate_reviewer_round_conflict(payload.reviewer_user_id, work_order, next_round)
+        candidate_first = payload.reviewer_user_id if next_round == "FIRST" else work_order.first_reviewer_id
+        candidate_second = payload.reviewer_user_id if next_round == "SECOND" else work_order.second_reviewer_id
+        candidate_third = payload.reviewer_user_id if next_round == "THIRD" else work_order.third_reviewer_id
+        ok, msg = validate_reviewer_avoidance(
+            project_leader_id=work_order.project_leader_id,
+            business_user_id=project.business_user_id,
+            first_reviewer_id=candidate_first,
+            second_reviewer_id=candidate_second,
+            third_reviewer_id=candidate_third,
+        )
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+
+        target_status = ROUND_REVIEWING_STATUS[next_round]
+        if not can_transit(reviewer_select_status, target_status):
             raise HTTPException(status_code=400, detail="非法状态流转")
+        if next_round in {"SECOND", "EXTERNAL_SECOND"}:
+            work_order.second_reviewer_id = payload.reviewer_user_id
+        else:
+            work_order.third_reviewer_id = payload.reviewer_user_id
+
+        latest_approve = (
+            db.query(ReviewRecord)
+            .filter(
+                ReviewRecord.work_order_id == work_order.id,
+                ReviewRecord.review_round == payload.review_round,
+                ReviewRecord.action == "APPROVE",
+            )
+            .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+            .first()
+        )
+        if not latest_approve:
+            raise HTTPException(status_code=400, detail="未找到上一轮审核通过记录")
+        if not _has_current_round_file(db, work_order.id, next_round, "REPORT_ZIP"):
+            _clone_files_to_round(
+                db,
+                work_order_id=work_order.id,
+                from_round=payload.review_round,
+                to_round=next_round,
+                uploaded_by=current_user.id,
+            )
+            _clone_opinion_files_to_round(
+                db,
+                work_order_id=work_order.id,
+                from_round=payload.review_round,
+                to_round=next_round,
+                uploaded_by=current_user.id,
+            )
+        db.add(
+            ReviewRecord(
+                work_order_id=work_order.id,
+                review_round=next_round,
+                reviewer_user_id=payload.reviewer_user_id,
+                action="SUBMIT",
+                comment=f"沿用上一轮审核通过文件 {AUTO_FROM_RECORD_MARKER}{latest_approve.id}]",
+                acted_at=datetime.now(timezone.utc),
+            )
+        )
         work_order.current_status = target_status.value
-        work_order.current_handler_user_id = reviewer_id
+        work_order.current_handler_user_id = payload.reviewer_user_id
         action_name = f"{payload.review_round}_APPROVE_REVIEWER_SELECT_{next_round}"
-        default_comment = "审核老师决定直接转交下一轮审核"
+        target_name = db.query(User.real_name).filter(User.id == payload.reviewer_user_id).scalar() or "-"
+        default_comment = f"审核老师决定直接转交下一轮审核人：{target_name}"
     else:
         if reviewer_id != current_user.id and "ADMIN" not in role_codes:
             raise HTTPException(status_code=403, detail="仅当前审核老师可决定是否退回项目负责人选人")
         if WorkOrderStatus(work_order.current_status) not in {approved_status, reviewer_select_status}:
             raise HTTPException(status_code=400, detail="当前状态不可返回项目负责人选择")
         target_status = _round_leader_wait_status(payload.review_round)
-        source_status = WorkOrderStatus(work_order.current_status)
-        if not can_transit(source_status, target_status):
+        if not can_transit(from_status_for_log, target_status):
             raise HTTPException(status_code=400, detail="非法状态流转")
         work_order.current_status = target_status.value
         work_order.current_handler_user_id = work_order.project_leader_id
@@ -878,7 +983,7 @@ def route_approved_review(
     create_workflow_log(
         db,
         work_order_id=work_order.id,
-        from_status=approved_status.value if payload.route_mode == "REVIEWER_SELECT_NEXT" else WorkOrderStatus(work_order.current_status).value,
+        from_status=from_status_for_log.value,
         to_status=work_order.current_status,
         action_type=action_name,
         operator_user_id=current_user.id,
@@ -886,7 +991,7 @@ def route_approved_review(
     )
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if project:
-        receiver = reviewer_id if payload.route_mode == "REVIEWER_SELECT_NEXT" else work_order.project_leader_id
+        receiver = payload.reviewer_user_id if payload.route_mode == "REVIEWER_SELECT_NEXT" and payload.reviewer_user_id else work_order.project_leader_id
         send_workflow_notification(
             db,
             project=project,
@@ -1008,6 +1113,10 @@ def decide_review(
 
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
+    if payload.action == "REJECT_RETURN":
+        has_opinion_file = _has_current_round_file(db, work_order.id, payload.review_round, "REVIEW_OPINION")
+        if not has_opinion_file and not (payload.comment and payload.comment.strip()):
+            raise HTTPException(status_code=400, detail="返回修改时，审核意见文件或审核备注必须填写一项")
 
     work_order.current_status = to_status.value
     work_order.current_handler_user_id = next_handler
@@ -1017,7 +1126,7 @@ def decide_review(
         review_round=payload.review_round,
         reviewer_user_id=current_user.id,
         action=payload.action,
-        comment=payload.comment or ("审核通过" if payload.action == "APPROVE" else None),
+        comment=payload.comment or ("审核通过" if payload.action == "APPROVE" else f"{payload.review_round}审核意见返回修改"),
         acted_at=datetime.now(timezone.utc),
     )
     db.add(record)

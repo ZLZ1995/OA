@@ -79,23 +79,71 @@
         <span v-else>-</span>
       </el-form-item>
 
-      <el-form-item :label="showReviewerChangePanel ? '重新上传文件' : (isReplyFlow ? '意见回复文件' : '待审报告包')">
+      <el-form-item label="文件传输区">
         <div class="review-upload-block">
           <div class="review-upload-main">
-            <div class="review-upload-actions">
-              <el-upload v-if="!isReportUploadLocked" :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="!canSubmitReview || reusePreviousFile">
-                <el-button :disabled="!canSubmitReview || reusePreviousFile || isReviewLocked">{{ showReviewerChangePanel ? '上传报告文件' : (isReplyFlow ? '上传审核意见回复' : '上传待审报告') }}</el-button>
-              </el-upload>
-              <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
-              <el-tag v-else-if="canCarryForwardApprovedFile" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
-              <el-tag v-else-if="isLockedCarryForwardStage" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
-              <el-tag v-else-if="isReportUploadLocked" type="warning" effect="plain">待审材料已锁定，不能重新上传</el-tag>
-            </div>
-            <div class="file-list" v-if="submitFiles.length">
-              <el-tag v-for="file in submitFiles" :key="file.id" type="info" effect="plain">
-                {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
-              </el-tag>
-            </div>
+            <section class="file-zone-card file-zone-card--primary">
+              <div class="file-zone-header">
+                <div>
+                  <div class="file-zone-title">待审报告资料包</div>
+                  <div class="file-zone-subtitle">评估报告、计算表、测算依据等本轮送审材料集中在这里维护。</div>
+                </div>
+                <el-upload v-if="canEditReportPackage" :auto-upload="false" :on-change="onReportSelected" :show-file-list="false">
+                  <el-button type="primary" plain>{{ isReplyFlow ? '上传修改后报告包' : '上传待审报告包' }}</el-button>
+                </el-upload>
+              </div>
+              <div class="review-upload-actions">
+                <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
+                <el-tag v-else-if="canCarryForwardApprovedFile" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
+                <el-tag v-else-if="isLockedCarryForwardStage" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
+                <el-tag v-else-if="isReportUploadLocked" type="warning" effect="plain">待审材料已锁定，不能删除或替换</el-tag>
+              </div>
+              <div class="file-row-list" v-if="currentReportPackageFiles.length">
+                <div v-for="file in currentReportPackageFiles" :key="file.id" class="file-row">
+                  <div class="file-row-main">
+                    <span class="file-name">{{ file.origin_file_name }}</span>
+                    <span class="file-meta">当前版本 · {{ formatFileSize(file.file_size) }}</span>
+                  </div>
+                  <el-space>
+                    <el-button type="primary" link @click="download(file)">下载</el-button>
+                    <el-button v-if="canDeleteReportPackageFile(file)" type="danger" link @click="onDeleteFile(file)">删除</el-button>
+                  </el-space>
+                </div>
+              </div>
+              <el-empty v-else description="暂无待审报告资料包" :image-size="48" />
+            </section>
+
+            <section class="file-zone-card file-zone-card--review">
+              <div class="file-zone-header">
+                <div>
+                  <div class="file-zone-title">审核意见 / 回复</div>
+                  <div class="file-zone-subtitle">审核老师上传意见，项目负责人上传回复，和待审报告资料包互不覆盖。</div>
+                </div>
+                <el-upload v-if="canUploadReplyFile" :auto-upload="false" :on-change="onReplySelected" :show-file-list="false">
+                  <el-button plain>上传审核意见回复</el-button>
+                </el-upload>
+              </div>
+              <el-alert
+                v-if="isReplyFlow"
+                type="warning"
+                :closable="false"
+                title="退回修改后重新送审时，审核意见回复文件或送审备注至少填写一项。"
+                show-icon
+              />
+              <div class="file-row-list" v-if="reviewCommunicationFiles.length">
+                <div v-for="file in reviewCommunicationFiles" :key="file.id" class="file-row">
+                  <div class="file-row-main">
+                    <span class="file-name">{{ file.origin_file_name }}</span>
+                    <span class="file-meta">{{ reviewFileTypeLabel(file) }} · {{ roundLabel(roundFromStage(file.business_stage) || reviewRound) }} · {{ formatFileSize(file.file_size) }}</span>
+                  </div>
+                  <el-space>
+                    <el-button type="primary" link @click="download(file)">下载</el-button>
+                    <el-button v-if="canDeleteReplyFile(file)" type="danger" link @click="onDeleteFile(file)">删除</el-button>
+                  </el-space>
+                </div>
+              </div>
+              <el-empty v-else description="暂无审核意见或回复文件" :image-size="48" />
+            </section>
           </div>
           <ReviewUploadRequirementBox v-if="showReviewRequirementBox" />
         </div>
@@ -168,6 +216,29 @@
         </el-form-item>
       </el-form>
     </template>
+
+    <el-dialog v-model="routingDialogVisible" :title="`转交${routingNextRoundLabel}`" width="520px" destroy-on-close>
+      <div class="routing-dialog-body">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="直接转交不会上传新文件，将沿用本轮审核通过的待审报告资料包。"
+        />
+        <el-form label-width="120px">
+          <el-form-item :label="`${routingNextRoundLabel}老师`" required>
+            <el-select v-model="routingReviewerUserId" placeholder="选择下一级审核老师" style="width: 100%" filterable>
+              <el-option v-for="u in routingUserOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="routingDialogVisible = false">稍后处理</el-button>
+        <el-button :loading="routingSubmitting" @click="routeApprovedToLeader">退回项目负责人选择</el-button>
+        <el-button type="primary" :disabled="!routingReviewerUserId" :loading="routingSubmitting" @click="routeApprovedToReviewer">直接转交</el-button>
+      </template>
+    </el-dialog>
 
     <template v-if="canRequestOwnerExternalAuditConfirm">
       <el-divider>外部审核确认</el-divider>
@@ -276,7 +347,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import { changeReviewAssignee, decideReview, listReviewCandidates, listReviews, recallRoutedReview, routeApprovedReview, submitReview, withdrawLatestReview, type ReviewCandidateItem, type ReviewRecordItem } from '@/api/reviews'
-import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
+import { deleteWorkOrderFile, downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import { useAuthStore } from '@/store/auth'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { updateWorkOrder } from '@/api/workorders'
@@ -325,6 +396,11 @@ const printRoomOptions = ref<UserItem[]>([])
 const records = ref<ReviewRecordItem[]>([])
 const files = ref<WorkOrderFileItem[]>([])
 const userOptions = ref<ReviewCandidateItem[]>([])
+const routingUserOptions = ref<ReviewCandidateItem[]>([])
+const routingDialogVisible = ref(false)
+const routingRound = ref<'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND'>('FIRST')
+const routingReviewerUserId = ref<number>()
+const routingSubmitting = ref(false)
 const loading = ref(false)
 
 const statusCode = computed(() => props.flowInfo?.current_work_order_status || '')
@@ -341,6 +417,8 @@ const isReviewerSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_FIRST_SEL
 const isLeaderSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))
 const isLeaderSubmitNextStage = computed(() => isLeaderSelectNextStage.value && isCurrentHandler.value)
 const isReportUploadLocked = computed(() => reusePreviousFile.value || isLockedCarryForwardStage.value || canCarryForwardApprovedFile.value)
+const canEditReportPackage = computed(() => canSubmitReview.value && !isReportUploadLocked.value && !showReviewerChangePanel.value)
+const canUploadReplyFile = computed(() => canSubmitReview.value && isReplyFlow.value && !showReviewerChangePanel.value)
 const canRecallRouting = computed(() => {
   if (!currentUserId.value) return false
   if (reviewRound.value === 'SECOND') return statusCode.value === 'SECOND_REVIEWING' && props.flowInfo?.first_reviewer_id === currentUserId.value
@@ -429,14 +507,27 @@ const showContractDraftDownload = computed(() => ['FIRST_REVIEWER', 'SECOND_REVI
 const showProjectSummary = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER', 'ADMIN'].some(role => props.userRoles.includes(role)))
 
 const reviewPackageFiles = computed(() => files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.business_stage === reviewStage(reviewRound.value)))
+const currentReportPackageFiles = computed(() => reviewPackageFiles.value.filter(file => file.is_current))
 const replyFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_REPLY' && file.business_stage === reviewStage(reviewRound.value)))
-const submitFiles = computed(() => isReplyFlow.value ? replyFiles.value : reviewPackageFiles.value)
+const currentReplyFiles = computed(() => replyFiles.value.filter(file => file.is_current))
+const submitFiles = computed(() => currentReportPackageFiles.value)
 const previousOpinionReferenceFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
 const opinionFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
+const reviewCommunicationFiles = computed(() => files.value
+  .filter(file => ['REVIEW_OPINION', 'REVIEW_REPLY'].includes(file.file_category) && file.business_stage.startsWith('REVIEW_') && file.is_current)
+  .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())
+)
 const formalReportFiles = computed(() => files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.business_stage === 'FORMAL_REPORT'))
 const contractDraftFiles = computed(() => files.value.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.business_stage === 'CONTRACT_DRAFT' && file.is_current))
 const finalContractFiles = computed(() => files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.business_stage === 'FINAL_CONTRACT_SCAN' && file.is_current))
 const showReviewRequirementBox = computed(() => !isReplyFlow.value && !showReviewerChangePanel.value)
+const routingNextRound = computed<ReviewRound>(() => {
+  if (routingRound.value === 'FIRST') return 'SECOND'
+  if (routingRound.value === 'SECOND') return 'THIRD'
+  if (routingRound.value === 'EXTERNAL_FIRST') return 'EXTERNAL_SECOND'
+  return 'EXTERNAL_THIRD'
+})
+const routingNextRoundLabel = computed(() => roundLabel(routingNextRound.value))
 const projectPartyIds = computed(() => {
   const ids = new Set<number>()
   if (props.flowInfo?.project?.project_leader_id) ids.add(props.flowInfo.project.project_leader_id)
@@ -447,7 +538,7 @@ const reviewStatusText = computed(() => {
   if (isReplyFlow.value) return `${roundLabel(reviewRound.value)}意见已返回等待回复`
   if (canCarryForwardApprovedFile.value) return '待提交审核'
   if (isSubmitStatus(statusCode.value)) {
-    return submitFiles.value.length ? '待提交审核' : '待上传文件'
+    return currentReportPackageFiles.value.length ? '待提交审核' : '待上传文件'
   }
   return REVIEW_STATUS_TEXT[statusCode.value] || '当前暂无报告送审任务'
 })
@@ -583,10 +674,16 @@ function filesForRecord(record: ReviewRecordItem) {
     return uploadedTime > previousTime && uploadedTime <= recordTime
   }
   if (record.action === 'SUBMIT') {
-    const category = hasEarlierReject(record) ? 'REVIEW_REPLY' : 'REPORT_ZIP'
-    return files.value.filter(file => file.file_category === category && file.business_stage === stage && inCurrentRecordWindow(file))
+    const categories = hasEarlierReject(record) ? ['REPORT_ZIP', 'REVIEW_REPLY'] : ['REPORT_ZIP']
+    return files.value.filter(file => categories.includes(file.file_category) && file.business_stage === stage && inCurrentRecordWindow(file))
   }
   return files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === stage && inCurrentRecordWindow(file))
+}
+
+function reviewFileTypeLabel(file: WorkOrderFileItem) {
+  if (file.file_category === 'REVIEW_OPINION') return '审核意见'
+  if (file.file_category === 'REVIEW_REPLY') return '意见回复'
+  return '附件'
 }
 
 function formatFileSize(size?: number | null) {
@@ -647,11 +744,23 @@ async function onReportSelected(file: UploadFile) {
   if (isReviewLocked.value) return ElMessage.warning(props.flowInfo?.review_submit_lock_reason || '报告送审暂不可办理')
   await uploadWorkOrderFile({
     work_order_id: props.workOrderId,
-    file_category: isReplyFlow.value ? 'REVIEW_REPLY' : 'REPORT_ZIP',
+    file_category: 'REPORT_ZIP',
     business_stage: reviewStage(reviewRound.value),
     file: file.raw
   })
-  ElMessage.success(isReplyFlow.value ? '审核意见回复已上传' : '待审报告已上传')
+  ElMessage.success('待审报告资料包已上传')
+  await loadFiles()
+}
+
+async function onReplySelected(file: UploadFile) {
+  if (!props.workOrderId || !file.raw) return
+  await uploadWorkOrderFile({
+    work_order_id: props.workOrderId,
+    file_category: 'REVIEW_REPLY',
+    business_stage: reviewStage(reviewRound.value),
+    file: file.raw
+  })
+  ElMessage.success('审核意见回复已上传')
   await loadFiles()
 }
 
@@ -707,7 +816,10 @@ async function onTransferPrintRoom() {
 async function onSubmit() {
   const targetReviewerId = isReplyFlow.value ? currentRoundReviewerId.value : reviewerUserId.value
   if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
-  if (requiresManualUploadBeforeSubmit.value) return ElMessage.warning(isReplyFlow.value ? '请先上传审核意见回复，或选择沿用上轮文件' : '请先上传待审报告')
+  if (requiresManualUploadBeforeSubmit.value) return ElMessage.warning('请先上传待审报告资料包')
+  if (isReplyFlow.value && !currentReplyFiles.value.length && !comment.value.trim()) {
+    return ElMessage.warning('退回修改后重新送审时，审核意见回复文件或送审备注至少填写一项')
+  }
   await submitReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, reviewer_user_id: targetReviewerId, comment: comment.value || undefined })
   ElMessage.success(isReplyFlow.value ? '审核意见回复已提交' : '提交审核成功')
   comment.value = ''
@@ -735,7 +847,7 @@ async function onSubmitWithReviewerChange() {
   if (!props.workOrderId) return
   const targetReviewerId = pendingReviewerChange.value?.reviewer_user_id || changeReviewerUserId.value
   if (!targetReviewerId) return ElMessage.warning('请选择新的审核老师')
-  if (!reusePreviousFile.value && !submitFiles.value.length) return ElMessage.warning('请重新上传文件，或选择沿用上轮文件')
+  if (!reusePreviousFile.value && !currentReportPackageFiles.value.length) return ElMessage.warning('请重新上传待审报告资料包，或选择沿用上轮文件')
   if (!pendingReviewerChange.value) {
     await changeReviewAssignee({
       work_order_id: props.workOrderId,
@@ -761,74 +873,72 @@ async function onSubmitWithReviewerChange() {
 
 async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
   if (!props.workOrderId) return
+  if (action === 'REJECT_RETURN' && !reviewComment.value.trim() && !opinionFiles.value.some(file => file.is_current)) {
+    return ElMessage.warning('返回修改时，审核意见文件或审核备注必须填写一项')
+  }
   await decideReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, action, comment: reviewComment.value || undefined })
   if (action === 'APPROVE' && ['FIRST', 'SECOND', 'EXTERNAL_FIRST', 'EXTERNAL_SECOND'].includes(reviewRound.value)) {
     const routedRound = reviewRound.value as 'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND'
-    const nextRoundLabel = reviewRound.value === 'FIRST'
-      ? '二审'
-      : reviewRound.value === 'SECOND'
-        ? '三审'
-        : reviewRound.value === 'EXTERNAL_FIRST'
-          ? '外审二级复核'
-          : '外审三级复核'
-    const routeConfirmText = reviewRound.value === 'FIRST'
-      ? '确认转交给选定人员进行二审吗？'
-      : reviewRound.value === 'SECOND'
-        ? '确认转交给选定人员进行三审吗？'
-        : reviewRound.value === 'EXTERNAL_FIRST'
-          ? '确认转交给固定外审二级复核人员吗？'
-          : '确认转交给固定外审三级复核人员吗？'
-    const returnLeaderText = reviewRound.value === 'FIRST'
-      ? '确认转交给项目负责人处理并选择二审老师吗？'
-      : reviewRound.value === 'SECOND'
-        ? '确认转交给项目负责人处理并选择三审老师吗？'
-        : reviewRound.value === 'EXTERNAL_FIRST'
-          ? '确认转交给项目负责人处理并继续推进外审二级复核吗？'
-          : '确认转交给项目负责人处理并继续推进外审三级复核吗？'
-    try {
-      await ElMessageBox.confirm(
-        routeConfirmText,
-        `转交${nextRoundLabel}`,
-        {
-          confirmButtonText: '直接转交',
-          cancelButtonText: '转交项目负责人',
-          distinguishCancelAndClose: true,
-          type: 'warning'
-        }
-      )
-      await routeApprovedReview({
-        work_order_id: props.workOrderId,
-        review_round: routedRound,
-        route_mode: 'REVIEWER_SELECT_NEXT'
-      })
-      ElMessage.success(`已转交${nextRoundLabel}`)
-    } catch (error) {
-      if (error === 'cancel') {
-        await ElMessageBox.confirm(
-          returnLeaderText,
-          '转交项目负责人',
-          {
-            confirmButtonText: '确认转交',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }
-        )
-        await routeApprovedReview({
-          work_order_id: props.workOrderId,
-          review_round: routedRound,
-          route_mode: 'RETURN_TO_PROJECT_LEADER'
-        })
-        ElMessage.success('已转交项目负责人')
-      } else if (error !== 'close') {
-        throw error
-      }
-    }
+    await openRoutingDialog(routedRound)
   } else {
     ElMessage.success(action === 'APPROVE' ? '审核通过' : '已退回修改')
   }
   reviewComment.value = ''
   await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
   emit('changed')
+}
+
+async function openRoutingDialog(round: 'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND') {
+  if (!props.workOrderId) return
+  routingRound.value = round
+  routingReviewerUserId.value = undefined
+  routingUserOptions.value = []
+  const nextRound = round === 'FIRST' ? 'SECOND' : round === 'SECOND' ? 'THIRD' : round === 'EXTERNAL_FIRST' ? 'EXTERNAL_SECOND' : 'EXTERNAL_THIRD'
+  routingUserOptions.value = (await listReviewCandidates(props.workOrderId, nextRound)).items.filter(user => {
+    if (projectPartyIds.value.has(user.user_id)) return false
+    if (nextRound === 'SECOND' && [props.flowInfo?.first_reviewer_id, props.flowInfo?.third_reviewer_id].includes(user.user_id)) return false
+    if (nextRound === 'THIRD' && [props.flowInfo?.first_reviewer_id, props.flowInfo?.second_reviewer_id].includes(user.user_id)) return false
+    return true
+  })
+  routingReviewerUserId.value = routingUserOptions.value[0]?.user_id
+  routingDialogVisible.value = true
+}
+
+async function routeApprovedToReviewer() {
+  if (!props.workOrderId || !routingReviewerUserId.value) return ElMessage.warning(`请选择${routingNextRoundLabel.value}老师`)
+  routingSubmitting.value = true
+  try {
+    await routeApprovedReview({
+      work_order_id: props.workOrderId,
+      review_round: routingRound.value,
+      route_mode: 'REVIEWER_SELECT_NEXT',
+      reviewer_user_id: routingReviewerUserId.value
+    })
+    ElMessage.success(`已直接转交${routingNextRoundLabel.value}`)
+    routingDialogVisible.value = false
+    await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
+    emit('changed')
+  } finally {
+    routingSubmitting.value = false
+  }
+}
+
+async function routeApprovedToLeader() {
+  if (!props.workOrderId) return
+  routingSubmitting.value = true
+  try {
+    await routeApprovedReview({
+      work_order_id: props.workOrderId,
+      review_round: routingRound.value,
+      route_mode: 'RETURN_TO_PROJECT_LEADER'
+    })
+    ElMessage.success('已转交项目负责人选择下一轮审核老师')
+    routingDialogVisible.value = false
+    await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
+    emit('changed')
+  } finally {
+    routingSubmitting.value = false
+  }
 }
 
 async function onRequestOwnerExternalAuditConfirm() {
@@ -881,6 +991,25 @@ async function onRecallRouting() {
 
 function download(file: WorkOrderFileItem) {
   downloadWorkOrderFile(file.id, file.origin_file_name)
+}
+
+function canDeleteReportPackageFile(file: WorkOrderFileItem) {
+  return canEditReportPackage.value && file.is_current && !file.locked
+}
+
+function canDeleteReplyFile(file: WorkOrderFileItem) {
+  return canUploadReplyFile.value && file.file_category === 'REVIEW_REPLY' && file.is_current && !file.locked
+}
+
+async function onDeleteFile(file: WorkOrderFileItem) {
+  await ElMessageBox.confirm(`确认删除当前文件「${file.origin_file_name}」吗？历史审核记录仍会保留。`, '删除文件', {
+    type: 'warning',
+    confirmButtonText: '确认删除',
+    cancelButtonText: '取消'
+  })
+  await deleteWorkOrderFile(file.id)
+  ElMessage.success('文件已删除')
+  await loadFiles()
 }
 
 function canWithdrawRow(row: ReviewRow) {
@@ -941,7 +1070,7 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   flex: 1;
   min-width: 260px;
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .review-upload-actions {
@@ -949,6 +1078,83 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.file-zone-card {
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #f8fbff 0%, #ffffff 68%);
+  box-shadow: 0 8px 22px rgba(21, 78, 128, 0.06);
+}
+
+.file-zone-card--primary {
+  border-left: 4px solid #1f5f99;
+}
+
+.file-zone-card--review {
+  border-left: 4px solid #67a14b;
+}
+
+.file-zone-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.file-zone-title {
+  color: #0c3157;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.file-zone-subtitle {
+  color: #6b7d90;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.file-row-list {
+  display: grid;
+  gap: 8px;
+}
+
+.file-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid #e4edf6;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.file-row-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.file-name {
+  color: #163b5c;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-meta {
+  color: #8090a0;
+  font-size: 12px;
+}
+
+.routing-dialog-body {
+  display: grid;
+  gap: 16px;
 }
 
 .attachment-list {
@@ -997,6 +1203,12 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   .review-upload-main {
     width: 100%;
     min-width: 100%;
+  }
+
+  .file-zone-header,
+  .file-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

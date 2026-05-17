@@ -274,6 +274,47 @@ def list_work_order_files(
     return WorkOrderFileListResponse(items=[_to_file_response(db, item) for item in rows])
 
 
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_work_order_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(
+        require_roles(
+            "ADMIN",
+            "PROJECT_LEADER",
+            "PROJECT_MEMBER",
+            "FIRST_REVIEWER",
+            "SECOND_REVIEWER",
+            "THIRD_REVIEWER",
+        )
+    ),
+) -> None:
+    row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    if row.locked:
+        raise HTTPException(status_code=400, detail="该文件已锁定，不允许删除")
+    if not row.is_current:
+        raise HTTPException(status_code=400, detail="该文件已不是当前版本")
+
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == row.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    _ensure_review_package_unlocked(work_order, row)
+
+    if row.file_category in {"REPORT_ZIP", "REVIEW_REPLY"}:
+        _ensure_project_signoff_operator(db, work_order, current_user)
+    elif row.file_category == "REVIEW_OPINION":
+        if row.uploaded_by != current_user.id and not any(item.role.code == "ADMIN" for item in current_user.roles):
+            raise HTTPException(status_code=403, detail="仅上传人可删除审核意见附件")
+    else:
+        raise HTTPException(status_code=400, detail="该类型文件暂不支持在此删除")
+
+    row.is_current = False
+    db.commit()
+
+
 @router.post("/{file_id}/replace", response_model=WorkOrderFileResponse)
 def replace_work_order_file(
     file_id: int,

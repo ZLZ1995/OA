@@ -63,6 +63,32 @@ def _seed_basic(db: Session) -> tuple[User, User, Project, WorkOrder]:
     return leader, reviewer, project, work_order
 
 
+def _add_review_file(
+    db: Session,
+    work_order: WorkOrder,
+    *,
+    category: str = "REPORT_ZIP",
+    round_name: str = "FIRST",
+    uploaded_by: int | None = None,
+    filename: str = "report.zip",
+) -> WorkOrderFile:
+    row = WorkOrderFile(
+        work_order_id=work_order.id,
+        file_category=category,
+        business_stage=f"REVIEW_{round_name}",
+        version_no=1,
+        is_current=True,
+        origin_file_name=filename,
+        storage_key=filename,
+        file_size=100,
+        uploaded_by=uploaded_by or work_order.project_leader_id,
+        uploaded_at=work_order.created_at,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
 def test_submit_review_rejects_reviewer_without_round_role() -> None:
     from app.api.v1.reviews import submit_review
 
@@ -120,6 +146,7 @@ def test_submit_review_accepts_reviewer_with_round_role() -> None:
     assert first_role is not None
     db.add(UserRole(user_id=reviewer.id, role_id=first_role.id))
     db.commit()
+    _add_review_file(db, work_order, uploaded_by=leader.id)
 
     payload = ReviewSubmitRequest(
         work_order_id=work_order.id,
@@ -145,6 +172,7 @@ def test_rejected_review_can_be_resubmitted_to_same_round() -> None:
     work_order.current_handler_user_id = leader.id
     work_order.first_reviewer_id = reviewer.id
     db.commit()
+    _add_review_file(db, work_order, uploaded_by=leader.id, filename="report-v2.zip")
 
     result = submit_review(
         payload=ReviewSubmitRequest(
@@ -191,6 +219,7 @@ def test_rejected_review_assignee_change_takes_effect_on_resubmit() -> None:
         )
     )
     db.commit()
+    _add_review_file(db, work_order, uploaded_by=leader.id, filename="report-v2.zip")
 
     record = change_reviewer_after_reject(
         payload=ReviewAssigneeChangeRequest(
@@ -254,6 +283,7 @@ def test_pending_reviewer_change_does_not_override_plain_resubmit() -> None:
         )
     )
     db.commit()
+    _add_review_file(db, work_order, uploaded_by=leader.id, filename="report-v2.zip")
 
     change_reviewer_after_reject(
         payload=ReviewAssigneeChangeRequest(
@@ -763,3 +793,82 @@ def test_recall_routed_second_review_returns_to_first_reviewer_selection_state()
     assert result.action == "CHANGE_REVIEWER"
     assert work_order.current_status == "FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND"
     assert work_order.current_handler_user_id == first_reviewer.id
+
+
+def test_reject_return_requires_opinion_file_or_comment() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    _, reviewer, _, work_order = _seed_basic(db)
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        decide_review(
+            payload=ReviewDecisionRequest(work_order_id=work_order.id, review_round="FIRST", action="REJECT_RETURN"),
+            db=db,
+            current_user=reviewer,
+            _={"FIRST_REVIEWER"},
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "审核意见文件或审核备注" in str(exc_info.value.detail)
+
+
+def test_reject_return_with_opinion_file_generates_default_comment() -> None:
+    from app.api.v1.reviews import decide_review
+
+    db = _build_session()
+    _, reviewer, _, work_order = _seed_basic(db)
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    db.commit()
+    _add_review_file(db, work_order, category="REVIEW_OPINION", uploaded_by=reviewer.id, filename="first-opinion.docx")
+
+    result = decide_review(
+        payload=ReviewDecisionRequest(work_order_id=work_order.id, review_round="FIRST", action="REJECT_RETURN"),
+        db=db,
+        current_user=reviewer,
+        _={"FIRST_REVIEWER"},
+    )
+
+    assert result.comment == "FIRST审核意见返回修改"
+
+
+def test_rejected_resubmit_requires_reply_file_or_comment() -> None:
+    from app.api.v1.reviews import submit_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    first_role = db.query(Role).filter(Role.code == "FIRST_REVIEWER").first()
+    assert first_role is not None
+    db.add(UserRole(user_id=reviewer.id, role_id=first_role.id))
+    work_order.current_status = "FIRST_REVIEW_REJECTED"
+    work_order.current_handler_user_id = leader.id
+    work_order.first_reviewer_id = reviewer.id
+    db.add(
+        ReviewRecord(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            reviewer_user_id=reviewer.id,
+            action="REJECT_RETURN",
+            comment="退回",
+            acted_at=work_order.created_at,
+        )
+    )
+    db.commit()
+    _add_review_file(db, work_order, uploaded_by=leader.id, filename="report-v2.zip")
+
+    with pytest.raises(HTTPException) as exc_info:
+        submit_review(
+            payload=ReviewSubmitRequest(work_order_id=work_order.id, review_round="FIRST", reviewer_user_id=reviewer.id),
+            db=db,
+            current_user=leader,
+            role_codes={"PROJECT_LEADER"},
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "审核意见回复文件或送审备注" in str(exc_info.value.detail)
