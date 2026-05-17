@@ -284,6 +284,26 @@ def _has_current_round_file(db: Session, work_order_id: int, review_round: str, 
     )
 
 
+def _has_round_file_after(
+    db: Session,
+    work_order_id: int,
+    review_round: str,
+    file_categories: set[str],
+    after_time: datetime,
+) -> bool:
+    return (
+        db.query(WorkOrderFile.id)
+        .filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.business_stage == f"REVIEW_{review_round}",
+            WorkOrderFile.file_category.in_(file_categories),
+            WorkOrderFile.uploaded_at > after_time,
+        )
+        .first()
+        is not None
+    )
+
+
 def _latest_rejection_record(db: Session, work_order_id: int, review_round: str) -> ReviewRecord | None:
     return (
         db.query(ReviewRecord)
@@ -697,7 +717,18 @@ def _submit_review_impl(
 
     latest_rejection = _latest_rejection_record(db, work_order.id, payload.review_round)
     if latest_rejection and from_status == ROUND_REJECTED_STATUS[payload.review_round]:
-        has_reply_file = _has_current_round_file(db, work_order.id, payload.review_round, "REVIEW_REPLY")
+        reply_categories = (
+            {"EXTERNAL_AUDIT_OPINION", "EXTERNAL_AUDIT_REPLY"}
+            if payload.review_round.startswith("EXTERNAL_")
+            else {"REVIEW_REPLY"}
+        )
+        has_reply_file = _has_round_file_after(
+            db,
+            work_order.id,
+            payload.review_round,
+            reply_categories,
+            latest_rejection.acted_at,
+        )
         if not has_reply_file and not (payload.comment and payload.comment.strip()):
             raise HTTPException(status_code=400, detail="退回修改后重新送审时，审核意见回复文件或送审备注必须填写一项")
 

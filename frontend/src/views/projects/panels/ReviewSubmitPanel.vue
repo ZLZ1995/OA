@@ -159,7 +159,7 @@
                   <div class="file-zone-title">外审意见 / 复核意见</div>
                   <div class="file-zone-subtitle">上传外部审核意见、外部复核意见等支撑文件，随外部复核轮次流转。</div>
                 </div>
-                <el-upload :auto-upload="false" :on-change="onExternalAuditOpinionSelected" :show-file-list="false">
+                <el-upload v-if="canUploadExternalAuditOpinionFile" :auto-upload="false" :on-change="onExternalAuditOpinionSelected" :show-file-list="false">
                   <el-button type="primary" plain>{{ externalAuditUploadButtonText }}</el-button>
                 </el-upload>
               </div>
@@ -543,7 +543,12 @@ const canOwnerChooseExternalAudit = computed(() =>
   isReviewSubmitter.value
 )
 const isExternalReviewRound = computed(() => reviewRound.value.startsWith('EXTERNAL_'))
-const showExternalAuditOpinionPanel = computed(() => canSubmitReview.value && isExternalReviewRound.value && !showReviewerChangePanel.value)
+const canUploadExternalAuditOpinionFile = computed(() => canSubmitReview.value && isExternalReviewRound.value && !showReviewerChangePanel.value)
+const showExternalAuditOpinionPanel = computed(() =>
+  isExternalReviewRound.value &&
+  !showReviewerChangePanel.value &&
+  (canSubmitReview.value || canReview.value || externalAuditOpinionFiles.value.length > 0)
+)
 const showContractDraftDownload = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].some(role => props.userRoles.includes(role)))
 const showProjectSummary = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER', 'ADMIN'].some(role => props.userRoles.includes(role)))
 
@@ -570,10 +575,25 @@ const previousOpinionReferenceFiles = computed(() => {
 })
 const opinionFiles = computed(() => files.value.filter(file => file.file_category === reviewOpinionCategory.value && file.business_stage === reviewStage(reviewRound.value)))
 const externalAuditFileCategories = ['EXTERNAL_AUDIT_OPINION', 'EXTERNAL_AUDIT_REPLY', 'EXTERNAL_REVIEW_OPINION'] as const
+const ownerExternalReplyCategories = ['EXTERNAL_AUDIT_OPINION', 'EXTERNAL_AUDIT_REPLY'] as const
 const externalAuditOpinionFiles = computed(() => files.value
   .filter(file => externalAuditFileCategories.includes(file.file_category as typeof externalAuditFileCategories[number]) && file.business_stage === reviewStage(reviewRound.value))
   .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())
 )
+const latestRoundRejectionTime = computed(() => {
+  const latestRejection = records.value
+    .filter(record => record.review_round === reviewRound.value && record.action === 'REJECT_RETURN')
+    .sort((a, b) => new Date(b.acted_at).getTime() - new Date(a.acted_at).getTime())[0]
+  return latestRejection ? new Date(latestRejection.acted_at).getTime() : 0
+})
+const currentSubmitReplyFiles = computed(() => {
+  if (!isExternalReviewRound.value) return currentReplyFiles.value
+  return files.value.filter(file =>
+    ownerExternalReplyCategories.includes(file.file_category as typeof ownerExternalReplyCategories[number]) &&
+    file.business_stage === reviewStage(reviewRound.value) &&
+    new Date(file.uploaded_at).getTime() > latestRoundRejectionTime.value
+  )
+})
 const externalAuditUploadCategory = computed(() => isReplyFlow.value ? 'EXTERNAL_AUDIT_REPLY' : 'EXTERNAL_AUDIT_OPINION')
 const externalAuditUploadButtonText = computed(() => isReplyFlow.value ? '上传外审意见回复' : '上传外审/复核意见')
 const multiCurrentReviewCommunicationCategories = ['EXTERNAL_AUDIT_OPINION', 'EXTERNAL_AUDIT_REPLY', 'EXTERNAL_REVIEW_OPINION'] as const
@@ -965,7 +985,7 @@ async function onSubmit() {
     return
   }
   if (requiresManualUploadBeforeSubmit.value) return ElMessage.warning('请先上传待审报告资料包')
-  if (isReplyFlow.value && !currentReplyFiles.value.length && !comment.value.trim()) {
+  if (isReplyFlow.value && !currentSubmitReplyFiles.value.length && !comment.value.trim()) {
     return ElMessage.warning('退回修改后重新送审时，审核意见回复文件或送审备注至少填写一项')
   }
   await submitReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, reviewer_user_id: targetReviewerId, comment: comment.value || undefined })
