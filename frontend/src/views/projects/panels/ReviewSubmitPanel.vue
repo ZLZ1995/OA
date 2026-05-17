@@ -37,6 +37,9 @@
           <el-option label="一审" value="FIRST" />
           <el-option label="二审" value="SECOND" />
           <el-option label="三审" value="THIRD" />
+          <el-option label="外部一审复核" value="EXTERNAL_FIRST" />
+          <el-option label="外部二审复核" value="EXTERNAL_SECOND" />
+          <el-option label="外部三审复核" value="EXTERNAL_THIRD" />
         </el-select>
       </el-form-item>
       <el-form-item label="审核老师" v-if="canSubmitReview && !isReplyFlow">
@@ -145,7 +148,30 @@
               <el-empty v-else description="暂无审核意见或回复文件" :image-size="48" />
             </section>
           </div>
-          <ReviewUploadRequirementBox v-if="showReviewRequirementBox" />
+          <div class="review-upload-side">
+            <ReviewUploadRequirementBox v-if="showReviewRequirementBox" />
+            <section v-if="showExternalAuditOpinionPanel" class="file-zone-card file-zone-card--external">
+              <div class="file-zone-header">
+                <div>
+                  <div class="file-zone-title">外审意见 / 复核意见</div>
+                  <div class="file-zone-subtitle">上传外部审核意见、外部复核意见等支撑文件，随外部复核轮次流转。</div>
+                </div>
+                <el-upload :auto-upload="false" :on-change="onExternalAuditOpinionSelected" :show-file-list="false">
+                  <el-button type="primary" plain>上传外审/复核意见</el-button>
+                </el-upload>
+              </div>
+              <div class="file-row-list" v-if="externalAuditOpinionFiles.length">
+                <div v-for="file in externalAuditOpinionFiles" :key="file.id" class="file-row">
+                  <div class="file-row-main">
+                    <span class="file-name">{{ file.origin_file_name }}</span>
+                    <span class="file-meta">外审/复核意见 · {{ roundLabel(roundFromStage(file.business_stage) || reviewRound) }} · {{ formatFileSize(file.file_size) }}</span>
+                  </div>
+                  <el-button type="primary" link @click="download(file)">下载</el-button>
+                </div>
+              </div>
+              <el-empty v-else description="暂无外审意见或复核意见文件" :image-size="48" />
+            </section>
+          </div>
         </div>
       </el-form-item>
       <el-form-item label="送审备注" v-if="canSubmitReview && !showReviewerChangePanel">
@@ -504,6 +530,8 @@ const canOwnerChooseExternalAudit = computed(() =>
   statusCode.value === 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM' &&
   isReviewSubmitter.value
 )
+const isExternalReviewRound = computed(() => reviewRound.value.startsWith('EXTERNAL_'))
+const showExternalAuditOpinionPanel = computed(() => canSubmitReview.value && isExternalReviewRound.value && !showReviewerChangePanel.value)
 const showContractDraftDownload = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].some(role => props.userRoles.includes(role)))
 const showProjectSummary = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER', 'ADMIN'].some(role => props.userRoles.includes(role)))
 
@@ -528,8 +556,12 @@ const previousOpinionReferenceFiles = computed(() => {
   ))
 })
 const opinionFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
+const externalAuditOpinionFiles = computed(() => files.value
+  .filter(file => file.file_category === 'EXTERNAL_AUDIT_OPINION' && file.business_stage === reviewStage(reviewRound.value) && file.is_current)
+  .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())
+)
 const reviewCommunicationFiles = computed(() => files.value
-  .filter(file => ['REVIEW_OPINION', 'REVIEW_REPLY'].includes(file.file_category) && file.business_stage.startsWith('REVIEW_') && file.is_current)
+  .filter(file => ['REVIEW_OPINION', 'REVIEW_REPLY', 'EXTERNAL_AUDIT_OPINION'].includes(file.file_category) && file.business_stage.startsWith('REVIEW_') && file.is_current)
   .sort((a, b) => new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime())
 )
 const visibleReviewCommunicationFiles = computed(() => dedupeReviewCommunicationFiles(reviewCommunicationFiles.value)
@@ -622,11 +654,22 @@ const REVIEW_STATUS_TEXT: Record<string, string> = {
   WAIT_THIRD_REVIEW_SUBMIT: '已确定三审老师，待提交三审',
   THIRD_REVIEWING: '三审审核中',
   THIRD_REVIEW_REJECTED: '三审意见已返回等待回复',
+  WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT: '待上传外部一审复核资料',
+  EXTERNAL_FIRST_REVIEWING: '外部一审复核中',
+  EXTERNAL_FIRST_REJECTED: '外部一审复核意见已返回等待回复',
+  EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND: '外部一审复核已通过，待决定外部二审复核流向',
+  WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT: '已确定外部二审复核老师，待提交外部二审复核',
+  EXTERNAL_SECOND_REVIEWING: '外部二审复核中',
+  EXTERNAL_SECOND_REJECTED: '外部二审复核意见已返回等待回复',
+  EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD: '外部二审复核已通过，待决定外部三审复核流向',
+  WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT: '已确定外部三审复核老师，待提交外部三审复核',
+  EXTERNAL_THIRD_REVIEWING: '外部三审复核中',
+  EXTERNAL_THIRD_REJECTED: '外部三审复核意见已返回等待回复',
   THIRD_APPROVED_WAIT_PRINTROOM: '三审已通过，待补充正式报告与合同扫描件'
 }
 
 function isSubmitStatus(status: string) {
-  return ['CONTRACT_APPROVED', 'WAIT_FIRST_REVIEW_SUBMIT', 'FIRST_REVIEW_REJECTED', 'FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND', 'WAIT_SECOND_REVIEW_SUBMIT', 'SECOND_REVIEW_REJECTED', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD', 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD', 'WAIT_THIRD_REVIEW_SUBMIT', 'THIRD_REVIEW_REJECTED'].includes(status)
+  return ['CONTRACT_APPROVED', 'WAIT_FIRST_REVIEW_SUBMIT', 'FIRST_REVIEW_REJECTED', 'FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND', 'WAIT_SECOND_REVIEW_SUBMIT', 'SECOND_REVIEW_REJECTED', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD', 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD', 'WAIT_THIRD_REVIEW_SUBMIT', 'THIRD_REVIEW_REJECTED', 'WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT', 'EXTERNAL_FIRST_REJECTED', 'EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'EXTERNAL_SECOND_REJECTED', 'EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT', 'EXTERNAL_THIRD_REJECTED'].includes(status)
 }
 
 function syncRoundWithStatus() {
@@ -718,6 +761,7 @@ function filesForRecord(record: ReviewRecordItem) {
   }
   if (record.action === 'SUBMIT') {
     const categories = hasEarlierReject(record) ? ['REPORT_ZIP', 'REVIEW_REPLY'] : ['REPORT_ZIP']
+    if (record.review_round.startsWith('EXTERNAL_')) categories.push('EXTERNAL_AUDIT_OPINION')
     return files.value.filter(file => categories.includes(file.file_category) && file.business_stage === stage && inCurrentRecordWindow(file))
   }
   return files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === stage && inCurrentRecordWindow(file))
@@ -726,6 +770,7 @@ function filesForRecord(record: ReviewRecordItem) {
 function reviewFileTypeLabel(file: WorkOrderFileItem) {
   if (file.file_category === 'REVIEW_OPINION') return '审核意见'
   if (file.file_category === 'REVIEW_REPLY') return '意见回复'
+  if (file.file_category === 'EXTERNAL_AUDIT_OPINION') return '外审/复核意见'
   return '附件'
 }
 
@@ -804,6 +849,18 @@ async function onReplySelected(file: UploadFile) {
     file: file.raw
   })
   ElMessage.success('审核意见回复已上传')
+  await loadFiles()
+}
+
+async function onExternalAuditOpinionSelected(file: UploadFile) {
+  if (!props.workOrderId || !file.raw) return
+  await uploadWorkOrderFile({
+    work_order_id: props.workOrderId,
+    file_category: 'EXTERNAL_AUDIT_OPINION',
+    business_stage: reviewStage(reviewRound.value),
+    file: file.raw
+  })
+  ElMessage.success('外审意见/复核意见文件已上传')
   await loadFiles()
 }
 
@@ -1144,6 +1201,12 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   gap: 14px;
 }
 
+.review-upload-side {
+  width: 362px;
+  display: grid;
+  gap: 14px;
+}
+
 .review-upload-actions {
   display: flex;
   align-items: center;
@@ -1165,6 +1228,10 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 
 .file-zone-card--review {
   border-left: 4px solid #67a14b;
+}
+
+.file-zone-card--external {
+  border-left: 4px solid #d45b2c;
 }
 
 .file-zone-header {
@@ -1274,6 +1341,10 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   .review-upload-main {
     width: 100%;
     min-width: 100%;
+  }
+
+  .review-upload-side {
+    width: 100%;
   }
 
   .file-zone-header,

@@ -101,6 +101,7 @@ const records = ref<(ContractReviewRecordItem & { actionLabel: string })[]>([])
 const contractFiles = ref<WorkOrderFileItem[]>([])
 const reviewAttachment = ref<WorkOrderFileItem | null>(null)
 const reviewComment = ref('')
+const currentSubmitRecord = computed(() => records.value.find(item => item.action_type === 'SUBMIT_CONTRACT'))
 
 const canReview = computed(() => {
   const currentUserId = auth.user?.id
@@ -156,7 +157,7 @@ async function onAttachmentSelected(file: UploadFile) {
 }
 
 async function onApprove() {
-  const submitRecord = records.value.find(item => item.action_type === 'SUBMIT_CONTRACT')
+  const submitRecord = currentSubmitRecord.value
   if (!submitRecord) return ElMessage.warning('未找到待处理的合同初稿提交记录')
   await approveContractReview(submitRecord.id, {
     comment: reviewComment.value || undefined,
@@ -169,7 +170,7 @@ async function onApprove() {
 }
 
 async function onReject() {
-  const submitRecord = records.value.find(item => item.action_type === 'SUBMIT_CONTRACT')
+  const submitRecord = currentSubmitRecord.value
   if (!submitRecord) return ElMessage.warning('未找到待处理的合同初稿提交记录')
   await rejectContractReview(submitRecord.id, {
     comment: reviewComment.value || undefined,

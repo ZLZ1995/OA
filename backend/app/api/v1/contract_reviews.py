@@ -237,7 +237,7 @@ def approve_contract_review(
         operator_user_id=current_user.id,
         reviewer_user_id=current_user.id,
         comment=payload.comment or "合同审核通过",
-        contract_file_id=_get_current_contract_file(db, work_order.id).id if _get_current_contract_file(db, work_order.id) else None,
+        contract_file_id=record.contract_file_id,
         review_attachment_file_id=payload.review_attachment_file_id,
     )
     db.add(approve_record)
@@ -301,7 +301,7 @@ def reject_contract_review(
         operator_user_id=current_user.id,
         reviewer_user_id=current_user.id,
         comment=payload.comment or "合同退回修改",
-        contract_file_id=_get_current_contract_file(db, work_order.id).id if _get_current_contract_file(db, work_order.id) else None,
+        contract_file_id=record.contract_file_id,
         review_attachment_file_id=payload.review_attachment_file_id,
     )
     db.add(reject_record)

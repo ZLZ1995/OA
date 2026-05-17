@@ -74,7 +74,6 @@ import { ElMessage, type UploadFile } from 'element-plus'
 import {
   completeContractUpload,
   listWorkOrderFiles,
-  replaceWorkOrderFile,
   uploadWorkOrderFile,
   downloadWorkOrderFile,
   type WorkOrderFileItem
@@ -142,8 +141,14 @@ async function onSelect(file: UploadFile) {
 }
 
 async function onReplace(row: WorkOrderFileItem, file: File) {
-  await replaceWorkOrderFile(row.id, file)
-  ElMessage.success('合同初稿文件已替换')
+  if (!props.workOrderId) return ElMessage.warning('当前项目暂无关联工单，无法上传合同初稿')
+  await uploadWorkOrderFile({
+    work_order_id: props.workOrderId,
+    file_category: 'CONTRACT_DRAFT',
+    business_stage: 'CONTRACT_DRAFT',
+    file,
+  })
+  ElMessage.success('合同初稿新版本已上传')
   await load()
   emit('changed')
 }
