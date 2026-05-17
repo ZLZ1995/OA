@@ -213,6 +213,7 @@ def upload_file(
     next_version = 1 if not latest else latest.version_no + 1
 
     single_current_stage_categories = {FORMAL_REPORT_FILE_CATEGORY, FINAL_CONTRACT_SCAN_FILE_CATEGORY}
+    append_only_categories = {"EXTERNAL_AUDIT_OPINION", "EXTERNAL_AUDIT_REPLY", "EXTERNAL_REVIEW_OPINION"}
     current_filter = [
         WorkOrderFile.work_order_id == work_order_id,
         WorkOrderFile.file_category == file_category,
@@ -221,11 +222,12 @@ def upload_file(
     if file_category not in single_current_stage_categories:
         current_filter.append(WorkOrderFile.business_stage == business_stage)
 
-    db.query(WorkOrderFile).filter(
-        and_(
-            *current_filter,
-        )
-    ).update({"is_current": False})
+    if file_category not in append_only_categories:
+        db.query(WorkOrderFile).filter(
+            and_(
+                *current_filter,
+            )
+        ).update({"is_current": False})
 
     storage_key, file_size = save_upload_file(upload)
     row = WorkOrderFile(

@@ -160,7 +160,7 @@
                   <div class="file-zone-subtitle">上传外部审核意见、外部复核意见等支撑文件，随外部复核轮次流转。</div>
                 </div>
                 <el-upload :auto-upload="false" :on-change="onExternalAuditOpinionSelected" :show-file-list="false">
-                  <el-button type="primary" plain>上传外审/复核意见</el-button>
+                  <el-button type="primary" plain>{{ externalAuditUploadButtonText }}</el-button>
                 </el-upload>
               </div>
               <div class="file-row-list" v-if="externalAuditOpinionFiles.length">
@@ -559,21 +559,30 @@ const previousReviewRound = computed<ReviewRound | undefined>(() => {
   if (reviewRound.value === 'EXTERNAL_THIRD') return 'EXTERNAL_SECOND'
   return undefined
 })
+const reviewOpinionCategory = computed(() => isExternalReviewRound.value ? 'EXTERNAL_REVIEW_OPINION' : 'REVIEW_OPINION')
 const previousOpinionReferenceFiles = computed(() => {
   if (!previousReviewRound.value) return []
   return dedupeReviewCommunicationFiles(files.value.filter(file =>
-    file.file_category === 'REVIEW_OPINION' &&
+    file.file_category === (previousReviewRound.value?.startsWith('EXTERNAL_') ? 'EXTERNAL_REVIEW_OPINION' : 'REVIEW_OPINION') &&
     file.business_stage === reviewStage(previousReviewRound.value as ReviewRound) &&
     file.is_current
   ))
 })
-const opinionFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === reviewStage(reviewRound.value)))
+const opinionFiles = computed(() => files.value.filter(file => file.file_category === reviewOpinionCategory.value && file.business_stage === reviewStage(reviewRound.value)))
+const externalAuditFileCategories = ['EXTERNAL_AUDIT_OPINION', 'EXTERNAL_AUDIT_REPLY', 'EXTERNAL_REVIEW_OPINION'] as const
 const externalAuditOpinionFiles = computed(() => files.value
-  .filter(file => file.file_category === 'EXTERNAL_AUDIT_OPINION' && file.business_stage === reviewStage(reviewRound.value) && file.is_current)
+  .filter(file => externalAuditFileCategories.includes(file.file_category as typeof externalAuditFileCategories[number]) && file.business_stage === reviewStage(reviewRound.value))
   .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())
 )
+const externalAuditUploadCategory = computed(() => isReplyFlow.value ? 'EXTERNAL_AUDIT_REPLY' : 'EXTERNAL_AUDIT_OPINION')
+const externalAuditUploadButtonText = computed(() => isReplyFlow.value ? '上传外审意见回复' : '上传外审/复核意见')
+const multiCurrentReviewCommunicationCategories = ['EXTERNAL_AUDIT_OPINION', 'EXTERNAL_AUDIT_REPLY', 'EXTERNAL_REVIEW_OPINION'] as const
 const reviewCommunicationFiles = computed(() => files.value
-  .filter(file => ['REVIEW_OPINION', 'REVIEW_REPLY', 'EXTERNAL_AUDIT_OPINION'].includes(file.file_category) && file.business_stage.startsWith('REVIEW_') && file.is_current)
+  .filter(file =>
+    ['REVIEW_OPINION', 'REVIEW_REPLY', 'EXTERNAL_AUDIT_OPINION', 'EXTERNAL_AUDIT_REPLY', 'EXTERNAL_REVIEW_OPINION'].includes(file.file_category) &&
+    file.business_stage.startsWith('REVIEW_') &&
+    (file.is_current || multiCurrentReviewCommunicationCategories.includes(file.file_category as typeof multiCurrentReviewCommunicationCategories[number]))
+  )
   .sort((a, b) => new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime())
 )
 const visibleReviewCommunicationFiles = computed(() => dedupeReviewCommunicationFiles(reviewCommunicationFiles.value)
@@ -778,16 +787,19 @@ function filesForRecord(record: ReviewRecordItem) {
   }
   if (record.action === 'SUBMIT') {
     const categories = hasEarlierReject(record) ? ['REPORT_ZIP', 'REVIEW_REPLY'] : ['REPORT_ZIP']
-    if (record.review_round.startsWith('EXTERNAL_')) categories.push('EXTERNAL_AUDIT_OPINION')
+    if (record.review_round.startsWith('EXTERNAL_')) categories.push('EXTERNAL_AUDIT_OPINION', 'EXTERNAL_AUDIT_REPLY')
     return files.value.filter(file => categories.includes(file.file_category) && file.business_stage === stage && inCurrentRecordWindow(file))
   }
-  return files.value.filter(file => file.file_category === 'REVIEW_OPINION' && file.business_stage === stage && inCurrentRecordWindow(file))
+  const opinionCategory = record.review_round.startsWith('EXTERNAL_') ? 'EXTERNAL_REVIEW_OPINION' : 'REVIEW_OPINION'
+  return files.value.filter(file => file.file_category === opinionCategory && file.business_stage === stage && inCurrentRecordWindow(file))
 }
 
 function reviewFileTypeLabel(file: WorkOrderFileItem) {
   if (file.file_category === 'REVIEW_OPINION') return '审核意见'
   if (file.file_category === 'REVIEW_REPLY') return '意见回复'
   if (file.file_category === 'EXTERNAL_AUDIT_OPINION') return '外审/复核意见'
+  if (file.file_category === 'EXTERNAL_AUDIT_REPLY') return '外审意见回复'
+  if (file.file_category === 'EXTERNAL_REVIEW_OPINION') return '外审复核意见'
   return '附件'
 }
 
@@ -878,17 +890,17 @@ async function onExternalAuditOpinionSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
   await uploadWorkOrderFile({
     work_order_id: props.workOrderId,
-    file_category: 'EXTERNAL_AUDIT_OPINION',
+    file_category: externalAuditUploadCategory.value,
     business_stage: reviewStage(reviewRound.value),
     file: file.raw
   })
-  ElMessage.success('外审意见/复核意见文件已上传')
+  ElMessage.success(`${reviewFileTypeLabel({ file_category: externalAuditUploadCategory.value } as WorkOrderFileItem)}文件已上传`)
   await loadFiles()
 }
 
 async function onOpinionSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
-  await uploadWorkOrderFile({ work_order_id: props.workOrderId, file_category: 'REVIEW_OPINION', business_stage: reviewStage(reviewRound.value), file: file.raw })
+  await uploadWorkOrderFile({ work_order_id: props.workOrderId, file_category: reviewOpinionCategory.value, business_stage: reviewStage(reviewRound.value), file: file.raw })
   ElMessage.success('审核意见文件已上传')
   await loadFiles()
 }

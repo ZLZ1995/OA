@@ -149,7 +149,14 @@ REVIEW_ROUND_SEQUENCE = {
     "EXTERNAL_THIRD": 6,
 }
 
-REVIEW_FILE_CATEGORIES = {"REPORT_ZIP", "REVIEW_REPLY", "REVIEW_OPINION"}
+REVIEW_FILE_CATEGORIES = {
+    "REPORT_ZIP",
+    "REVIEW_REPLY",
+    "REVIEW_OPINION",
+    "EXTERNAL_AUDIT_OPINION",
+    "EXTERNAL_AUDIT_REPLY",
+    "EXTERNAL_REVIEW_OPINION",
+}
 STATE_OWNED_EVAL_NATURE = "国有资产评估业务"
 AUTO_FROM_RECORD_MARKER = "[AUTO_FROM_RECORD:"
 PASSED_TO_MARKER = "[PASSED_TO_ROUND:"
@@ -299,7 +306,12 @@ def _clone_files_to_round(
     uploaded_by: int,
 ) -> None:
     stage_to = f"REVIEW_{to_round}"
-    clone_categories = ("REPORT_ZIP", "EXTERNAL_AUDIT_OPINION") if from_round.startswith("EXTERNAL") else ("REPORT_ZIP",)
+    clone_categories = (
+        "REPORT_ZIP",
+        "EXTERNAL_AUDIT_OPINION",
+        "EXTERNAL_AUDIT_REPLY",
+        "EXTERNAL_REVIEW_OPINION",
+    ) if from_round.startswith("EXTERNAL") else ("REPORT_ZIP",)
     for file_category in clone_categories:
         source_files = _latest_round_files(db, work_order_id, from_round, file_category)
         if not source_files:
@@ -1087,7 +1099,8 @@ def decide_review(
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
     if payload.action == "REJECT_RETURN":
-        has_opinion_file = _has_current_round_file(db, work_order.id, payload.review_round, "REVIEW_OPINION")
+        opinion_category = "EXTERNAL_REVIEW_OPINION" if payload.review_round.startswith("EXTERNAL_") else "REVIEW_OPINION"
+        has_opinion_file = _has_current_round_file(db, work_order.id, payload.review_round, opinion_category)
         if not has_opinion_file and not (payload.comment and payload.comment.strip()):
             raise HTTPException(status_code=400, detail="返回修改时，审核意见文件或审核备注必须填写一项")
 
@@ -1237,13 +1250,13 @@ def withdraw_latest_review_step(
             raise HTTPException(status_code=400, detail="只能撤回当前最新退回操作")
         rollback_status = reviewing_status
         rollback_handler = latest.reviewer_user_id
-        file_categories = {"REVIEW_OPINION"}
+        file_categories = {"EXTERNAL_REVIEW_OPINION"} if review_round.startswith("EXTERNAL_") else {"REVIEW_OPINION"}
     elif latest.action == "APPROVE":
         if current_status != approved_status:
             raise HTTPException(status_code=400, detail="只能撤回当前最新通过操作")
         rollback_status = reviewing_status
         rollback_handler = latest.reviewer_user_id
-        file_categories = {"REVIEW_OPINION"}
+        file_categories = {"EXTERNAL_REVIEW_OPINION"} if review_round.startswith("EXTERNAL_") else {"REVIEW_OPINION"}
     elif latest.action == "SUBMIT":
         if current_status != reviewing_status:
             raise HTTPException(status_code=400, detail="只能撤回当前最新送审操作")
@@ -1290,7 +1303,11 @@ def withdraw_latest_review_step(
         next_round = _parse_transferred_to_round(latest.comment)
         if next_round:
             carried_categories = {"REPORT_ZIP", "REVIEW_OPINION"}
-            carried_categories.add("EXTERNAL_AUDIT_OPINION" if review_round.startswith("EXTERNAL_") else "REVIEW_REPLY")
+            if review_round.startswith("EXTERNAL_"):
+                carried_categories.discard("REVIEW_OPINION")
+                carried_categories.update({"EXTERNAL_AUDIT_OPINION", "EXTERNAL_AUDIT_REPLY", "EXTERNAL_REVIEW_OPINION"})
+            else:
+                carried_categories.add("REVIEW_REPLY")
             carried_stage = f"REVIEW_{next_round}"
             carried_files = db.query(WorkOrderFile).filter(
                 WorkOrderFile.work_order_id == work_order_id,
