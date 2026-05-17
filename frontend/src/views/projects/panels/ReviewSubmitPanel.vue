@@ -416,7 +416,7 @@ const isLockedCarryForwardStage = computed(() => ['WAIT_SECOND_REVIEW_SUBMIT', '
 const isReviewerSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND', 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD', 'EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND', 'EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD'].includes(statusCode.value))
 const isLeaderSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))
 const isLeaderSubmitNextStage = computed(() => isLeaderSelectNextStage.value && isCurrentHandler.value)
-const isReportUploadLocked = computed(() => reusePreviousFile.value || isLockedCarryForwardStage.value || canCarryForwardApprovedFile.value)
+const isReportUploadLocked = computed(() => reusePreviousFile.value || isLockedCarryForwardStage.value || canCarryForwardApprovedFile.value || isLeaderSelectNextStage.value || isReviewerSelectNextStage.value)
 const canEditReportPackage = computed(() => canSubmitReview.value && !isReportUploadLocked.value && !showReviewerChangePanel.value)
 const canUploadReplyFile = computed(() => canSubmitReview.value && isReplyFlow.value && !showReviewerChangePanel.value)
 const canRecallRouting = computed(() => {
@@ -441,7 +441,7 @@ const hasChangedReviewer = computed(() => Boolean(pendingReviewerChange.value))
 const isReviewLocked = computed(() => Boolean(props.flowInfo?.review_submit_locked))
 const canChangeReviewer = computed(() => canSubmitReview.value && isReplyFlow.value && !isReviewLocked.value)
 const reusePreviousFile = computed(() => isReplyFlow.value && replyFileMode.value === 'REUSE')
-const canCarryForwardApprovedFile = computed(() => isLeaderSubmitNextStage.value && !isReplyFlow.value)
+const canCarryForwardApprovedFile = computed(() => (isLeaderSelectNextStage.value || isReviewerSelectNextStage.value) && !isReplyFlow.value)
 const showReviewerChangePanel = computed(() => canChangeReviewer.value && isReviewerChangePanelOpen.value)
 const requiresManualUploadBeforeSubmit = computed(() =>
   !reusePreviousFile.value &&

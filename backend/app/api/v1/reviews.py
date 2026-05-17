@@ -659,11 +659,12 @@ def submit_review(
     payload: ReviewSubmitRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "ADMIN")),
+    role_codes: set[str] | None = None,
 ) -> ReviewRecordResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+    role_codes = role_codes or {item.role.code for item in current_user.roles}
     if "ADMIN" not in role_codes and not _is_project_party(db, work_order, current_user):
         raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可发起审核")
 
@@ -771,11 +772,12 @@ def change_reviewer_after_reject(
     payload: ReviewAssigneeChangeRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "ADMIN")),
+    role_codes: set[str] | None = None,
 ) -> ReviewRecordResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+    role_codes = role_codes or {item.role.code for item in current_user.roles}
     if "ADMIN" not in role_codes and not _is_project_party(db, work_order, current_user):
         raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可变更审核人")
 
