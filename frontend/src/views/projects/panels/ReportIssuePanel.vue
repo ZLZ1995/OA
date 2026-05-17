@@ -133,6 +133,14 @@ const formalReportFiles = ref<WorkOrderFileItem[]>([])
 const reportScanFiles = ref<WorkOrderFileItem[]>([])
 const reviewPackageFiles = ref<WorkOrderFileItem[]>([])
 const replaceInputs = new Map<number, HTMLInputElement>()
+const REVIEW_STAGE_ORDER: Record<string, number> = {
+  REVIEW_FIRST: 1,
+  REVIEW_SECOND: 2,
+  REVIEW_THIRD: 3,
+  REVIEW_EXTERNAL_FIRST: 4,
+  REVIEW_EXTERNAL_SECOND: 5,
+  REVIEW_EXTERNAL_THIRD: 6
+}
 
 const isPrintRoomRole = computed(() => Boolean(props.userRoles?.includes('PRINT_ROOM')))
 const canReplaceReportScan = computed(() => Boolean(props.userRoles?.some(role => ['PRINT_ROOM', 'ADMIN'].includes(role))))
@@ -168,10 +176,37 @@ async function loadFiles() {
   copyCount.value = info.copy_count || 1
   remark.value = info.remark || ''
   const files = (await listWorkOrderFiles(props.workOrderId)).items
-  contractFiles.value = files.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.is_current)
-  formalReportFiles.value = files.filter(file => file.file_category === 'FORMAL_REPORT' && file.is_current)
-  reportScanFiles.value = files.filter(file => file.file_category === 'REPORT_SCAN' || file.business_stage === 'REPORT_SCAN')
-  reviewPackageFiles.value = files.filter(file => file.file_category === 'REPORT_ZIP')
+  contractFiles.value = latestByCategory(files, 'FINAL_CONTRACT_SCAN')
+  formalReportFiles.value = latestByCategory(files, 'FORMAL_REPORT')
+  reportScanFiles.value = latestByCategory(files, 'REPORT_SCAN')
+  reviewPackageFiles.value = latestReviewPackage(files)
+}
+
+function activeManualFiles(files: WorkOrderFileItem[]) {
+  return files.filter(file => file.is_current && file.source_type !== 'SIGNOFF_SYNC')
+}
+
+function fileSortValue(file: WorkOrderFileItem) {
+  const uploadedAt = file.uploaded_at ? new Date(file.uploaded_at).getTime() : 0
+  return uploadedAt || file.id
+}
+
+function latestByCategory(files: WorkOrderFileItem[], category: string) {
+  const candidates = activeManualFiles(files).filter(file => file.file_category === category || file.business_stage === category)
+  if (!candidates.length) return []
+  return [candidates.sort((a, b) => fileSortValue(b) - fileSortValue(a) || b.version_no - a.version_no || b.id - a.id)[0]]
+}
+
+function latestReviewPackage(files: WorkOrderFileItem[]) {
+  const candidates = activeManualFiles(files).filter(file => file.file_category === 'REPORT_ZIP' && file.business_stage.startsWith('REVIEW_'))
+  if (!candidates.length) return []
+  const maxStageOrder = Math.max(...candidates.map(file => REVIEW_STAGE_ORDER[file.business_stage] || 0))
+  const finalStageFiles = candidates.filter(file => (REVIEW_STAGE_ORDER[file.business_stage] || 0) === maxStageOrder)
+  const maxVersion = Math.max(...finalStageFiles.map(file => file.version_no || 0))
+  return finalStageFiles
+    .filter(file => (file.version_no || 0) === maxVersion)
+    .sort((a, b) => fileSortValue(b) - fileSortValue(a) || b.id - a.id)
+    .slice(0, 1)
 }
 
 async function issueContract() {
