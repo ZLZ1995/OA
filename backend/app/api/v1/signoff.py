@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
@@ -11,11 +12,20 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.services.archive_sync_service import sync_signoff_files_to_archive
+from app.services.project_role_conflict_service import get_project_party_user_ids, validate_support_role_not_project_party
 from app.services.workflow_log_service import create_workflow_log
 from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
 
 router = APIRouter(prefix="/signoff", tags=["signoff"])
+
+
+class SignoffApproveRequest(BaseModel):
+    print_room_handler_id: int
+
+
+class EnterSignoffReviewRequest(BaseModel):
+    formal_report_count: int
 
 
 def _is_project_party(db: Session, work_order: WorkOrder, current_user: User) -> bool:
@@ -63,6 +73,35 @@ def _resolve_signoff_chief_appraiser(db: Session, work_order: WorkOrder) -> User
         if assigned:
             return assigned
     return _get_chief_appraiser(db)
+
+
+def _ensure_print_room_handler(db: Session, work_order: WorkOrder, handler_user_id: int) -> User:
+    validate_support_role_not_project_party(
+        handler_user_id,
+        get_project_party_user_ids(db, work_order.project_id, work_order),
+        "文印室人员",
+    )
+    handler = (
+        db.query(User)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(
+            User.id == handler_user_id,
+            User.is_active.is_(True),
+            User.username != settings.initial_admin_username,
+            Role.code == "PRINT_ROOM",
+        )
+        .first()
+    )
+    if not handler:
+        raise HTTPException(status_code=400, detail="请选择有效的文印室人员")
+    return handler
+
+
+def _ensure_formal_report_count(value: int) -> int:
+    if value < 1:
+        raise HTTPException(status_code=400, detail="报告出具数量必须大于 0")
+    return value
 
 
 @router.post("/work-orders/{work_order_id}/request-owner-confirm")
@@ -192,6 +231,7 @@ def mark_has_external_audit(
 @router.post("/work-orders/{work_order_id}/enter-review")
 def enter_signoff_review(
     work_order_id: int,
+    payload: EnterSignoffReviewRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "ADMIN")),
@@ -207,11 +247,13 @@ def enter_signoff_review(
     chief = _resolve_signoff_chief_appraiser(db, work_order)
     if chief is None:
         raise HTTPException(status_code=400, detail="系统未配置首席评估师账号")
+    formal_report_count = _ensure_formal_report_count(payload.formal_report_count)
 
     project = _get_project(db, work_order)
     work_order.current_status = WorkOrderStatus.SIGNOFF_REVIEWING.value
     work_order.current_handler_user_id = chief.id
     work_order.chief_appraiser_user_id = chief.id
+    work_order.formal_report_count = formal_report_count
     work_order.signoff_status = "REVIEWING"
     create_workflow_log(
         db,
@@ -239,6 +281,7 @@ def enter_signoff_review(
 @router.post("/work-orders/{work_order_id}/approve")
 def approve_signoff(
     work_order_id: int,
+    payload: SignoffApproveRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("CHIEF_APPRAISER", "ADMIN")),
@@ -246,31 +289,42 @@ def approve_signoff(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    if work_order.current_status != WorkOrderStatus.SIGNOFF_REVIEWING.value:
+    is_repair_assign = (
+        work_order.current_status == WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
+        and work_order.signoff_status == "APPROVED"
+        and not work_order.print_room_handler_id
+    )
+    if work_order.current_status != WorkOrderStatus.SIGNOFF_REVIEWING.value and not is_repair_assign:
         raise HTTPException(status_code=400, detail="当前状态不可执行签发通过")
+    handler = _ensure_print_room_handler(db, work_order, payload.print_room_handler_id)
+    formal_report_count = _ensure_formal_report_count(work_order.formal_report_count or 0)
 
     project = _get_project(db, work_order)
+    from_status = work_order.current_status
     work_order.current_status = WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
-    work_order.current_handler_user_id = work_order.print_room_handler_id
+    work_order.print_room_handler_id = handler.id
+    work_order.current_handler_user_id = handler.id
+    work_order.formal_report_count = formal_report_count
     work_order.signoff_status = "APPROVED"
-    sync_signoff_files_to_archive(db, work_order, current_user.id)
+    if not is_repair_assign:
+        sync_signoff_files_to_archive(db, work_order, current_user.id)
     create_workflow_log(
         db,
         work_order_id=work_order.id,
-        from_status=WorkOrderStatus.SIGNOFF_REVIEWING.value,
+        from_status=from_status,
         to_status=WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value,
-        action_type="APPROVE_SIGNOFF",
+        action_type="ASSIGN_PRINT_ROOM_AFTER_SIGNOFF" if is_repair_assign else "APPROVE_SIGNOFF",
         operator_user_id=current_user.id,
-        remark="同意签发",
+        remark="补充指定文印室人员和报告出具数量" if is_repair_assign else "同意签发",
     )
-    if project and work_order.print_room_handler_id:
+    if project:
         send_workflow_notification(
             db,
             project=project,
             work_order=work_order,
             sender_user=current_user,
-            receiver_user_id=work_order.print_room_handler_id,
-            action_name="APPROVE_SIGNOFF",
+            receiver_user_id=handler.id,
+            action_name="ASSIGN_PRINT_ROOM_AFTER_SIGNOFF" if is_repair_assign else "APPROVE_SIGNOFF",
             comment="签发已通过，请进入报告出具",
         )
     db.commit()

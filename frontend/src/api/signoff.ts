@@ -15,13 +15,13 @@ export async function markHasExternalAudit(workOrderId: number) {
   return data as { message: string }
 }
 
-export async function enterSignoffReview(workOrderId: number) {
-  const { data } = await http.post(`/signoff/work-orders/${workOrderId}/enter-review`)
+export async function enterSignoffReview(workOrderId: number, payload: { formal_report_count: number }) {
+  const { data } = await http.post(`/signoff/work-orders/${workOrderId}/enter-review`, payload)
   return data as { message: string }
 }
 
-export async function approveSignoff(workOrderId: number) {
-  const { data } = await http.post(`/signoff/work-orders/${workOrderId}/approve`)
+export async function approveSignoff(workOrderId: number, payload: { print_room_handler_id: number }) {
+  const { data } = await http.post(`/signoff/work-orders/${workOrderId}/approve`, payload)
   return data as { message: string }
 }
 

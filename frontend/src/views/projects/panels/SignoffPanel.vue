@@ -39,6 +39,9 @@
             </el-tag>
           </div>
         </el-form-item>
+        <el-form-item label="报告出具数量" required>
+          <el-input-number v-model="formalReportCount" :min="1" :precision="0" style="width: 180px" />
+        </el-form-item>
         <el-form-item>
           <el-button type="success" :disabled="!formalReportFiles.length || !contractFiles.length" @click="onEnterSignoff">
             进入签发审核
@@ -87,6 +90,40 @@
         <el-button type="danger" plain @click="onReturnOwnerUpload">附件/合同错误，返回项目负责人</el-button>
       </div>
     </template>
+
+    <template v-else-if="canAssignPrintRoomAfterSignoff">
+      <el-alert
+        type="warning"
+        :closable="false"
+        title="签发已通过，但尚未指定文印室人员和报告出具数量，请补充后转交报告出具。"
+        show-icon
+        style="margin-bottom: 12px"
+      />
+      <div class="signoff-actions">
+        <el-button type="success" @click="onApproveSignoff">选择文印室并转交</el-button>
+      </div>
+    </template>
+
+    <el-dialog v-model="approveDialogVisible" title="确认签发并转交文印室" width="520px">
+      <el-form label-width="120px">
+        <el-form-item label="文印室人员" required>
+          <el-select v-model="approveDraft.print_room_handler_id" placeholder="请选择文印室人员" style="width: 100%">
+            <el-option
+              v-for="user in printRoomOptions"
+              :key="user.id"
+              :label="`${user.real_name || user.username}（${user.username}）`"
+              :value="user.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="approveDialogVisible = false">取消</el-button>
+        <el-button type="success" :loading="approveSubmitting" @click="submitApproveSignoff">
+          确认签发并转交
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -101,6 +138,7 @@ import {
   returnSignoffToOwnerUpload,
   returnSignoffToThird,
 } from '@/api/signoff'
+import { listUserCandidates, type UserItem } from '@/api/users'
 import { useAuthStore } from '@/store/auth'
 
 const props = defineProps<{ workOrderId?: number; flowInfo?: ProjectFlowData; userRoles: string[]; canEdit: boolean }>()
@@ -108,6 +146,13 @@ const emit = defineEmits<{ (e: 'changed'): void }>()
 
 const auth = useAuthStore()
 const files = ref<WorkOrderFileItem[]>([])
+const printRoomOptions = ref<UserItem[]>([])
+const formalReportCount = ref(1)
+const approveDialogVisible = ref(false)
+const approveSubmitting = ref(false)
+const approveDraft = ref<{ print_room_handler_id?: number }>({
+  print_room_handler_id: undefined,
+})
 
 const currentUserId = computed(() => auth.user?.id)
 const canOwnerUpload = computed(() =>
@@ -118,6 +163,11 @@ const canSignoff = computed(() =>
   props.flowInfo?.current_work_order_status === 'SIGNOFF_REVIEWING' &&
   (props.userRoles.includes('CHIEF_APPRAISER') || props.userRoles.includes('ADMIN')) &&
   (!props.flowInfo?.chief_appraiser_user_id || props.flowInfo?.chief_appraiser_user_id === currentUserId.value)
+)
+const canAssignPrintRoomAfterSignoff = computed(() =>
+  props.flowInfo?.current_work_order_status === 'THIRD_APPROVED_WAIT_PRINTROOM' &&
+  (props.userRoles.includes('CHIEF_APPRAISER') || props.userRoles.includes('ADMIN')) &&
+  !props.flowInfo?.print_room_handler_id
 )
 
 const REVIEW_REPORT_STAGE_PRIORITY = [
@@ -186,6 +236,10 @@ async function loadFiles() {
   files.value = (await listWorkOrderFiles(props.workOrderId)).items
 }
 
+async function loadPrintRoomOptions() {
+  printRoomOptions.value = (await listUserCandidates('PRINT_ROOM')).items
+}
+
 async function onFormalReportSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
   await uploadWorkOrderFile({
@@ -212,16 +266,45 @@ async function onFinalContractSelected(file: UploadFile) {
 
 async function onEnterSignoff() {
   if (!props.workOrderId) return
-  await enterSignoffReview(props.workOrderId)
+  if (!formalReportCount.value || formalReportCount.value < 1) {
+    ElMessage.warning('请填写报告出具数量')
+    return
+  }
+  await enterSignoffReview(props.workOrderId, { formal_report_count: formalReportCount.value })
   ElMessage.success('已进入签发审核')
   emit('changed')
 }
 
 async function onApproveSignoff() {
   if (!props.workOrderId) return
-  await approveSignoff(props.workOrderId)
-  ElMessage.success('签发通过')
-  emit('changed')
+  if (!printRoomOptions.value.length) {
+    await loadPrintRoomOptions()
+  }
+  if (!printRoomOptions.value.length) {
+    ElMessage.warning('暂无可选文印室人员')
+    return
+  }
+  approveDraft.value.print_room_handler_id = props.flowInfo?.print_room_handler_id || printRoomOptions.value[0]?.id
+  approveDialogVisible.value = true
+}
+
+async function submitApproveSignoff() {
+  if (!props.workOrderId) return
+  if (!approveDraft.value.print_room_handler_id) {
+    ElMessage.warning('请选择文印室人员')
+    return
+  }
+  approveSubmitting.value = true
+  try {
+    await approveSignoff(props.workOrderId, {
+      print_room_handler_id: approveDraft.value.print_room_handler_id,
+    })
+    approveDialogVisible.value = false
+    ElMessage.success('签发通过，已转交文印室')
+    emit('changed')
+  } finally {
+    approveSubmitting.value = false
+  }
 }
 
 async function onReturnThird() {
@@ -242,8 +325,17 @@ function download(file: WorkOrderFileItem) {
   downloadWorkOrderFile(file.id, file.origin_file_name)
 }
 
-onMounted(loadFiles)
-watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], loadFiles)
+onMounted(() => {
+  formalReportCount.value = props.flowInfo?.formal_report_count || 1
+  loadFiles()
+})
+watch(
+  () => [props.workOrderId, props.flowInfo?.current_work_order_status, props.flowInfo?.formal_report_count],
+  () => {
+    formalReportCount.value = props.flowInfo?.formal_report_count || formalReportCount.value || 1
+    loadFiles()
+  }
+)
 </script>
 
 <style scoped>
