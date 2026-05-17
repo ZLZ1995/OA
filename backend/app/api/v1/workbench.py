@@ -19,6 +19,43 @@ from app.services.project_flow import get_project_leader_display_name, normalize
 router = APIRouter(prefix="/workbench", tags=["项目工作台"])
 
 
+def _todo_action_text(
+    project: Project,
+    work_order: WorkOrder,
+    step: str,
+    can_approve_delete: bool,
+    can_approve_termination: bool,
+    rejected_invoice: object | None,
+    confirming_invoice: object | None,
+    is_project_party: bool,
+) -> str:
+    if can_approve_delete:
+        return "待确认删除"
+    if can_approve_termination:
+        return f"待审核：{project.termination_reason}"
+    if work_order.current_status == "FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND":
+        if work_order.current_handler_user_id == work_order.project_leader_id:
+            return "请选择二审老师并提交审核"
+        return "待一审老师决定二审流向"
+    if work_order.current_status == "SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD":
+        if work_order.current_handler_user_id == work_order.project_leader_id:
+            return "请选择三审老师并提交审核"
+        return "待二审老师决定三审流向"
+    if rejected_invoice and is_project_party:
+        return "开票信息被退回，请修改后重新提交"
+    if confirming_invoice and is_project_party:
+        return "财务已完成开票，请确认或退回修改"
+    if step == "合同初稿审核" and work_order.contract_reviewer_id == work_order.current_handler_user_id:
+        return "请处理合同初稿审核"
+    if (
+        step == "报告邮寄"
+        and work_order.mailing_handler_user_id == work_order.current_handler_user_id
+        and work_order.mailing_status == "PRINT_ROOM_PENDING"
+    ):
+        return "请填写快递单号"
+    return f"待处理：{step}"
+
+
 @router.get("", response_model=WorkbenchResponse)
 def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> WorkbenchResponse:
     role_codes = {item.role.code for item in current_user.roles}
@@ -296,24 +333,15 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             .order_by(WorkflowLog.id.desc())
             .first()
         )
-        todo_action = (
-            "待确认删除"
-            if can_approve_delete
-            else f"待审核：{project.termination_reason}"
-            if can_approve_termination
-            else "开票信息被退回，请修改后重新提交"
-            if rejected_invoice and is_project_party
-            else "财务已完成开票，请确认或退回修改"
-            if confirming_invoice and is_project_party
-            else "请处理合同初稿审核"
-            if step == "合同初稿审核" and work_order.contract_reviewer_id == current_user.id
-            else "请填写快递单号"
-            if (
-                step == "报告邮寄"
-                and work_order.mailing_handler_user_id == current_user.id
-                and work_order.mailing_status == "PRINT_ROOM_PENDING"
-            )
-            else f"待处理：{step}"
+        todo_action = _todo_action_text(
+            project=project,
+            work_order=work_order,
+            step=step,
+            can_approve_delete=can_approve_delete,
+            can_approve_termination=can_approve_termination,
+            rejected_invoice=rejected_invoice,
+            confirming_invoice=confirming_invoice,
+            is_project_party=is_project_party,
         )
         todo_projects.append(
             WorkbenchProjectItem(

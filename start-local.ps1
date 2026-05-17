@@ -1,14 +1,14 @@
 $ErrorActionPreference = 'Stop'
 
-$Root = 'C:\Users\946355064\Desktop\OA-main'
+$Root = 'D:\1\OA-main-routing-pr2'
 $FrontendDir = Join-Path $Root 'frontend'
 $BackendDir = Join-Path $Root 'backend'
 $LogsDir = Join-Path $Root 'logs'
 $FrontendLog = Join-Path $LogsDir 'frontend-local.log'
 $BackendLog = Join-Path $LogsDir 'backend-local.log'
 $PidFile = Join-Path $LogsDir 'local-services.json'
-$DatabaseUrl = 'sqlite:///C:/Users/946355064/Desktop/OA-main/backend/local-dev.db'
-$StorageDir = 'C:/Users/946355064/Desktop/OA-main/backend/uploads'
+$DatabaseUrl = 'sqlite:///D:/1/OA-main-routing-pr2/backend/local-dev.db'
+$StorageDir = 'D:/1/OA-main-routing-pr2/backend/uploads'
 
 New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 
@@ -37,7 +37,7 @@ $frontendProc = Start-Process -FilePath 'C:\Windows\System32\cmd.exe' `
   -WindowStyle Hidden `
   -PassThru
 
-$backendCmd = "set DATABASE_URL=$DatabaseUrl&& set LOCAL_STORAGE_DIR=$StorageDir&& C:\Users\946355064\Desktop\OA-main\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8080 > `"$BackendLog`" 2>&1"
+$backendCmd = "set DATABASE_URL=$DatabaseUrl&& set LOCAL_STORAGE_DIR=$StorageDir&& D:\1\OA-main-routing-pr2\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8080 > `"$BackendLog`" 2>&1"
 $backendProc = Start-Process -FilePath 'C:\Windows\System32\cmd.exe' `
   -ArgumentList '/c', $backendCmd `
   -WorkingDirectory $BackendDir `

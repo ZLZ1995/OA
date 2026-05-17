@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'SilentlyContinue'
 
-$Root = 'C:\Users\946355064\Desktop\OA-main'
+$Root = 'D:\1\OA-main-routing-pr2'
 $LogsDir = Join-Path $Root 'logs'
 $PidFile = Join-Path $LogsDir 'local-services.json'
 

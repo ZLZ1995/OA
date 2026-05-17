@@ -177,9 +177,23 @@ const activeNodeLabel = computed(() => {
 
 const todoBannerTitle = computed(() => {
   if (!flow.value) return ''
-  const label = todoLabelQuery.value.trim() || flow.value.project.current_step || activeNodeLabel.value
+  const label = resolveCurrentTodoLabel() || todoLabelQuery.value.trim() || flow.value.project.current_step || activeNodeLabel.value
   return label ? `当前待办环节：${label}` : ''
 })
+
+function resolveCurrentTodoLabel() {
+  if (!flow.value) return ''
+  const status = flow.value.current_work_order_status
+  const isCurrentHandler = Boolean(auth.user?.id && flow.value.current_handler_user_id === auth.user.id)
+  const isProjectLeader = Boolean(auth.user?.id && flow.value.project.project_leader_id === auth.user.id)
+  if (status === 'FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND') {
+    return isCurrentHandler && isProjectLeader ? '请选择二审老师并提交审核' : '待一审老师决定二审流向'
+  }
+  if (status === 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD') {
+    return isCurrentHandler && isProjectLeader ? '请选择三审老师并提交审核' : '待二审老师决定三审流向'
+  }
+  return ''
+}
 
 function ensureVisibleActiveNode() {
   if (!visibleFlowNodes.value.some(node => node.key === activeNode.value)) {

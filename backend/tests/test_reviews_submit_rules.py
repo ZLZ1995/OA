@@ -510,14 +510,50 @@ def test_first_review_route_back_to_project_leader_after_approve() -> None:
             route_mode="RETURN_TO_PROJECT_LEADER",
         ),
         db=db,
-        current_user=leader,
-        role_codes={"PROJECT_LEADER"},
+        current_user=reviewer,
+        role_codes={"FIRST_REVIEWER"},
     )
 
     db.refresh(work_order)
     assert work_order.current_status == "FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND"
     assert work_order.current_handler_user_id == work_order.project_leader_id
     assert result.action == "CHANGE_REVIEWER"
+
+
+def test_project_leader_cannot_choose_route_after_first_review_approve() -> None:
+    from app.api.v1.reviews import decide_review, route_approved_review
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    work_order.current_status = "FIRST_REVIEWING"
+    work_order.current_handler_user_id = reviewer.id
+    work_order.first_reviewer_id = reviewer.id
+    db.commit()
+
+    decide_review(
+        payload=ReviewDecisionRequest(
+            work_order_id=work_order.id,
+            review_round="FIRST",
+            action="APPROVE",
+        ),
+        db=db,
+        current_user=reviewer,
+        _={"FIRST_REVIEWER"},
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        route_approved_review(
+            payload=ReviewApprovalRoutingRequest(
+                work_order_id=work_order.id,
+                review_round="FIRST",
+                route_mode="RETURN_TO_PROJECT_LEADER",
+            ),
+            db=db,
+            current_user=leader,
+            role_codes={"PROJECT_LEADER"},
+        )
+
+    assert exc_info.value.status_code == 403
 
 
 def test_first_review_reviewer_select_status_maps_to_second_review_step() -> None:
