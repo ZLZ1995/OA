@@ -339,6 +339,7 @@ const isReplyFlow = computed(() => ['FIRST_REVIEW_REJECTED', 'SECOND_REVIEW_REJE
 const isLockedCarryForwardStage = computed(() => ['WAIT_SECOND_REVIEW_SUBMIT', 'WAIT_THIRD_REVIEW_SUBMIT', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))
 const isReviewerSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND', 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD', 'EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND', 'EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD'].includes(statusCode.value))
 const isLeaderSelectNextStage = computed(() => ['FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND', 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))
+const isLeaderSubmitNextStage = computed(() => isLeaderSelectNextStage.value && isCurrentHandler.value)
 const isReportUploadLocked = computed(() => reusePreviousFile.value || isLockedCarryForwardStage.value || canCarryForwardApprovedFile.value)
 const canRecallRouting = computed(() => {
   if (!currentUserId.value) return false
@@ -362,7 +363,7 @@ const hasChangedReviewer = computed(() => Boolean(pendingReviewerChange.value))
 const isReviewLocked = computed(() => Boolean(props.flowInfo?.review_submit_locked))
 const canChangeReviewer = computed(() => canSubmitReview.value && isReplyFlow.value && !isReviewLocked.value)
 const reusePreviousFile = computed(() => isReplyFlow.value && replyFileMode.value === 'REUSE')
-const canCarryForwardApprovedFile = computed(() => isLeaderSelectNextStage.value && !isReplyFlow.value)
+const canCarryForwardApprovedFile = computed(() => isLeaderSubmitNextStage.value && !isReplyFlow.value)
 const showReviewerChangePanel = computed(() => canChangeReviewer.value && isReviewerChangePanelOpen.value)
 const requiresManualUploadBeforeSubmit = computed(() =>
   !reusePreviousFile.value &&
@@ -381,7 +382,7 @@ const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'EXTERNAL_SECOND') return props.flowInfo?.second_reviewer_id
   return props.flowInfo?.third_reviewer_id
 })
-const canSubmitReview = computed(() => props.canEdit && !isReviewLocked.value && isReviewSubmitter.value && (isSubmitStatus(statusCode.value) || isLeaderSelectNextStage.value || isReviewerSelectNextStage.value))
+const canSubmitReview = computed(() => props.canEdit && !isReviewLocked.value && isReviewSubmitter.value && (isSubmitStatus(statusCode.value) || isLeaderSubmitNextStage.value || isReviewerSelectNextStage.value))
 const canReviewerSelectNext = computed(() =>
   props.canEdit &&
   !isReviewLocked.value &&
@@ -497,10 +498,12 @@ const REVIEW_STATUS_TEXT: Record<string, string> = {
   WAIT_FIRST_REVIEW_SUBMIT: '待上传文件',
   FIRST_REVIEWING: '一审审核中',
   FIRST_REVIEW_REJECTED: '一审意见已返回等待回复',
-  WAIT_SECOND_REVIEW_SUBMIT: '二审待办',
+  FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND: '一审已通过，待一审老师决定二审流向',
+  WAIT_SECOND_REVIEW_SUBMIT: '已确定二审老师，待提交二审',
   SECOND_REVIEWING: '二审审核中',
   SECOND_REVIEW_REJECTED: '二审意见已返回等待回复',
-  WAIT_THIRD_REVIEW_SUBMIT: '三审待办',
+  SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD: '二审已通过，待二审老师决定三审流向',
+  WAIT_THIRD_REVIEW_SUBMIT: '已确定三审老师，待提交三审',
   THIRD_REVIEWING: '三审审核中',
   THIRD_REVIEW_REJECTED: '三审意见已返回等待回复',
   THIRD_APPROVED_WAIT_PRINTROOM: '三审已通过，待补充正式报告与合同扫描件'
@@ -546,6 +549,7 @@ function roundFromStage(stage: string): ReviewRound | undefined {
 }
 
 function recordRoundLabel(record: ReviewRecordItem) {
+  if (record.action === 'CHANGE_REVIEWER' && record.comment?.includes('决定')) return `${roundLabel(record.review_round)}流向决定`
   if (record.action === 'CHANGE_REVIEWER') return `${roundLabel(record.review_round)}审核人变更`
   if (record.action === 'SUBMIT') return hasEarlierReject(record) ? `${roundLabel(record.review_round)}意见回复` : '报告送审'
   if (record.action === 'REJECT_RETURN') return `${roundLabel(record.review_round)}意见发出`
@@ -759,6 +763,7 @@ async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
   if (!props.workOrderId) return
   await decideReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, action, comment: reviewComment.value || undefined })
   if (action === 'APPROVE' && ['FIRST', 'SECOND', 'EXTERNAL_FIRST', 'EXTERNAL_SECOND'].includes(reviewRound.value)) {
+    const routedRound = reviewRound.value as 'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND'
     const nextRoundLabel = reviewRound.value === 'FIRST'
       ? '二审'
       : reviewRound.value === 'SECOND'
@@ -793,7 +798,7 @@ async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
       )
       await routeApprovedReview({
         work_order_id: props.workOrderId,
-        review_round: reviewRound.value,
+        review_round: routedRound,
         route_mode: 'REVIEWER_SELECT_NEXT'
       })
       ElMessage.success(`已转交${nextRoundLabel}`)
@@ -810,7 +815,7 @@ async function onDecision(action: 'APPROVE' | 'REJECT_RETURN') {
         )
         await routeApprovedReview({
           work_order_id: props.workOrderId,
-          review_round: reviewRound.value,
+          review_round: routedRound,
           route_mode: 'RETURN_TO_PROJECT_LEADER'
         })
         ElMessage.success('已转交项目负责人')

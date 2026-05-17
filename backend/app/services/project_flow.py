@@ -177,6 +177,10 @@ def build_todo_action(step: str, user_role: str) -> str | None:
         return "请处理开票"
     if user_role == "档案管理员" and step == "报告归档":
         return "请审核归档材料"
+    if user_role == "项目负责人" and step == "二审":
+        return "待一审老师决定二审流向"
+    if user_role == "项目负责人" and step == "三审":
+        return "待二审老师决定三审流向"
     if user_role in {"创建人", "项目负责人", "项目组成员"}:
         mapping = {
             "项目创建": "请完善项目组成员",

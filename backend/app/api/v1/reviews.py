@@ -851,9 +851,10 @@ def route_approved_review(
         work_order.current_status = target_status.value
         work_order.current_handler_user_id = reviewer_id
         action_name = f"{payload.review_round}_APPROVE_REVIEWER_SELECT_{next_round}"
+        default_comment = "审核老师决定直接转交下一轮审核"
     else:
-        if "ADMIN" not in role_codes and not _is_project_party(db, work_order, current_user):
-            raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可处理项目负责人选人流转")
+        if reviewer_id != current_user.id and "ADMIN" not in role_codes:
+            raise HTTPException(status_code=403, detail="仅当前审核老师可决定是否退回项目负责人选人")
         if WorkOrderStatus(work_order.current_status) not in {approved_status, reviewer_select_status}:
             raise HTTPException(status_code=400, detail="当前状态不可返回项目负责人选择")
         target_status = _round_leader_wait_status(payload.review_round)
@@ -863,13 +864,14 @@ def route_approved_review(
         work_order.current_status = target_status.value
         work_order.current_handler_user_id = work_order.project_leader_id
         action_name = f"{payload.review_round}_APPROVE_RETURN_PROJECT_LEADER_SELECT_{next_round}"
+        default_comment = "审核老师决定退回项目负责人选择下一轮审核人"
 
     record = ReviewRecord(
         work_order_id=work_order.id,
         review_round=payload.review_round,
         reviewer_user_id=current_user.id,
         action="CHANGE_REVIEWER",
-        comment=payload.comment or action_name,
+        comment=payload.comment or default_comment,
         acted_at=datetime.now(timezone.utc),
     )
     db.add(record)
