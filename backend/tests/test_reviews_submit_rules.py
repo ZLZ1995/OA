@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from datetime import date
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -90,7 +90,7 @@ def _add_review_file(
 
 
 def test_submit_review_rejects_reviewer_without_round_role() -> None:
-    from app.api.v1.reviews import submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review
 
     db = _build_session()
     leader, reviewer, _, work_order = _seed_basic(db)
@@ -109,7 +109,7 @@ def test_submit_review_rejects_reviewer_without_round_role() -> None:
 
 
 def test_submit_review_requires_amount_and_valuation_base_date() -> None:
-    from app.api.v1.reviews import submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review
 
     db = _build_session()
     leader, reviewer, project, work_order = _seed_basic(db)
@@ -137,7 +137,7 @@ def test_submit_review_requires_amount_and_valuation_base_date() -> None:
 
 
 def test_submit_review_accepts_reviewer_with_round_role() -> None:
-    from app.api.v1.reviews import submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review
 
     db = _build_session()
     leader, reviewer, _, work_order = _seed_basic(db)
@@ -160,7 +160,7 @@ def test_submit_review_accepts_reviewer_with_round_role() -> None:
 
 
 def test_rejected_review_can_be_resubmitted_to_same_round() -> None:
-    from app.api.v1.reviews import submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review
 
     db = _build_session()
     leader, reviewer, _, work_order = _seed_basic(db)
@@ -193,7 +193,7 @@ def test_rejected_review_can_be_resubmitted_to_same_round() -> None:
 
 
 def test_rejected_review_assignee_change_takes_effect_on_resubmit() -> None:
-    from app.api.v1.reviews import change_reviewer_after_reject, submit_review
+    from app.api.v1.reviews import _change_reviewer_after_reject_impl as change_reviewer_after_reject, _submit_review_impl as submit_review
 
     db = _build_session()
     leader, reviewer, _, work_order = _seed_basic(db)
@@ -257,7 +257,7 @@ def test_rejected_review_assignee_change_takes_effect_on_resubmit() -> None:
 
 
 def test_pending_reviewer_change_does_not_override_plain_resubmit() -> None:
-    from app.api.v1.reviews import change_reviewer_after_reject, submit_review
+    from app.api.v1.reviews import _change_reviewer_after_reject_impl as change_reviewer_after_reject, _submit_review_impl as submit_review
 
     db = _build_session()
     leader, reviewer, _, work_order = _seed_basic(db)
@@ -316,7 +316,7 @@ def test_pending_reviewer_change_does_not_override_plain_resubmit() -> None:
 
 
 def test_rejected_review_assignee_change_only_once_per_rejection() -> None:
-    from app.api.v1.reviews import change_reviewer_after_reject
+    from app.api.v1.reviews import _change_reviewer_after_reject_impl as change_reviewer_after_reject
 
     db = _build_session()
     leader, reviewer, _, work_order = _seed_basic(db)
@@ -594,7 +594,7 @@ def test_first_review_reviewer_select_status_maps_to_second_review_step() -> Non
 
 
 def test_project_leader_can_submit_second_review_without_reupload_after_first_approved() -> None:
-    from app.api.v1.reviews import submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review
 
     db = _build_session()
     leader, first_reviewer, _, work_order = _seed_basic(db)
@@ -648,7 +648,7 @@ def test_project_leader_can_submit_second_review_without_reupload_after_first_ap
 
 
 def test_project_leader_can_submit_third_review_without_reupload_after_second_approved() -> None:
-    from app.api.v1.reviews import submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review
 
     db = _build_session()
     leader, first_reviewer, _, work_order = _seed_basic(db)
@@ -839,7 +839,7 @@ def test_reject_return_with_opinion_file_generates_default_comment() -> None:
 
 
 def test_rejected_resubmit_requires_reply_file_or_comment() -> None:
-    from app.api.v1.reviews import submit_review
+    from app.api.v1.reviews import _submit_review_impl as submit_review
 
     db = _build_session()
     leader, reviewer, _, work_order = _seed_basic(db)

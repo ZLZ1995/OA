@@ -659,6 +659,15 @@ def submit_review(
     payload: ReviewSubmitRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+) -> ReviewRecordResponse:
+    return _submit_review_impl(payload=payload, db=db, current_user=current_user)
+
+
+def _submit_review_impl(
+    *,
+    payload: ReviewSubmitRequest,
+    db: Session,
+    current_user: User,
     role_codes: set[str] | None = None,
 ) -> ReviewRecordResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
@@ -772,6 +781,15 @@ def change_reviewer_after_reject(
     payload: ReviewAssigneeChangeRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+) -> ReviewRecordResponse:
+    return _change_reviewer_after_reject_impl(payload=payload, db=db, current_user=current_user)
+
+
+def _change_reviewer_after_reject_impl(
+    *,
+    payload: ReviewAssigneeChangeRequest,
+    db: Session,
+    current_user: User,
     role_codes: set[str] | None = None,
 ) -> ReviewRecordResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
