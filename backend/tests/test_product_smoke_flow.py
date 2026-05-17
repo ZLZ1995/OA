@@ -1,5 +1,7 @@
 from datetime import date, datetime, timezone
+from io import BytesIO
 
+from fastapi import UploadFile
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -248,6 +250,70 @@ def test_smoke_04_review_and_signoff_move_to_print_room() -> None:
 
     db.refresh(work_order)
     assert work_order.current_status == WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
+
+
+def test_signoff_upload_keeps_only_latest_current_attachment_and_contract_scan(tmp_path, monkeypatch) -> None:
+    from app.api.v1.files import upload_file
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "local_storage_dir", str(tmp_path))
+    db = _build_session()
+    users, _, work_order = _create_project_bundle(db)
+    work_order.current_status = WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value
+    work_order.current_handler_user_id = users["leader"].id
+    db.commit()
+
+    upload_file(
+        work_order_id=work_order.id,
+        file_category="FORMAL_REPORT",
+        business_stage="FORMAL_REPORT",
+        upload=UploadFile(filename="report-1.xlsx", file=BytesIO(b"one")),
+        db=db,
+        current_user=users["leader"],
+        _={"PROJECT_LEADER"},
+    )
+    latest_report = upload_file(
+        work_order_id=work_order.id,
+        file_category="FORMAL_REPORT",
+        business_stage="FORMAL_REPORT",
+        upload=UploadFile(filename="report-2.xlsx", file=BytesIO(b"two")),
+        db=db,
+        current_user=users["leader"],
+        _={"PROJECT_LEADER"},
+    )
+    upload_file(
+        work_order_id=work_order.id,
+        file_category="FINAL_CONTRACT_SCAN",
+        business_stage="FINAL_CONTRACT_SCAN",
+        upload=UploadFile(filename="contract-1.xlsx", file=BytesIO(b"one")),
+        db=db,
+        current_user=users["leader"],
+        _={"PROJECT_LEADER"},
+    )
+    latest_contract = upload_file(
+        work_order_id=work_order.id,
+        file_category="FINAL_CONTRACT_SCAN",
+        business_stage="FINAL_CONTRACT_SCAN",
+        upload=UploadFile(filename="contract-2.xlsx", file=BytesIO(b"two")),
+        db=db,
+        current_user=users["leader"],
+        _={"PROJECT_LEADER"},
+    )
+
+    current_reports = db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order.id,
+        WorkOrderFile.file_category == "FORMAL_REPORT",
+        WorkOrderFile.is_current.is_(True),
+        WorkOrderFile.source_type != "SIGNOFF_SYNC",
+    ).all()
+    current_contracts = db.query(WorkOrderFile).filter(
+        WorkOrderFile.work_order_id == work_order.id,
+        WorkOrderFile.file_category == "FINAL_CONTRACT_SCAN",
+        WorkOrderFile.is_current.is_(True),
+        WorkOrderFile.source_type != "SIGNOFF_SYNC",
+    ).all()
+    assert [item.id for item in current_reports] == [latest_report.id]
+    assert [item.id for item in current_contracts] == [latest_contract.id]
 
 
 def test_smoke_05_print_room_and_mailing_move_to_archive_submit() -> None:

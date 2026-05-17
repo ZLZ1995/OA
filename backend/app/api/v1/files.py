@@ -212,12 +212,18 @@ def upload_file(
     )
     next_version = 1 if not latest else latest.version_no + 1
 
+    single_current_stage_categories = {FORMAL_REPORT_FILE_CATEGORY, FINAL_CONTRACT_SCAN_FILE_CATEGORY}
+    current_filter = [
+        WorkOrderFile.work_order_id == work_order_id,
+        WorkOrderFile.file_category == file_category,
+        WorkOrderFile.is_current.is_(True),
+    ]
+    if file_category not in single_current_stage_categories:
+        current_filter.append(WorkOrderFile.business_stage == business_stage)
+
     db.query(WorkOrderFile).filter(
         and_(
-            WorkOrderFile.work_order_id == work_order_id,
-            WorkOrderFile.file_category == file_category,
-            WorkOrderFile.business_stage == business_stage,
-            WorkOrderFile.is_current.is_(True),
+            *current_filter,
         )
     ).update({"is_current": False})
 

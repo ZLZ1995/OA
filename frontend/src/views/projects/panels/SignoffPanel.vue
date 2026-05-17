@@ -21,7 +21,7 @@
       <el-form label-width="120px">
         <el-form-item label="报告附件">
           <el-upload :auto-upload="false" :on-change="onFormalReportSelected" :show-file-list="false">
-            <el-button type="primary">上传报告附件</el-button>
+            <el-button type="primary">{{ formalReportFiles.length ? '重新上传报告附件' : '上传报告附件' }}</el-button>
           </el-upload>
           <div v-if="formalReportFiles.length" class="file-list">
             <el-tag v-for="file in formalReportFiles" :key="file.id" type="info" effect="plain">
@@ -31,7 +31,7 @@
         </el-form-item>
         <el-form-item label="合同扫描件">
           <el-upload :auto-upload="false" :on-change="onFinalContractSelected" :show-file-list="false">
-            <el-button type="primary">上传合同扫描件</el-button>
+            <el-button type="primary">{{ contractFiles.length ? '重新上传合同扫描件' : '上传合同扫描件' }}</el-button>
           </el-upload>
           <div v-if="contractFiles.length" class="file-list">
             <el-tag v-for="file in contractFiles" :key="file.id" type="success" effect="plain">
@@ -130,13 +130,13 @@ const REVIEW_REPORT_STAGE_PRIORITY = [
 ]
 
 const reviewPackageFiles = computed(() => {
-  const reportFiles = files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.is_current)
+  const reportFiles = files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.is_current && file.source_type !== 'SIGNOFF_SYNC')
   const stage = REVIEW_REPORT_STAGE_PRIORITY.find(item => reportFiles.some(file => file.business_stage === item))
   if (!stage) return []
   return latestFilesByOriginal(reportFiles.filter(file => file.business_stage === stage))
 })
-const formalReportFiles = computed(() => latestFilesByOriginal(files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.is_current)))
-const contractFiles = computed(() => latestFilesByOriginal(files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.is_current)))
+const formalReportFiles = computed(() => latestFileOnly(files.value.filter(file => file.file_category === 'FORMAL_REPORT' && file.is_current && file.source_type !== 'SIGNOFF_SYNC')))
+const contractFiles = computed(() => latestFileOnly(files.value.filter(file => file.file_category === 'FINAL_CONTRACT_SCAN' && file.is_current && file.source_type !== 'SIGNOFF_SYNC')))
 
 const signoffStatusText = computed(() => {
   if (props.flowInfo?.current_work_order_status === 'WAIT_OWNER_SIGNOFF_UPLOAD') return '待上传报告附件与合同扫描件'
@@ -167,6 +167,15 @@ function latestFilesByOriginal(fileList: WorkOrderFileItem[]) {
     result.push(file)
   }
   return result
+}
+
+function latestFileOnly(fileList: WorkOrderFileItem[]) {
+  const latest = [...fileList].sort((a, b) => {
+    const timeDiff = new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()
+    if (timeDiff !== 0) return timeDiff
+    return b.id - a.id
+  })[0]
+  return latest ? [latest] : []
 }
 
 async function loadFiles() {
