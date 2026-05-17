@@ -42,10 +42,13 @@
           <el-option label="外部三审复核" value="EXTERNAL_THIRD" />
         </el-select>
       </el-form-item>
-      <el-form-item label="审核老师" v-if="canSubmitReview && !isReplyFlow">
+      <el-form-item label="审核老师" v-if="canSubmitReview && !isReplyFlow && !isExternalReviewRound">
         <el-select v-model="reviewerUserId" placeholder="选择审核老师" style="width: 320px">
           <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
         </el-select>
+      </el-form-item>
+      <el-form-item label="复核人员" v-if="canSubmitReview && !isReplyFlow && isExternalReviewRound">
+        <el-input :model-value="externalFixedReviewerName" disabled style="width: 320px" />
       </el-form-item>
       <template v-if="showReviewerChangePanel">
         <el-form-item label="变更审核老师">
@@ -252,7 +255,10 @@
           title="直接转交不会上传新文件，将沿用本轮审核通过的待审报告资料包。"
         />
         <el-form label-width="120px">
-          <el-form-item :label="`${routingNextRoundLabel}老师`" required>
+          <el-form-item v-if="routingNextRound.startsWith('EXTERNAL_')" :label="`${routingNextRoundLabel}人员`">
+            <el-input :model-value="routingFixedReviewerName" disabled />
+          </el-form-item>
+          <el-form-item v-else :label="`${routingNextRoundLabel}老师`" required>
             <el-select v-model="routingReviewerUserId" placeholder="选择下一级审核老师" style="width: 100%" filterable>
               <el-option v-for="u in routingUserOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
             </el-select>
@@ -487,6 +493,12 @@ const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'EXTERNAL_SECOND') return props.flowInfo?.second_reviewer_id
   return props.flowInfo?.third_reviewer_id
 })
+const externalFixedReviewerName = computed(() => {
+  if (reviewRound.value === 'EXTERNAL_FIRST') return props.flowInfo?.project.first_reviewer_name || '-'
+  if (reviewRound.value === 'EXTERNAL_SECOND') return props.flowInfo?.project.second_reviewer_name || '-'
+  if (reviewRound.value === 'EXTERNAL_THIRD') return props.flowInfo?.project.third_reviewer_name || '-'
+  return '-'
+})
 const canSubmitReview = computed(() => props.canEdit && !isReviewLocked.value && isReviewSubmitter.value && (isSubmitStatus(statusCode.value) || isLeaderSubmitNextStage.value || isReviewerSelectNextStage.value))
 const canReviewerSelectNext = computed(() =>
   props.canEdit &&
@@ -578,6 +590,11 @@ const routingNextRound = computed<ReviewRound>(() => {
   return 'EXTERNAL_THIRD'
 })
 const routingNextRoundLabel = computed(() => roundLabel(routingNextRound.value))
+const routingFixedReviewerName = computed(() => {
+  if (routingNextRound.value === 'EXTERNAL_SECOND') return props.flowInfo?.project.second_reviewer_name || '-'
+  if (routingNextRound.value === 'EXTERNAL_THIRD') return props.flowInfo?.project.third_reviewer_name || '-'
+  return '-'
+})
 const reviewerSelectSourceRound = computed<'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND' | undefined>(() => {
   if (statusCode.value === 'FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND') return 'FIRST'
   if (statusCode.value === 'SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD') return 'SECOND'
@@ -782,6 +799,11 @@ function formatFileSize(size?: number | null) {
 }
 
 async function loadCandidates() {
+  if (isExternalReviewRound.value) {
+    reviewerUserId.value = currentRoundReviewerId.value || undefined
+    userOptions.value = []
+    return
+  }
   if (isReplyFlow.value && !canChangeReviewer.value) {
     reviewerUserId.value = currentRoundReviewerId.value || undefined
     userOptions.value = []
@@ -914,8 +936,8 @@ async function onTransferPrintRoom() {
 }
 
 async function onSubmit() {
-  const targetReviewerId = isReplyFlow.value ? currentRoundReviewerId.value : reviewerUserId.value
-  if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
+  const targetReviewerId = (isReplyFlow.value || isExternalReviewRound.value) ? currentRoundReviewerId.value : reviewerUserId.value
+  if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isExternalReviewRound.value ? '当前外部复核轮次缺少对应内部审核人' : isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
   if (reviewerSelectSourceRound.value) {
     await routeApprovedReview({
       work_order_id: props.workOrderId,
@@ -1022,6 +1044,11 @@ async function openRoutingDialog(round: 'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 
   routingReviewerUserId.value = undefined
   routingUserOptions.value = []
   const nextRound = round === 'FIRST' ? 'SECOND' : round === 'SECOND' ? 'THIRD' : round === 'EXTERNAL_FIRST' ? 'EXTERNAL_SECOND' : 'EXTERNAL_THIRD'
+  if (nextRound.startsWith('EXTERNAL_')) {
+    routingReviewerUserId.value = nextRound === 'EXTERNAL_SECOND' ? props.flowInfo?.second_reviewer_id || undefined : props.flowInfo?.third_reviewer_id || undefined
+    routingDialogVisible.value = true
+    return
+  }
   routingUserOptions.value = (await listReviewCandidates(props.workOrderId, nextRound)).items.filter(user => {
     if (projectPartyIds.value.has(user.user_id)) return false
     if (nextRound === 'SECOND' && [props.flowInfo?.first_reviewer_id, props.flowInfo?.third_reviewer_id].includes(user.user_id)) return false
