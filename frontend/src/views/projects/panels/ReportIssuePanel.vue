@@ -115,12 +115,14 @@ import { getPrintRoomInfo, issueOfficialContract, issuePaperReport, markContract
 import { downloadWorkOrderFile, listWorkOrderFiles, replaceWorkOrderFile, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { startReportMailing } from '@/api/reportMailing'
+import { useAuthStore } from '@/store/auth'
 
 const props = defineProps<{ workOrderId?: number; canOperate: boolean; userRoles?: string[]; flowInfo?: ProjectFlowData }>()
 const emit = defineEmits<{
   (e: 'changed'): void
   (e: 'navigate', key: string): void
 }>()
+const auth = useAuthStore()
 
 const contractNo = ref('')
 const paperReportNo = ref('')
@@ -143,10 +145,19 @@ const REVIEW_STAGE_ORDER: Record<string, number> = {
 }
 
 const isPrintRoomRole = computed(() => Boolean(props.userRoles?.includes('PRINT_ROOM')))
-const canReplaceReportScan = computed(() => Boolean(props.userRoles?.some(role => ['PRINT_ROOM', 'ADMIN'].includes(role))))
+const isAssignedPrintRoomHandler = computed(() => Boolean(
+  auth.user?.id &&
+  props.flowInfo?.current_handler_user_id === auth.user.id &&
+  props.flowInfo?.print_room_handler_id === auth.user.id
+))
+const canHandlePrintRoom = computed(() => Boolean(
+  props.flowInfo?.current_work_order_status === 'PRINTROOM_PROCESSING' &&
+  (props.userRoles?.includes('ADMIN') || isAssignedPrintRoomHandler.value || props.flowInfo?.user_role_in_project === '文印室')
+))
+const canReplaceReportScan = computed(() => canHandlePrintRoom.value)
 const canPrintRoom = computed(() => Boolean(
-  props.userRoles?.some(role => ['PRINT_ROOM', 'ADMIN'].includes(role)) &&
-  props.flowInfo?.current_work_order_status === 'PRINTROOM_PROCESSING'
+  props.canOperate &&
+  canHandlePrintRoom.value
 ))
 const canReportErrorBack = computed(() => Boolean(
   props.userRoles?.some(role => ['PROJECT_LEADER', 'PROJECT_MEMBER', 'ADMIN'].includes(role)) &&
@@ -173,7 +184,7 @@ async function loadFiles() {
   const info = await getPrintRoomInfo(props.workOrderId)
   contractNo.value = info.contract_no || ''
   paperReportNo.value = info.paper_report_no || ''
-  copyCount.value = info.copy_count || 1
+  copyCount.value = info.copy_count || info.formal_report_count || props.flowInfo?.formal_report_count || copyCount.value || 1
   remark.value = info.remark || ''
   const files = (await listWorkOrderFiles(props.workOrderId)).items
   contractFiles.value = latestByCategory(files, 'FINAL_CONTRACT_SCAN')

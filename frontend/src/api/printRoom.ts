@@ -14,6 +14,7 @@ export interface PrintRoomInfoItem {
   contract_no?: string | null
   paper_report_no?: string | null
   copy_count?: number | null
+  formal_report_count?: number | null
   remark?: string | null
 }
 

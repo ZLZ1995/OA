@@ -21,6 +21,7 @@ class PrintRoomInfoResponse(BaseModel):
     contract_no: str | None = None
     paper_report_no: str | None = None
     copy_count: int | None = None
+    formal_report_count: int | None = None
     remark: str | None = None
 
 

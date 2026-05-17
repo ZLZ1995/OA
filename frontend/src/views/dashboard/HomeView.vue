@@ -72,26 +72,170 @@
       </el-card>
 
       <el-card class="todo-card" shadow="never">
-        <template #header>待办项目</template>
-        <el-table class="wide-table" :data="todoProjects" size="small" table-layout="fixed">
-          <el-table-column prop="project_no" label="项目编号" width="118" show-overflow-tooltip />
-          <el-table-column prop="project_name" label="项目名称" min-width="96" show-overflow-tooltip />
-          <el-table-column prop="client_name" label="客户名称" min-width="120" show-overflow-tooltip />
-          <el-table-column prop="project_leader_name" label="项目负责人" width="92" show-overflow-tooltip />
-          <el-table-column prop="transfer_user_name" label="转交人" width="82" show-overflow-tooltip />
-          <el-table-column prop="current_step" label="当前步骤" width="96" show-overflow-tooltip />
-          <el-table-column prop="todo_action" label="待办事项" min-width="116" show-overflow-tooltip />
+        <template #header>
+          <div class="card-header">
+            <span>待办项目</span>
+            <span class="card-header-tip">点击项目后，下方联动展示该项目消息和办理入口</span>
+          </div>
+        </template>
+        <el-table
+          ref="todoTableRef"
+          class="wide-table todo-table"
+          :data="todoProjects"
+          size="small"
+          row-key="id"
+          highlight-current-row
+          table-layout="fixed"
+          @current-change="handleTodoCurrentChange"
+          @row-click="handleTodoRowClick"
+        >
+          <el-table-column prop="project_no" label="项目编号" width="126" show-overflow-tooltip />
+          <el-table-column prop="project_name" label="项目名称" min-width="108" show-overflow-tooltip />
+          <el-table-column prop="client_name" label="客户名称" min-width="124" show-overflow-tooltip />
+          <el-table-column prop="current_step" label="当前步骤" width="110" show-overflow-tooltip />
+          <el-table-column prop="todo_action" label="待办事项" min-width="126" show-overflow-tooltip />
+          <el-table-column label="优先级" width="92">
+            <template #default="{ row }">
+              <el-tag size="small" :type="todoPriorityTagType(row)">
+                {{ todoPriorityText(row) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="操作" width="200">
             <template #default="{ row }">
-              <el-button v-if="row.can_approve_delete" link type="danger" @click="goDeleteApprovals">处理删除审核</el-button>
+              <el-button v-if="row.can_approve_delete" link type="danger" @click.stop="goDeleteApprovals">处理删除审核</el-button>
               <template v-else>
-                <el-button link type="primary" @click="goProject(row.id, row)">进入项目</el-button>
-                <el-button link type="success" @click="goNotifications(row.id)">相关消息</el-button>
+                <el-button link type="primary" @click.stop="goProject(row.id, row)">进入项目</el-button>
+                <el-button link type="success" @click.stop="focusTodoProject(row)">查看联动</el-button>
               </template>
-              <el-button v-if="row.can_approve_termination" link type="danger" @click="approveTermination(row)">允许终止/废止</el-button>
+              <el-button v-if="row.can_approve_termination" link type="danger" @click.stop="approveTermination(row)">允许终止</el-button>
             </template>
           </el-table-column>
         </el-table>
+      </el-card>
+
+      <el-card class="linkage-card" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <span>待办消息联动</span>
+            <span class="card-header-tip">{{ selectedTodo ? '当前联动项目：' + selectedTodo.project_name : '请选择一个待办项目' }}</span>
+          </div>
+        </template>
+
+        <template v-if="selectedTodo">
+          <div class="summary-metrics summary-metrics-compact">
+            <div class="summary-metric">
+              <span>未读消息</span>
+              <strong>{{ linkageStats.unread_count }}</strong>
+            </div>
+            <div class="summary-metric">
+              <span>催办消息</span>
+              <strong>{{ linkageStats.today_reminder_count }}</strong>
+            </div>
+            <div class="summary-metric">
+              <span>今日新增</span>
+              <strong>{{ linkageStats.today_new_count }}</strong>
+            </div>
+          </div>
+
+          <el-tabs v-model="activeTab" class="linkage-tabs" @tab-change="loadLinkedNotifications">
+            <el-tab-pane label="未读" name="unread" />
+            <el-tab-pane label="已读" name="read" />
+            <el-tab-pane label="我发起的" name="initiated" />
+            <el-tab-pane label="抄送我的" name="cc" />
+            <el-tab-pane label="全部" name="all" />
+          </el-tabs>
+
+          <div class="linkage-toolbar">
+            <NotificationFilterBar
+              class="linkage-filter"
+              :filters="filters"
+              @update:filters="Object.assign(filters, $event)"
+              @search="loadLinkedNotifications"
+              @reset="resetFilters"
+            />
+            <div class="linkage-toolbar-actions">
+              <el-button :disabled="!selectedNotificationIds.length" @click="batchRead">批量已读</el-button>
+              <el-button type="primary" plain @click="openNotificationsPage">查看全部消息</el-button>
+            </div>
+          </div>
+
+          <div class="linkage-content">
+            <div class="linkage-main">
+              <div class="linkage-section-head">
+                <div>
+                  <h3>消息动态</h3>
+                  <p>围绕当前待办项目集中查看流程消息、催办和处理提醒</p>
+                </div>
+              </div>
+              <NotificationListTable
+                :items="linkedNotifications"
+                @selection-change="selectedNotificationIds = $event"
+                @open="openNotification"
+                @enter-handle="enterHandle"
+              />
+            </div>
+
+            <div class="linkage-side">
+              <div class="side-panel quick-actions">
+                <div class="side-panel-head">
+                  <h3>待办处理</h3>
+                  <p>常用操作入口</p>
+                </div>
+                <el-button type="primary" @click="goProject(selectedTodo.id, selectedTodo)">进入办理</el-button>
+                <el-button @click="openNotificationsPage">查看关联消息</el-button>
+                <el-button :disabled="!selectedNotificationIds.length" @click="batchRead">标记所选已读</el-button>
+                <el-button
+                  v-if="selectedTodo.can_approve_termination"
+                  type="danger"
+                  plain
+                  @click="approveTermination(selectedTodo)"
+                >
+                  允许终止
+                </el-button>
+              </div>
+
+              <div class="side-panel flow-panel">
+                <div class="side-panel-head">
+                  <h3>流程进度</h3>
+                  <p>当前项目关键状态</p>
+                </div>
+                <ul class="flow-list">
+                  <li>
+                    <span>待办事项</span>
+                    <strong>{{ selectedTodo.todo_action || '暂无明确待办' }}</strong>
+                  </li>
+                  <li>
+                    <span>当前处理状态</span>
+                    <strong>{{ selectedTodo.status_display || '进行中' }}</strong>
+                  </li>
+                  <li>
+                    <span>最近催办</span>
+                    <strong>{{ formatDateTime(selectedTodo.latest_remind_at) || '今日无催办' }}</strong>
+                  </li>
+                  <li>
+                    <span>今日催办次数</span>
+                    <strong>{{ selectedTodo.remind_count_today || 0 }}</strong>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="side-panel focus-panel">
+                <div class="side-panel-head">
+                  <h3>联动说明</h3>
+                  <p>帮助使用新工作台结构</p>
+                </div>
+                <ol class="focus-list">
+                  <li>上方切换待办项目，下方消息会自动按项目联动刷新。</li>
+                  <li>优先处理红色未读或催办消息，再进入对应项目环节。</li>
+                  <li>需要查看完整历史时，可进入“查看全部消息”。</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <el-empty v-else description="暂无待办项目，联动区将在有待办后自动展示" />
       </el-card>
 
       <el-card class="my-card" shadow="never">
@@ -115,6 +259,13 @@
         </el-table>
       </el-card>
     </div>
+
+    <NotificationDetailDrawer
+      v-model:visible="detailVisible"
+      :item="currentNotification"
+      :timeline-items="timelineItems"
+      @goto-target="gotoTarget"
+    />
 
     <el-dialog v-model="editVisible" title="编辑项目" width="560px">
       <el-form label-width="120px">
@@ -171,7 +322,7 @@
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editLoading" @click="saveProject">确认更改并保存</el-button>
+        <el-button type="primary" :loading="editLoading" @click="saveProject">确认修改并保存</el-button>
       </template>
     </el-dialog>
 
@@ -200,12 +351,23 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox, type ElTable } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { getWorkbench, type WorkbenchProjectItem } from '@/api/workbench'
+import NotificationDetailDrawer from '@/components/notifications/NotificationDetailDrawer.vue'
+import NotificationFilterBar from '@/components/notifications/NotificationFilterBar.vue'
+import NotificationListTable from '@/components/notifications/NotificationListTable.vue'
+import {
+  batchMarkNotificationRead,
+  getNotificationDetail,
+  getNotificationStats,
+  getNotificationTimeline,
+  listMyNotifications,
+  markNotificationRead,
+  type NotificationItem,
+  type NotificationTimelineItem,
+} from '@/api/notifications'
 import { createProjectDeleteRequest } from '@/api/projectDeleteRequests'
-import { listUserCandidates, type UserItem } from '@/api/users'
 import {
   archiveProject,
   approveProjectTermination,
@@ -220,7 +382,12 @@ import {
   type ProjectUndertakingUnit,
   type ReportType,
 } from '@/api/projects'
+import { listUserCandidates, type UserItem } from '@/api/users'
+import { getWorkbench, type WorkbenchProjectItem } from '@/api/workbench'
 import { useAuthStore } from '@/store/auth'
+import { useNotificationStore } from '@/store/notification'
+
+type NotificationTab = 'all' | 'unread' | 'read' | 'initiated' | 'cc'
 
 const evaluationBusinessOptions: EvaluationBusinessNature[] = [
   '国有资产评估业务',
@@ -236,8 +403,17 @@ const reportTypeOptions: ReportType[] = ['评估报告', '估值报告', '咨询
 
 const router = useRouter()
 const auth = useAuthStore()
+const notifications = useNotificationStore()
+const todoTableRef = ref<InstanceType<typeof ElTable>>()
 const myProjects = ref<WorkbenchProjectItem[]>([])
 const todoProjects = ref<WorkbenchProjectItem[]>([])
+const selectedTodoId = ref<number>()
+const linkedNotifications = ref<NotificationItem[]>([])
+const selectedNotificationIds = ref<number[]>([])
+const activeTab = ref<NotificationTab>('unread')
+const detailVisible = ref(false)
+const currentNotification = ref<NotificationItem | null>(null)
+const timelineItems = ref<NotificationTimelineItem[]>([])
 const editVisible = ref(false)
 const editLoading = ref(false)
 const editingProjectId = ref<number>()
@@ -247,7 +423,26 @@ const deleteTargetProjectId = ref<number>()
 const deleteTargetProjectName = ref('')
 const deleteAdminOptions = ref<UserItem[]>([])
 
-const currentUserDisplayName = auth.user?.real_name || auth.user?.username || '当前创建人'
+const linkageStats = reactive({
+  today_new_count: 0,
+  unread_count: 0,
+  today_reminder_count: 0,
+  read_rate: 0,
+  avg_process_duration_seconds: 0,
+  latest_notification_id: null as number | null,
+  server_time: '',
+})
+
+const filters = reactive({
+  keyword: '',
+  message_type: '',
+  priority: '',
+  project_id: undefined as number | undefined,
+})
+
+const currentUserDisplayName = computed(() => auth.user?.real_name || auth.user?.username || '当前创建人')
+
+const selectedTodo = computed(() => todoProjects.value.find(item => item.id === selectedTodoId.value) || null)
 
 const form = reactive({
   undertaking_unit: '中勤' as ProjectUndertakingUnit,
@@ -283,6 +478,172 @@ async function load() {
   const data = await getWorkbench()
   myProjects.value = data.my_projects
   todoProjects.value = data.todo_projects
+
+  const preferredId = selectedTodoId.value && todoProjects.value.some(item => item.id === selectedTodoId.value)
+    ? selectedTodoId.value
+    : todoProjects.value[0]?.id
+
+  if (preferredId) {
+    await selectTodoProject(preferredId)
+  } else {
+    selectedTodoId.value = undefined
+    linkedNotifications.value = []
+    selectedNotificationIds.value = []
+  }
+}
+
+async function refreshWorkbenchData(preserveSelection = true) {
+  const previousSelectedId = preserveSelection ? selectedTodoId.value : undefined
+  const data = await getWorkbench()
+  myProjects.value = data.my_projects
+  todoProjects.value = data.todo_projects
+
+  const nextSelectedId = previousSelectedId && todoProjects.value.some(item => item.id === previousSelectedId)
+    ? previousSelectedId
+    : todoProjects.value[0]?.id
+
+  if (nextSelectedId) {
+    selectedTodoId.value = nextSelectedId
+    await nextTick()
+    const current = todoProjects.value.find(item => item.id === nextSelectedId)
+    if (current) {
+      todoTableRef.value?.setCurrentRow(current)
+    }
+  } else {
+    selectedTodoId.value = undefined
+  }
+}
+
+async function selectTodoProject(projectId: number) {
+  selectedTodoId.value = projectId
+  filters.project_id = projectId
+  selectedNotificationIds.value = []
+  await nextTick()
+  const current = todoProjects.value.find(item => item.id === projectId)
+  if (current) {
+    todoTableRef.value?.setCurrentRow(current)
+  }
+  await loadLinkedNotifications()
+}
+
+async function loadLinkedNotifications() {
+  if (!selectedTodo.value) return
+  filters.project_id = selectedTodo.value.id
+  const [listResult, statsResult] = await Promise.all([
+    listMyNotifications({
+      tab: activeTab.value,
+      keyword: filters.keyword || undefined,
+      message_type: filters.message_type || undefined,
+      priority: filters.priority || undefined,
+      project_id: selectedTodo.value.id,
+      page: 1,
+      page_size: 20,
+    }),
+    getNotificationStats(),
+  ])
+
+  linkedNotifications.value = listResult.items
+  const projectItems = listResult.items.filter(item => item.project_id === selectedTodo.value?.id)
+  const unreadCount = projectItems.filter(item => !item.is_read).length
+  const reminderCount = projectItems.filter(item => item.message_type === 'REMINDER').length
+  const readCount = projectItems.filter(item => item.is_read).length
+  const readRate = projectItems.length ? Number(((readCount / projectItems.length) * 100).toFixed(2)) : 0
+
+  linkageStats.today_new_count = projectItems.length
+  linkageStats.unread_count = unreadCount
+  linkageStats.today_reminder_count = reminderCount
+  linkageStats.read_rate = readRate
+  linkageStats.avg_process_duration_seconds = statsResult.avg_process_duration_seconds
+  linkageStats.latest_notification_id = statsResult.latest_notification_id
+  linkageStats.server_time = statsResult.server_time
+}
+
+function handleTodoCurrentChange(row?: WorkbenchProjectItem) {
+  if (row && row.id !== selectedTodoId.value) {
+    void selectTodoProject(row.id)
+  }
+}
+
+function handleTodoRowClick(row: WorkbenchProjectItem) {
+  if (row.id !== selectedTodoId.value) {
+    void selectTodoProject(row.id)
+  }
+}
+
+function focusTodoProject(row: WorkbenchProjectItem) {
+  void selectTodoProject(row.id)
+}
+
+async function openNotification(item: NotificationItem) {
+  if (!item.is_read) {
+    await markNotificationRead(item.id)
+    notifications.applyReadState([item.id])
+  }
+  const [detail, timeline] = await Promise.all([
+    getNotificationDetail(item.id),
+    getNotificationTimeline(item.id),
+  ])
+  currentNotification.value = { ...detail, is_read: true }
+  timelineItems.value = timeline.items
+  detailVisible.value = true
+  await refreshWorkbenchData()
+  await loadLinkedNotifications()
+}
+
+async function enterHandle(item: NotificationItem) {
+  if (item.process_status === 'PROCESSED') {
+    ElMessage.warning('该消息对应环节已处理')
+    await loadLinkedNotifications()
+    return
+  }
+  if (!item.project_id) return
+  if (!item.is_read) {
+    await markNotificationRead(item.id)
+    notifications.applyReadState([item.id])
+  }
+  await refreshWorkbenchData()
+  await router.push(`/projects/${item.project_id}/flow`)
+}
+
+async function batchRead() {
+  if (!selectedNotificationIds.value.length) return
+  const ids = [...selectedNotificationIds.value]
+  await batchMarkNotificationRead(ids)
+  notifications.applyReadState(ids)
+  ElMessage.success('已批量标记为已读')
+  selectedNotificationIds.value = []
+  await refreshWorkbenchData()
+  await loadLinkedNotifications()
+}
+
+async function resetFilters() {
+  filters.keyword = ''
+  filters.message_type = ''
+  filters.priority = ''
+  await loadLinkedNotifications()
+}
+
+function gotoTarget(item: NotificationItem) {
+  if (item.link_type === 'PROJECT' && item.link_target_id) {
+    router.push(`/projects/${item.link_target_id}/flow`)
+    return
+  }
+  if (item.link_type === 'WORK_ORDER' && item.link_target_id) {
+    router.push(`/workorders/${item.link_target_id}`)
+    return
+  }
+  ElMessage.info('该消息暂无可跳转目标')
+}
+
+function openNotificationsPage() {
+  if (selectedTodo.value) {
+    router.push({
+      path: '/notifications',
+      query: { project_id: String(selectedTodo.value.id), message_type: filters.message_type || 'REMINDER' },
+    })
+    return
+  }
+  router.push('/notifications')
 }
 
 async function onCreate() {
@@ -357,7 +718,7 @@ async function approveTermination(row: WorkbenchProjectItem) {
     confirmButtonText: '允许终止/废止',
   })
   await approveProjectTermination(row.id)
-  ElMessage.success('已允许终止/废止，项目方现在可以归档')
+  ElMessage.success('已允许终止/废止，项目负责人现在可以归档')
   await load()
 }
 
@@ -410,7 +771,7 @@ async function submitDeleteRequest() {
       reason: deleteDraft.reason.trim() || undefined,
     })
     deleteDialogVisible.value = false
-    ElMessage.success(`已提交项目「${deleteTargetProjectName.value}」删除申请，待管理员 ${approver?.real_name || ''} 确认`)
+    ElMessage.success(`已提交项目“${deleteTargetProjectName.value}”删除申请，待管理员 ${approver?.real_name || ''} 确认`)
     await load()
   } finally {
     deleteSubmitting.value = false
@@ -495,13 +856,29 @@ function resolveTodoLabel(row: WorkbenchProjectItem) {
   return row.todo_action?.trim() || row.current_step?.trim() || ''
 }
 
+function todoPriorityText(row: WorkbenchProjectItem) {
+  if (row.can_approve_delete || row.can_approve_termination) return '紧急'
+  if ((row.remind_count_today || 0) > 0 || row.is_reminded) return '重要'
+  return '普通'
+}
+
+function todoPriorityTagType(row: WorkbenchProjectItem) {
+  if (row.can_approve_delete || row.can_approve_termination) return 'danger'
+  if ((row.remind_count_today || 0) > 0 || row.is_reminded) return 'warning'
+  return 'info'
+}
+
+function formatDateTime(value?: string | null) {
+  return value ? new Date(value).toLocaleString() : ''
+}
+
 function goProject(id: number, row?: WorkbenchProjectItem) {
   if (!row) {
     router.push(`/projects/${id}/flow`)
     return
   }
 
-  const todoPanel = row ? resolveTodoPanel(row) : undefined
+  const todoPanel = resolveTodoPanel(row)
   if (!todoPanel) {
     router.push(`/projects/${id}/flow`)
     return
@@ -529,7 +906,31 @@ function goNotifications(projectId?: number) {
   router.push('/notifications')
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+})
+
+const stopNotificationRefreshWatch = watch(
+  () => notifications.listRefreshToken,
+  async () => {
+    if (!selectedTodo.value) return
+    await refreshWorkbenchData()
+    await loadLinkedNotifications()
+  },
+)
+
+watch(
+  () => notifications.stats,
+  (value) => {
+    if (!selectedTodo.value) return
+    linkageStats.server_time = value.server_time
+  },
+  { deep: true },
+)
+
+onUnmounted(() => {
+  stopNotificationRefreshWatch()
+})
 </script>
 
 <style scoped>
@@ -581,6 +982,7 @@ onMounted(load)
   grid-template-columns: 320px minmax(0, 1fr);
   grid-template-areas:
     "create todo"
+    "create linkage"
     "mine mine";
   gap: 14px;
   align-items: start;
@@ -594,8 +996,26 @@ onMounted(load)
   grid-area: todo;
 }
 
+.linkage-card {
+  grid-area: linkage;
+  min-height: 386px;
+}
+
 .my-card {
   grid-area: mine;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-header-tip {
+  color: #64748b;
+  font-size: 12px;
+  text-align: right;
 }
 
 .wide-table {
@@ -626,13 +1046,233 @@ onMounted(load)
   margin-left: 8px;
 }
 
+.todo-table :deep(.el-table__body tr.current-row > td.el-table__cell) {
+  background: #edf5ff;
+}
+
+.linkage-card :deep(.el-empty) {
+  padding: 48px 0 56px;
+}
+
+.linkage-card :deep(.el-empty__description) {
+  color: #64748b;
+}
+
+.summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-metrics-compact {
+  padding: 0;
+}
+
+.summary-metric {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(31, 78, 121, 0.08);
+}
+
+.summary-metric span,
+.summary-metric strong {
+  display: block;
+}
+
+.summary-metric span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.summary-metric strong {
+  margin-top: 8px;
+  color: #1f4e79;
+  font-size: 18px;
+}
+
+.linkage-tabs {
+  margin-top: 16px;
+}
+
+.linkage-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px 0 16px;
+}
+
+.linkage-filter {
+  flex: 1;
+}
+
+.linkage-filter :deep(.filter-bar) {
+  margin-bottom: 0;
+}
+
+.linkage-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.linkage-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.linkage-main,
+.side-panel {
+  border: 1px solid var(--zq-border-soft);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.linkage-main {
+  padding: 14px;
+}
+
+.linkage-section-head,
+.side-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.linkage-section-head h3,
+.side-panel-head h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #153a63;
+}
+
+.linkage-section-head p,
+.side-panel-head p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.linkage-side {
+  display: grid;
+  gap: 14px;
+}
+
+.side-panel {
+  padding: 14px;
+}
+
+.linkage-card :deep(.el-card__body) {
+  position: relative;
+}
+
+.linkage-card :deep(.el-card__body)::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  width: 188px;
+  height: 188px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(31, 78, 121, 0.06), transparent 68%);
+  pointer-events: none;
+}
+
+.quick-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.flow-list,
+.focus-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-list {
+  display: grid;
+  gap: 12px;
+}
+
+.flow-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--zq-border-soft);
+}
+
+.flow-list li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.flow-list span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.flow-list strong {
+  color: #153a63;
+  text-align: right;
+}
+
+.focus-list {
+  display: grid;
+  gap: 10px;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1200px) {
+  .summary-metrics {
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+  }
+
+  .linkage-content {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 960px) {
   .workbench-grid {
     grid-template-columns: 1fr;
     grid-template-areas:
       "create"
       "todo"
+      "linkage"
       "mine";
+  }
+
+  .linkage-toolbar,
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .card-header-tip {
+    text-align: left;
+  }
+
+  .summary-metrics {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(90px, 1fr));
+  }
+
+  .linkage-toolbar-actions {
+    padding-top: 0;
+    flex-wrap: wrap;
   }
 }
 </style>

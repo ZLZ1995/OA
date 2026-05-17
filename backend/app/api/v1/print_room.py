@@ -49,12 +49,20 @@ def _ensure_project_operator(db: Session, work_order: WorkOrder, user_id: int) -
         raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可处理该流程")
 
 
+def _ensure_print_room_handler(work_order: WorkOrder, current_user: User) -> None:
+    if any(item.role.code == "ADMIN" for item in current_user.roles):
+        return
+    if work_order.print_room_handler_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅当前文印室办理人员可处理报告出具")
+
+
 @router.get("/work-orders/{work_order_id}", response_model=PrintRoomInfoResponse)
 def get_print_room_info(
     work_order_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> PrintRoomInfoResponse:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     contract = db.query(Contract).filter(Contract.work_order_id == work_order_id).first()
     record = db.query(PrintRoomRecord).filter(PrintRoomRecord.work_order_id == work_order_id).first()
     return PrintRoomInfoResponse(
@@ -62,6 +70,7 @@ def get_print_room_info(
         contract_no=contract.contract_no if contract else None,
         paper_report_no=record.paper_report_no if record else None,
         copy_count=record.copy_count if record else None,
+        formal_report_count=work_order.formal_report_count if work_order else None,
         remark=record.remark if record else None,
     )
 
@@ -261,6 +270,8 @@ def issue_official_contract(
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
 
+    _ensure_print_room_handler(work_order, current_user)
+
     contract = db.query(Contract).filter(Contract.work_order_id == work_order.id).first()
     if not contract:
         contract = Contract(work_order_id=work_order.id)
@@ -299,6 +310,8 @@ def issue_paper_report(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+
+    _ensure_print_room_handler(work_order, current_user)
 
     from_status = WorkOrderStatus(work_order.current_status)
     to_status = WorkOrderStatus.PAPER_REPORT_ISSUED
