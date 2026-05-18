@@ -186,23 +186,41 @@
                   <span class="card-header-tip">同时统计我创建的项目和我办理过的项目</span>
                 </div>
               </template>
-              <el-table class="wide-table" :data="myProjects" size="small" table-layout="fixed">
-                <el-table-column prop="project_no" label="项目编号" width="132" show-overflow-tooltip />
-                <el-table-column prop="project_name" label="项目名称" min-width="130" show-overflow-tooltip />
-                <el-table-column prop="client_name" label="客户名称" min-width="130" show-overflow-tooltip />
-                <el-table-column
+                <el-table class="wide-table" :data="myProjects" size="small" table-layout="fixed">
+                  <el-table-column prop="project_no" label="项目编号" width="132" show-overflow-tooltip />
+                  <el-table-column prop="project_name" label="项目名称" min-width="130" show-overflow-tooltip />
+                  <el-table-column prop="client_name" label="客户名称" min-width="130" show-overflow-tooltip />
+                  <el-table-column
                   prop="my_project_role"
                   label="我的角色"
                   width="116"
                   column-key="my_project_role"
                   :filters="myProjectRoleFilters"
-                  :filter-method="filterMyProjectRole"
-                  filter-placement="bottom-end"
-                  show-overflow-tooltip
-                />
-                <el-table-column prop="current_step" label="当前步骤" width="108" show-overflow-tooltip />
-                <el-table-column prop="status_display" label="状态" width="110" show-overflow-tooltip />
-                <el-table-column label="操作" width="420">
+                    :filter-method="filterMyProjectRole"
+                    filter-placement="bottom-end"
+                    show-overflow-tooltip
+                  />
+                  <el-table-column
+                    prop="current_step"
+                    label="当前步骤"
+                    width="108"
+                    column-key="current_step"
+                    :filters="myProjectStepFilters"
+                    :filter-method="filterMyProjectStep"
+                    filter-placement="bottom-end"
+                    show-overflow-tooltip
+                  />
+                  <el-table-column
+                    prop="status_display"
+                    label="状态"
+                    width="110"
+                    column-key="status_display"
+                    :filters="myProjectStatusFilters"
+                    :filter-method="filterMyProjectStatus"
+                    filter-placement="bottom-end"
+                    show-overflow-tooltip
+                  />
+                  <el-table-column label="操作" width="420">
                   <template #default="{ row }">
                     <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
                     <el-button link type="success" @click="goNotifications(row.id)">相关消息</el-button>
@@ -475,6 +493,18 @@ const myProjectRoleFilters = computed(() =>
     value: role,
   })),
 )
+const myProjectStepFilters = computed(() =>
+  Array.from(new Set(myProjects.value.map(item => item.current_step).filter(Boolean))).map(step => ({
+    text: step,
+    value: step,
+  })),
+)
+const myProjectStatusFilters = computed(() =>
+  Array.from(new Set(myProjects.value.map(item => item.status_display).filter(Boolean))).map(status => ({
+    text: status,
+    value: status,
+  })),
+)
 
 const FLOW_PREVIEW_STEPS: FlowPreviewNode[] = [
   { key: 'create', label: '项目创建', keywords: ['项目创建'], group: '立项准备' },
@@ -709,6 +739,14 @@ function handleNotificationRowClick(item: NotificationItem) {
 
 function filterMyProjectRole(value: string, row: WorkbenchProjectItem) {
   return row.my_project_role === value
+}
+
+function filterMyProjectStep(value: string, row: WorkbenchProjectItem) {
+  return row.current_step === value
+}
+
+function filterMyProjectStatus(value: string, row: WorkbenchProjectItem) {
+  return row.status_display === value
 }
 
 function gotoTarget(item: NotificationItem) {
