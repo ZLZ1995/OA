@@ -1,6 +1,6 @@
 <template>
   <el-empty v-if="!items.length" description="暂无消息" />
-  <el-table v-else :data="items" @selection-change="onSelectionChange">
+  <el-table v-else :data="items" @selection-change="onSelectionChange" @row-click="onRowClick">
     <el-table-column type="selection" width="48" />
     <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
     <el-table-column label="类型" width="120">
@@ -71,6 +71,7 @@ const emit = defineEmits<{
   (event: 'selection-change', value: number[]): void
   (event: 'open', value: NotificationItem): void
   (event: 'enter-handle', value: NotificationItem): void
+  (event: 'row-click', value: NotificationItem): void
 }>()
 
 function formatDate(value: string) {
@@ -119,5 +120,9 @@ function canEnterHandle(row: NotificationItem) {
 
 function onSelectionChange(rows: NotificationItem[]) {
   emit('selection-change', rows.map(row => row.id))
+}
+
+function onRowClick(row: NotificationItem) {
+  emit('row-click', row)
 }
 </script>

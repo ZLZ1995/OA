@@ -6,6 +6,7 @@ class WorkbenchProjectItem(BaseModel):
     project_no: str
     project_name: str
     client_name: str
+    my_project_role: str | None = None
     project_leader_name: str | None = None
     transfer_user_name: str | None = None
     current_step: str

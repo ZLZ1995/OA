@@ -14,9 +14,29 @@ from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.workflow_log import WorkflowLog
 from app.schemas.workbench import WorkbenchProjectItem, WorkbenchResponse
-from app.services.project_flow import get_project_leader_display_name, normalize_project_step
+from app.services.project_flow import get_project_leader_display_name, get_user_role_in_project, normalize_project_step
 
 router = APIRouter(prefix="/workbench", tags=["项目工作台"])
+
+
+def _build_my_project_role(
+    *,
+    project: Project,
+    latest_work_order: WorkOrder | None,
+    current_user: User,
+    is_member: bool,
+) -> str:
+    if project.business_user_id == current_user.id:
+        return "创建人"
+    if project.project_leader_id == current_user.id:
+        return "项目负责人"
+    if is_member:
+        return "项目组成员"
+    if latest_work_order:
+        role = get_user_role_in_project(project, latest_work_order, current_user, is_member)
+        if role and role not in {"无权限", "管理员"}:
+            return role
+    return "经办人"
 
 
 def _todo_action_text(
@@ -63,15 +83,38 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
     my_projects: list[WorkbenchProjectItem] = []
     member_project_ids = db.query(ProjectMember.project_id).filter(ProjectMember.user_id == current_user.id)
     member_project_id_set = {item[0] for item in member_project_ids.all()}
+    handled_project_ids = {
+        item[0]
+        for item in db.query(WorkOrder.project_id)
+        .filter(
+            or_(
+                WorkOrder.current_handler_user_id == current_user.id,
+                WorkOrder.initiator_user_id == current_user.id,
+                WorkOrder.project_leader_id == current_user.id,
+                WorkOrder.contract_reviewer_id == current_user.id,
+                WorkOrder.first_reviewer_id == current_user.id,
+                WorkOrder.second_reviewer_id == current_user.id,
+                WorkOrder.third_reviewer_id == current_user.id,
+                WorkOrder.print_room_handler_id == current_user.id,
+                WorkOrder.mailing_handler_user_id == current_user.id,
+                WorkOrder.archive_reviewer_id == current_user.id,
+                WorkOrder.archive_submitter_id == current_user.id,
+                WorkOrder.chief_appraiser_user_id == current_user.id,
+            )
+        )
+        .all()
+    }
     my_project_filter = or_(
         Project.business_user_id == current_user.id,
         Project.project_leader_id == current_user.id,
         Project.id.in_(member_project_id_set),
+        Project.id.in_(handled_project_ids),
     )
 
     for project in base_query.filter(my_project_filter).order_by(Project.id.desc()).all():
         latest_work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project.id).order_by(WorkOrder.id.desc()).first()
         delete_request = db.query(ProjectDeleteRequest).filter(ProjectDeleteRequest.project_id == project.id).first()
+        is_member = project.id in member_project_id_set
         step = normalize_project_step(
             latest_work_order.current_status if latest_work_order else None,
             project.archived_at is not None,
@@ -111,6 +154,12 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
                 project_no=project.project_code,
                 project_name=project.project_name,
                 client_name=project.client_name,
+                my_project_role=_build_my_project_role(
+                    project=project,
+                    latest_work_order=latest_work_order,
+                    current_user=current_user,
+                    is_member=is_member,
+                ),
                 project_leader_name=get_project_leader_display_name(project, leader.real_name if leader else None),
                 current_step=step,
                 status_display=step,

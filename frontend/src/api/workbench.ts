@@ -5,6 +5,7 @@ export interface WorkbenchProjectItem {
   project_no: string
   project_name: string
   client_name: string
+  my_project_role?: string | null
   project_leader_name?: string | null
   transfer_user_name?: string | null
   current_step: string

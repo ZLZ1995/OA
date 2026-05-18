@@ -75,7 +75,7 @@ const HELP_MENU: MenuItem = {
     { key: 'help-manual', title: '使用说明', path: '/help/manual' },
   ],
 }
-const SHARED_MENUS: MenuItem[] = [{ key: 'notifications', title: '消息中心', path: '/notifications' }, HELP_MENU]
+const SHARED_MENUS: MenuItem[] = [HELP_MENU]
 const ADMIN_MENUS: MenuItem[] = [
   { key: 'accounts', title: '账号管理', path: '/accounts' },
   { key: 'termination-approvals', title: '终止/废止审核', path: '/termination-approvals' },
