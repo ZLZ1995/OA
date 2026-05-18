@@ -56,6 +56,16 @@ def _ensure_print_room_handler(work_order: WorkOrder, current_user: User) -> Non
         raise HTTPException(status_code=403, detail="仅当前文印室办理人员可处理报告出具")
 
 
+def _advance_legacy_print_room_status(work_order: WorkOrder) -> None:
+    if (
+        work_order.current_status == WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
+        and work_order.signoff_status == "APPROVED"
+        and work_order.print_room_handler_id
+    ):
+        work_order.current_status = WorkOrderStatus.PRINTROOM_PROCESSING.value
+        work_order.current_handler_user_id = work_order.print_room_handler_id
+
+
 @router.get("/work-orders/{work_order_id}", response_model=PrintRoomInfoResponse)
 def get_print_room_info(
     work_order_id: int,
@@ -273,6 +283,7 @@ def issue_official_contract(
         raise HTTPException(status_code=404, detail="工单不存在")
 
     _ensure_print_room_handler(work_order, current_user)
+    _advance_legacy_print_room_status(work_order)
 
     contract = db.query(Contract).filter(Contract.work_order_id == work_order.id).first()
     if not contract:
@@ -314,6 +325,7 @@ def issue_paper_report(
         raise HTTPException(status_code=404, detail="工单不存在")
 
     _ensure_print_room_handler(work_order, current_user)
+    _advance_legacy_print_room_status(work_order)
 
     from_status = WorkOrderStatus(work_order.current_status)
     to_status = WorkOrderStatus.PAPER_REPORT_ISSUED

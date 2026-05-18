@@ -35,6 +35,16 @@ def _user_name(db: Session, user_id: int) -> str | None:
     return db.query(User.real_name).filter(User.id == user_id).scalar()
 
 
+def _advance_legacy_print_room_status(work_order: WorkOrder) -> None:
+    if (
+        work_order.current_status == WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
+        and work_order.signoff_status == "APPROVED"
+        and work_order.print_room_handler_id
+    ):
+        work_order.current_status = WorkOrderStatus.PRINTROOM_PROCESSING.value
+        work_order.current_handler_user_id = work_order.print_room_handler_id
+
+
 def _to_file_response(db: Session, row: WorkOrderFile) -> WorkOrderFileResponse:
     display_label = None
     if row.source_type == SIGNOFF_SYNC_SOURCE_TYPE:
@@ -159,6 +169,7 @@ def _ensure_upload_permission(
 
 
     if file_category == "REPORT_SCAN":
+        _advance_legacy_print_room_status(work_order)
         if work_order.current_status != WorkOrderStatus.PRINTROOM_PROCESSING.value:
             raise HTTPException(status_code=400, detail="报告出具环节才可上传报告扫描件")
         if current_user.id != work_order.print_room_handler_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
