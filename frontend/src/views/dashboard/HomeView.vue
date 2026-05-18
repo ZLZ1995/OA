@@ -2,182 +2,182 @@
   <div class="workbench-page">
     <div class="workbench-hero">
       <div>
-        <p>??????????</p>
-        <h1>??????????????</h1>
+        <p>中勤资产评估有限公司</p>
+        <h1>中勤资产评估项目流程管理系统</h1>
       </div>
-      <el-tag effect="plain" type="primary">?????</el-tag>
+      <el-tag effect="plain" type="primary">流程工作台</el-tag>
     </div>
 
     <div class="workbench-grid">
       <el-card class="create-card" shadow="never">
-        <template #header>?????</template>
+        <template #header>项目创建区</template>
         <el-form label-width="110px">
-          <el-form-item label="????">
+          <el-form-item label="承接单位">
             <el-select v-model="form.undertaking_unit">
-              <el-option label="??" value="??" />
-              <el-option label="????" value="????" />
-              <el-option label="??" value="??" />
-              <el-option label="??" value="??" />
+              <el-option label="中勤" value="中勤" />
+              <el-option label="中立国际" value="中立国际" />
+              <el-option label="中众" value="中众" />
+              <el-option label="其他" value="其他" />
             </el-select>
           </el-form-item>
-          <el-form-item label="????">
-            <el-input v-model="form.project_code" placeholder="??????" readonly disabled />
+          <el-form-item label="项目编号">
+            <el-input v-model="form.project_code" placeholder="系统自动生成" readonly disabled />
           </el-form-item>
-          <el-form-item label="????">
+          <el-form-item label="项目名称">
             <el-input v-model="form.project_name" />
           </el-form-item>
-          <el-form-item label="????">
+          <el-form-item label="客户名称">
             <el-input v-model="form.client_name" />
           </el-form-item>
-          <el-form-item label="??????">
+          <el-form-item label="评估业务性质">
             <el-select v-model="form.evaluation_business_nature" style="width: 100%">
               <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
-          <el-form-item label="????">
+          <el-form-item label="报告类型">
             <el-select v-model="form.report_type">
               <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
-          <el-form-item label="?????">
+          <el-form-item label="评估基准日">
             <el-date-picker
               v-model="form.valuation_base_date"
               type="date"
               value-format="YYYY-MM-DD"
-              placeholder="???????"
+              placeholder="选择评估基准日"
               style="width: 100%"
             />
           </el-form-item>
-          <el-form-item label="???????">
+          <el-form-item label="项目承接业务员">
             <el-input v-model="form.business_salesman" />
           </el-form-item>
-          <el-form-item label="????">
+          <el-form-item label="项目来源">
             <el-radio-group v-model="form.project_source">
-              <el-radio-button value="INTERNAL">????</el-radio-button>
-              <el-radio-button value="EXTERNAL">????</el-radio-button>
+              <el-radio-button value="INTERNAL">评估一部</el-radio-button>
+              <el-radio-button value="EXTERNAL">评估二部</el-radio-button>
             </el-radio-group>
           </el-form-item>
-          <el-form-item label="?????">
+          <el-form-item label="项目负责人">
             <el-input
               v-if="form.project_source === 'EXTERNAL'"
               v-model="form.external_project_leader_name"
-              placeholder="??????????"
+              placeholder="请输入项目负责人姓名"
             />
             <el-input v-else :model-value="currentUserDisplayName" disabled />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="onCreate">????</el-button>
+            <el-button type="primary" @click="onCreate">创建项目</el-button>
           </el-form-item>
         </el-form>
       </el-card>
 
       <el-card class="todo-card" shadow="never">
-        <template #header>????</template>
+        <template #header>待办项目</template>
         <el-table class="wide-table" :data="todoProjects" size="small" table-layout="fixed">
-          <el-table-column prop="project_no" label="????" width="118" show-overflow-tooltip />
-          <el-table-column prop="project_name" label="????" min-width="96" show-overflow-tooltip />
-          <el-table-column prop="client_name" label="????" min-width="120" show-overflow-tooltip />
-          <el-table-column prop="project_leader_name" label="?????" width="92" show-overflow-tooltip />
-          <el-table-column prop="transfer_user_name" label="???" width="82" show-overflow-tooltip />
-          <el-table-column prop="current_step" label="????" width="96" show-overflow-tooltip />
-          <el-table-column prop="todo_action" label="????" min-width="116" show-overflow-tooltip />
-          <el-table-column label="??" width="200">
+          <el-table-column prop="project_no" label="项目编号" width="118" show-overflow-tooltip />
+          <el-table-column prop="project_name" label="项目名称" min-width="96" show-overflow-tooltip />
+          <el-table-column prop="client_name" label="客户名称" min-width="120" show-overflow-tooltip />
+          <el-table-column prop="project_leader_name" label="项目负责人" width="92" show-overflow-tooltip />
+          <el-table-column prop="transfer_user_name" label="转交人" width="82" show-overflow-tooltip />
+          <el-table-column prop="current_step" label="当前步骤" width="96" show-overflow-tooltip />
+          <el-table-column prop="todo_action" label="待办事项" min-width="116" show-overflow-tooltip />
+          <el-table-column label="操作" width="200">
             <template #default="{ row }">
-              <el-button v-if="row.can_approve_delete" link type="danger" @click="goDeleteApprovals">??????</el-button>
+              <el-button v-if="row.can_approve_delete" link type="danger" @click="goDeleteApprovals">处理删除审核</el-button>
               <template v-else>
-                <el-button link type="primary" @click="goProject(row.id, row)">????</el-button>
-                <el-button link type="success" @click="goNotifications(row.id)">????</el-button>
+                <el-button link type="primary" @click="goProject(row.id, row)">进入项目</el-button>
+                <el-button link type="success" @click="goNotifications(row.id)">相关消息</el-button>
               </template>
-              <el-button v-if="row.can_approve_termination" link type="danger" @click="approveTermination(row)">????/??</el-button>
+              <el-button v-if="row.can_approve_termination" link type="danger" @click="approveTermination(row)">允许终止/废止</el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
 
       <el-card class="my-card" shadow="never">
-        <template #header>????</template>
+        <template #header>我的项目</template>
         <el-table class="wide-table" :data="myProjects" size="small" table-layout="fixed">
-          <el-table-column prop="project_no" label="????" width="132" show-overflow-tooltip />
-          <el-table-column prop="project_name" label="????" min-width="130" show-overflow-tooltip />
-          <el-table-column prop="client_name" label="????" min-width="130" show-overflow-tooltip />
-          <el-table-column prop="current_step" label="????" width="108" show-overflow-tooltip />
-          <el-table-column prop="status_display" label="??" width="110" show-overflow-tooltip />
-          <el-table-column label="??" width="420">
+          <el-table-column prop="project_no" label="项目编号" width="132" show-overflow-tooltip />
+          <el-table-column prop="project_name" label="项目名称" min-width="130" show-overflow-tooltip />
+          <el-table-column prop="client_name" label="客户名称" min-width="130" show-overflow-tooltip />
+          <el-table-column prop="current_step" label="当前步骤" width="108" show-overflow-tooltip />
+          <el-table-column prop="status_display" label="状态" width="110" show-overflow-tooltip />
+          <el-table-column label="操作" width="420">
             <template #default="{ row }">
-              <el-button link type="primary" @click="goProject(row.id)">????</el-button>
-              <el-button link type="success" @click="goNotifications(row.id)">????</el-button>
-              <el-button link type="primary" :disabled="!row.can_edit" @click="editProject(row)">??</el-button>
-              <el-button link type="warning" :disabled="!row.can_archive" @click="archive(row.id)">??</el-button>
-              <el-button link type="danger" :disabled="!row.can_request_termination" @click="requestTermination(row)">????/??</el-button>
-              <el-button link type="danger" @click="remove(row)">??</el-button>
+              <el-button link type="primary" @click="goProject(row.id)">进入项目</el-button>
+              <el-button link type="success" @click="goNotifications(row.id)">相关消息</el-button>
+              <el-button link type="primary" :disabled="!row.can_edit" @click="editProject(row)">编辑</el-button>
+              <el-button link type="warning" :disabled="!row.can_archive" @click="archive(row.id)">归档</el-button>
+              <el-button link type="danger" :disabled="!row.can_request_termination" @click="requestTermination(row)">项目终止/废止</el-button>
+              <el-button link type="danger" @click="remove(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
     </div>
 
-    <el-dialog v-model="editVisible" title="????" width="560px">
+    <el-dialog v-model="editVisible" title="编辑项目" width="560px">
       <el-form label-width="120px">
-        <el-form-item label="????">
+        <el-form-item label="承接单位">
           <el-select v-model="editForm.undertaking_unit" style="width: 100%">
-            <el-option label="??" value="??" />
-            <el-option label="????" value="????" />
-            <el-option label="??" value="??" />
-            <el-option label="??" value="??" />
+            <el-option label="中勤" value="中勤" />
+            <el-option label="中立国际" value="中立国际" />
+            <el-option label="中众" value="中众" />
+            <el-option label="其他" value="其他" />
           </el-select>
         </el-form-item>
-        <el-form-item label="????">
+        <el-form-item label="项目名称">
           <el-input v-model="editForm.project_name" />
         </el-form-item>
-        <el-form-item label="????">
+        <el-form-item label="客户名称">
           <el-input v-model="editForm.client_name" />
         </el-form-item>
-        <el-form-item label="??????">
+        <el-form-item label="评估业务性质">
           <el-select v-model="editForm.evaluation_business_nature" style="width: 100%">
             <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
           </el-select>
         </el-form-item>
-        <el-form-item label="????">
+        <el-form-item label="报告类型">
           <el-select v-model="editForm.report_type" style="width: 100%">
             <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
           </el-select>
         </el-form-item>
-        <el-form-item label="?????">
+        <el-form-item label="评估基准日">
           <el-date-picker
             v-model="editForm.valuation_base_date"
             type="date"
             value-format="YYYY-MM-DD"
-            placeholder="???????"
+            placeholder="选择评估基准日"
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="???????">
+        <el-form-item label="项目承接业务员">
           <el-input v-model="editForm.business_salesman" />
         </el-form-item>
-        <el-form-item label="????">
+        <el-form-item label="项目来源">
           <el-radio-group v-model="editForm.project_source">
-            <el-radio-button value="INTERNAL">????</el-radio-button>
-            <el-radio-button value="EXTERNAL">????</el-radio-button>
+            <el-radio-button value="INTERNAL">评估一部</el-radio-button>
+            <el-radio-button value="EXTERNAL">评估二部</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="?????">
+        <el-form-item label="项目负责人">
           <el-input
             v-if="editForm.project_source === 'EXTERNAL'"
             v-model="editForm.external_project_leader_name"
-            placeholder="??????????"
+            placeholder="请输入项目负责人姓名"
           />
           <el-input v-else :model-value="currentUserDisplayName" disabled />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editVisible = false">??</el-button>
-        <el-button type="primary" :loading="editLoading" @click="saveProject">???????</el-button>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editLoading" @click="saveProject">确认更改并保存</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="deleteDialogVisible" title="??????" width="520px">
+    <el-dialog v-model="deleteDialogVisible" title="申请删除项目" width="520px">
       <el-form label-width="120px">
-        <el-form-item label="???????">
+        <el-form-item label="共同认证管理员">
           <el-select v-model="deleteDraft.approver_user_id" style="width: 100%">
             <el-option
               v-for="item in deleteAdminOptions"
@@ -187,13 +187,13 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="????">
-          <el-input v-model="deleteDraft.reason" type="textarea" :rows="3" placeholder="????????" />
+        <el-form-item label="删除原因">
+          <el-input v-model="deleteDraft.reason" type="textarea" :rows="3" placeholder="可选填写删除原因" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="deleteDialogVisible = false">??</el-button>
-        <el-button type="primary" :loading="deleteSubmitting" @click="submitDeleteRequest">??????</el-button>
+        <el-button @click="deleteDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="deleteSubmitting" @click="submitDeleteRequest">提交删除申请</el-button>
       </template>
     </el-dialog>
   </div>
@@ -223,16 +223,16 @@ import {
 import { useAuthStore } from '@/store/auth'
 
 const evaluationBusinessOptions: EvaluationBusinessNature[] = [
-  '????????',
-  '????????',
-  '????????',
-  '??????',
-  '????????',
-  '????????',
-  '??',
+  '国有资产评估业务',
+  '境外资产评估业务',
+  '证券期货评估业务',
+  '司法评估业务',
+  '金融资产评估业务',
+  '珠宝首饰评估业务',
+  '其他',
 ]
 
-const reportTypeOptions: ReportType[] = ['????', '????', '????', '????', '?????']
+const reportTypeOptions: ReportType[] = ['评估报告', '估值报告', '咨询报告', '复核报告', '追溯性报告']
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -247,15 +247,15 @@ const deleteTargetProjectId = ref<number>()
 const deleteTargetProjectName = ref('')
 const deleteAdminOptions = ref<UserItem[]>([])
 
-const currentUserDisplayName = auth.user?.real_name || auth.user?.username || '?????'
+const currentUserDisplayName = auth.user?.real_name || auth.user?.username || '当前创建人'
 
 const form = reactive({
-  undertaking_unit: '??' as ProjectUndertakingUnit,
+  undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_code: '',
   project_name: '',
   client_name: '',
-  evaluation_business_nature: '????????' as EvaluationBusinessNature,
-  report_type: '????' as ReportType,
+  evaluation_business_nature: '国有资产评估业务' as EvaluationBusinessNature,
+  report_type: '评估报告' as ReportType,
   valuation_base_date: '',
   business_salesman: '',
   project_source: 'INTERNAL' as ProjectSource,
@@ -263,11 +263,11 @@ const form = reactive({
 })
 
 const editForm = reactive({
-  undertaking_unit: '??' as ProjectUndertakingUnit,
+  undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_name: '',
   client_name: '',
-  evaluation_business_nature: '????????' as EvaluationBusinessNature,
-  report_type: '????' as ReportType,
+  evaluation_business_nature: '国有资产评估业务' as EvaluationBusinessNature,
+  report_type: '评估报告' as ReportType,
   valuation_base_date: '',
   business_salesman: '',
   project_source: 'INTERNAL' as ProjectSource,
@@ -289,11 +289,11 @@ async function onCreate() {
   const user = auth.user ?? await auth.ensureUserLoaded()
   if (!user?.id) return
   if (!form.project_name || !form.client_name || !form.business_salesman.trim()) {
-    ElMessage.warning('???????????')
+    ElMessage.warning('请填写完整项目创建信息')
     return
   }
   if (form.project_source === 'EXTERNAL' && !form.external_project_leader_name.trim()) {
-    ElMessage.warning('???????????????')
+    ElMessage.warning('评估二部项目必须填写项目负责人')
     return
   }
 
@@ -313,12 +313,12 @@ async function onCreate() {
   form.project_code = created.project_code
   form.project_name = ''
   form.client_name = ''
-  form.evaluation_business_nature = '????????'
+  form.evaluation_business_nature = '国有资产评估业务'
   form.business_salesman = ''
   form.valuation_base_date = ''
   form.project_source = 'INTERNAL'
   form.external_project_leader_name = ''
-  ElMessage.success('??????')
+  ElMessage.success('项目创建成功')
   await load()
 }
 
@@ -331,48 +331,48 @@ async function editProject(row: WorkbenchProjectItem) {
 
 async function archive(id: number) {
   await archiveProject(id)
-  ElMessage.success('?????')
+  ElMessage.success('项目已归档')
   await load()
 }
 
 async function requestTermination(row: WorkbenchProjectItem) {
   const { value } = await ElMessageBox.prompt(
-    '???????/???????????????????????',
-    '????/??',
+    '请填写项目终止/废止原因，保存后项目将锁定并发送给管理员审核。',
+    '项目终止/废止',
     {
-      confirmButtonText: '?????????',
-      cancelButtonText: '??',
+      confirmButtonText: '保存并发送给管理员',
+      cancelButtonText: '取消',
       inputType: 'textarea',
-      inputPlaceholder: '?????/????',
-      inputValidator: value => Boolean(value?.trim()) || '???????/????',
+      inputPlaceholder: '请输入终止/废止原因',
+      inputValidator: value => Boolean(value?.trim()) || '请填写项目终止/废止原因',
     },
   )
   await requestProjectTermination(row.id, value.trim())
-  ElMessage.success('??/???????????')
+  ElMessage.success('终止/废止申请已发送给管理员')
   await load()
 }
 
 async function approveTermination(row: WorkbenchProjectItem) {
-  await ElMessageBox.alert(row.termination_reason || '?????', '????/????', {
-    confirmButtonText: '????/??',
+  await ElMessageBox.alert(row.termination_reason || '未填写原因', '项目终止/废止原因', {
+    confirmButtonText: '允许终止/废止',
   })
   await approveProjectTermination(row.id)
-  ElMessage.success('?????/????????????')
+  ElMessage.success('已允许终止/废止，项目方现在可以归档')
   await load()
 }
 
 async function remove(row: WorkbenchProjectItem) {
-  if (row.status_display === '?????') {
-    ElMessage.warning('?????????')
+  if (row.status_display === '待确认删除') {
+    ElMessage.warning('已有待确认删除申请')
     return
   }
-  if (row.status_display === '???') {
-    ElMessage.warning('?????????')
+  if (row.status_display === '已归档') {
+    ElMessage.warning('已归档项目不可删除')
     return
   }
   try {
     await deleteProject(row.id)
-    ElMessage.success('?????')
+    ElMessage.success('项目已删除')
     await load()
   } catch (error: any) {
     if (error?.response?.status === 400) {
@@ -386,7 +386,7 @@ async function remove(row: WorkbenchProjectItem) {
 async function openDeleteDialog(projectId: number, projectName: string) {
   const admins = (await listUserCandidates('ADMIN')).items.filter(item => item.id !== auth.user?.id)
   if (!admins.length) {
-    ElMessage.warning('????????????')
+    ElMessage.warning('暂无可选的共同认证管理员')
     return
   }
   deleteAdminOptions.value = admins
@@ -399,7 +399,7 @@ async function openDeleteDialog(projectId: number, projectName: string) {
 
 async function submitDeleteRequest() {
   if (!deleteTargetProjectId.value || !deleteDraft.approver_user_id) {
-    ElMessage.warning('??????????')
+    ElMessage.warning('请选择共同认证管理员')
     return
   }
   deleteSubmitting.value = true
@@ -410,7 +410,7 @@ async function submitDeleteRequest() {
       reason: deleteDraft.reason.trim() || undefined,
     })
     deleteDialogVisible.value = false
-    ElMessage.success(`??????${deleteTargetProjectName.value}?????????? ${approver?.real_name || ''} ??`)
+    ElMessage.success(`已提交项目「${deleteTargetProjectName.value}」删除申请，待管理员 ${approver?.real_name || ''} 确认`)
     await load()
   } finally {
     deleteSubmitting.value = false
@@ -421,7 +421,7 @@ function fillEditForm(project: ProjectItem) {
   editForm.undertaking_unit = project.undertaking_unit
   editForm.project_name = project.project_name
   editForm.client_name = project.client_name
-  editForm.evaluation_business_nature = (project.evaluation_business_nature || '????????') as EvaluationBusinessNature
+  editForm.evaluation_business_nature = (project.evaluation_business_nature || '国有资产评估业务') as EvaluationBusinessNature
   editForm.report_type = project.report_type
   editForm.valuation_base_date = project.valuation_base_date || ''
   editForm.business_salesman = project.business_salesman || ''
@@ -432,15 +432,15 @@ function fillEditForm(project: ProjectItem) {
 async function saveProject() {
   if (!editingProjectId.value) return
   if (!editForm.project_name.trim() || !editForm.client_name.trim()) {
-    ElMessage.warning('????????????')
+    ElMessage.warning('请填写项目名称和客户名称')
     return
   }
   if (!editForm.business_salesman.trim()) {
-    ElMessage.warning('??????????')
+    ElMessage.warning('请填写项目承接业务员')
     return
   }
   if (editForm.project_source === 'EXTERNAL' && !editForm.external_project_leader_name.trim()) {
-    ElMessage.warning('???????????????')
+    ElMessage.warning('评估二部项目必须填写项目负责人')
     return
   }
 
@@ -457,7 +457,7 @@ async function saveProject() {
       project_source: editForm.project_source,
       external_project_leader_name: editForm.project_source === 'EXTERNAL' ? editForm.external_project_leader_name.trim() : null,
     })
-    ElMessage.success('?????')
+    ElMessage.success('项目已更新')
     editVisible.value = false
     await load()
   } finally {
@@ -480,13 +480,13 @@ function resolveTodoPanel(row: WorkbenchProjectItem) {
   const combined = `${currentStep} ${todoAction} ${statusDisplay}`
   const matched = new Set<string>()
 
-  if (combined.includes('??') && (combined.includes('??') || combined.includes('??'))) matched.add('contractReview')
-  if (combined.includes('??') || combined.includes('??') || combined.includes('??') || combined.includes('??') || combined.includes('??')) matched.add('review')
-  if (combined.includes('??')) matched.add('signoff')
-  if (combined.includes('??') || combined.includes('??')) matched.add('issue')
-  if (combined.includes('??') || combined.includes('??')) matched.add('mailing')
-  if (combined.includes('??') || combined.includes('??')) matched.add('invoice')
-  if (combined.includes('??') || combined.includes('??')) matched.add('archive')
+  if (combined.includes('合同') && (combined.includes('审核') || combined.includes('初审'))) matched.add('contractReview')
+  if (combined.includes('送审') || combined.includes('一审') || combined.includes('二审') || combined.includes('三审') || combined.includes('评审')) matched.add('review')
+  if (combined.includes('签发')) matched.add('signoff')
+  if (combined.includes('出具') || combined.includes('文印')) matched.add('issue')
+  if (combined.includes('邮寄') || combined.includes('寄送')) matched.add('mailing')
+  if (combined.includes('发票') || combined.includes('开票')) matched.add('invoice')
+  if (combined.includes('归档') || combined.includes('档案')) matched.add('archive')
 
   return TODO_PANEL_PRIORITY.find(item => matched.has(item))
 }
