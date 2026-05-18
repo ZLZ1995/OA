@@ -132,12 +132,51 @@ def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrd
             return None
         return db.query(User.real_name).filter(User.id == user_id).scalar()
 
+    third_reviewer_visible_statuses = {
+        WorkOrderStatus.WAIT_THIRD_REVIEW_SUBMIT.value,
+        WorkOrderStatus.THIRD_REVIEWING.value,
+        WorkOrderStatus.THIRD_REVIEW_REJECTED.value,
+        WorkOrderStatus.THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND.value,
+        WorkOrderStatus.WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM.value,
+        WorkOrderStatus.WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT.value,
+        WorkOrderStatus.EXTERNAL_FIRST_REVIEWING.value,
+        WorkOrderStatus.EXTERNAL_FIRST_REJECTED.value,
+        WorkOrderStatus.EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND.value,
+        WorkOrderStatus.WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT.value,
+        WorkOrderStatus.EXTERNAL_SECOND_REVIEWING.value,
+        WorkOrderStatus.EXTERNAL_SECOND_REJECTED.value,
+        WorkOrderStatus.EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD.value,
+        WorkOrderStatus.WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT.value,
+        WorkOrderStatus.EXTERNAL_THIRD_REVIEWING.value,
+        WorkOrderStatus.EXTERNAL_THIRD_REJECTED.value,
+        WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value,
+        WorkOrderStatus.SIGNOFF_REVIEWING.value,
+        WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value,
+        WorkOrderStatus.PRINTROOM_PROCESSING.value,
+        WorkOrderStatus.PAPER_REPORT_ISSUED.value,
+        WorkOrderStatus.REPORT_MAILING.value,
+        WorkOrderStatus.REPORT_MAILING_COMPLETED.value,
+        WorkOrderStatus.WAIT_INVOICE_INFO.value,
+        WorkOrderStatus.INVOICE_PROCESSING.value,
+        WorkOrderStatus.INVOICE_INFO_REJECTED.value,
+        WorkOrderStatus.INVOICE_ISSUED.value,
+        WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value,
+        WorkOrderStatus.ARCHIVE_REVIEWING.value,
+        WorkOrderStatus.ARCHIVE_REJECTED.value,
+        WorkOrderStatus.ARCHIVED.value,
+    }
+    third_reviewer_name = (
+        user_name(work_order.third_reviewer_id)
+        if work_order.current_status in third_reviewer_visible_statuses
+        else None
+    )
+
     return {
         "contract_no": contract.contract_no if contract else None,
         "report_no": print_room_record.paper_report_no if print_room_record else None,
         "first_reviewer_name": user_name(work_order.first_reviewer_id),
         "second_reviewer_name": user_name(work_order.second_reviewer_id),
-        "third_reviewer_name": user_name(work_order.third_reviewer_id),
+        "third_reviewer_name": third_reviewer_name,
         "print_room_handler_name": user_name(work_order.print_room_handler_id),
         "mailing_handler_name": user_name(work_order.mailing_handler_user_id),
         "invoice_handler_name": user_name((invoice.handled_by or invoice.finance_handler_id) if invoice else None),

@@ -314,7 +314,8 @@ def approve_signoff(
 
     project = _get_project(db, work_order)
     from_status = work_order.current_status
-    work_order.current_status = WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
+    to_status = WorkOrderStatus.PRINTROOM_PROCESSING
+    work_order.current_status = to_status.value
     work_order.print_room_handler_id = handler.id
     work_order.current_handler_user_id = handler.id
     work_order.formal_report_count = formal_report_count
@@ -325,7 +326,7 @@ def approve_signoff(
         db,
         work_order_id=work_order.id,
         from_status=from_status,
-        to_status=WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value,
+        to_status=to_status.value,
         action_type="ASSIGN_PRINT_ROOM_AFTER_SIGNOFF" if is_repair_assign else "APPROVE_SIGNOFF",
         operator_user_id=current_user.id,
         remark="补充指定文印室人员和报告出具数量" if is_repair_assign else "同意签发",

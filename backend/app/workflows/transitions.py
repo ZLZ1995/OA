@@ -131,6 +131,7 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
         WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD,
         WorkOrderStatus.THIRD_REVIEWING,
         WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM,
+        WorkOrderStatus.PRINTROOM_PROCESSING,
     },
     WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM: {
         WorkOrderStatus.THIRD_REVIEWING,
