@@ -147,16 +147,17 @@ const REVIEW_STAGE_ORDER: Record<string, number> = {
 const isPrintRoomRole = computed(() => Boolean(props.userRoles?.includes('PRINT_ROOM')))
 const isAssignedPrintRoomHandler = computed(() => Boolean(
   auth.user?.id &&
-  props.flowInfo?.current_handler_user_id === auth.user.id &&
-  props.flowInfo?.print_room_handler_id === auth.user.id
+  (
+    props.flowInfo?.current_handler_user_id === auth.user.id ||
+    props.flowInfo?.print_room_handler_id === auth.user.id
+  )
 ))
 const canHandlePrintRoom = computed(() => Boolean(
   props.flowInfo?.current_work_order_status === 'PRINTROOM_PROCESSING' &&
-  (props.userRoles?.includes('ADMIN') || isAssignedPrintRoomHandler.value || props.flowInfo?.user_role_in_project === '文印室')
+  (props.userRoles?.some(role => ['PRINT_ROOM', 'ADMIN'].includes(role)) || isAssignedPrintRoomHandler.value)
 ))
 const canReplaceReportScan = computed(() => canHandlePrintRoom.value)
 const canPrintRoom = computed(() => Boolean(
-  props.canOperate &&
   canHandlePrintRoom.value
 ))
 const canReportErrorBack = computed(() => Boolean(
