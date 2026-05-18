@@ -29,24 +29,11 @@ export async function getHelpItem(itemKey: string) {
 }
 
 export async function downloadHelpManual() {
-  const response = await http.get('/help/manual/download', {
-    responseType: 'blob',
-  })
-
-  const blob = new Blob([response.data], {
-    type:
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  })
-  const downloadUrl = window.URL.createObjectURL(blob)
   const link = document.createElement('a')
-  link.href = downloadUrl
-
-  const disposition = response.headers['content-disposition'] as string | undefined
-  const matchedName = disposition?.match(/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i)?.[1]
-  link.download = matchedName ? decodeURIComponent(matchedName.replace(/\"/g, '')) : 'OA系统内部培训使用手册.docx'
+  link.href = `${window.location.origin}/OA系统内部培训使用手册.docx`
+  link.download = 'OA系统内部培训使用手册.docx'
 
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-  window.URL.revokeObjectURL(downloadUrl)
 }
