@@ -152,9 +152,17 @@ const isAssignedPrintRoomHandler = computed(() => Boolean(
     props.flowInfo?.print_room_handler_id === auth.user.id
   )
 ))
+const isReportIssueStage = computed(() =>
+  props.flowInfo?.current_work_order_status === 'PRINTROOM_PROCESSING' ||
+  props.flowInfo?.project.current_step === '报告出具'
+)
 const canHandlePrintRoom = computed(() => Boolean(
-  props.flowInfo?.current_work_order_status === 'PRINTROOM_PROCESSING' &&
-  (props.userRoles?.some(role => ['PRINT_ROOM', 'ADMIN'].includes(role)) || isAssignedPrintRoomHandler.value)
+  isReportIssueStage.value &&
+  (
+    props.userRoles?.some(role => ['PRINT_ROOM', 'ADMIN', '文印室'].includes(role)) ||
+    isAssignedPrintRoomHandler.value ||
+    props.flowInfo?.user_role_in_project === '文印室'
+  )
 ))
 const canReplaceReportScan = computed(() => canHandlePrintRoom.value)
 const canPrintRoom = computed(() => Boolean(
