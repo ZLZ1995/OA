@@ -260,14 +260,18 @@ async function issueReport() {
 
 async function onScanSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
-  await uploadWorkOrderFile({
-    work_order_id: props.workOrderId,
-    file_category: 'REPORT_SCAN',
-    business_stage: 'REPORT_SCAN',
-    file: file.raw,
-  })
-  ElMessage.success('报告扫描件已上传')
-  await loadFiles()
+  try {
+    await uploadWorkOrderFile({
+      work_order_id: props.workOrderId,
+      file_category: 'REPORT_SCAN',
+      business_stage: 'REPORT_SCAN',
+      file: file.raw,
+    })
+    ElMessage.success('报告扫描件已上传')
+    await loadFiles()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '报告扫描件上传失败')
+  }
 }
 
 function setReplaceInput(fileId: number, el: Element | ComponentPublicInstance | null) {

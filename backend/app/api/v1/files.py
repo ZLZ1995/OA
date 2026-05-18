@@ -159,7 +159,10 @@ def _ensure_upload_permission(
 
 
     if file_category == "REPORT_SCAN":
-        if work_order.current_status != WorkOrderStatus.PRINTROOM_PROCESSING.value:
+        if work_order.current_status not in {
+            WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value,
+            WorkOrderStatus.PRINTROOM_PROCESSING.value,
+        }:
             raise HTTPException(status_code=400, detail="报告出具环节才可上传报告扫描件")
         if current_user.id != work_order.print_room_handler_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
             raise HTTPException(status_code=403, detail="仅当前文印室办理人员可上传报告扫描件")
