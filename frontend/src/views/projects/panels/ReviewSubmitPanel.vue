@@ -532,7 +532,7 @@ const canUploadFormalReport = computed(() => {
     props.userRoles.includes('THIRD_REVIEWER')
   )
 })
-const showFormalReportPanel = computed(() => canUploadFormalReport.value)
+const showFormalReportPanel = computed(() => false)
 const canRequestOwnerExternalAuditConfirm = computed(() =>
   statusCode.value === 'THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND' &&
   Boolean(currentUserId.value && currentUserId.value === props.flowInfo?.third_reviewer_id) &&

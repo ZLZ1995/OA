@@ -15,7 +15,10 @@ export async function markHasExternalAudit(workOrderId: number) {
   return data as { message: string }
 }
 
-export async function enterSignoffReview(workOrderId: number, payload: { formal_report_count: number }) {
+export async function enterSignoffReview(
+  workOrderId: number,
+  payload: { formal_report_count: number; signer_one: string; signer_two: string }
+) {
   const { data } = await http.post(`/signoff/work-orders/${workOrderId}/enter-review`, payload)
   return data as { message: string }
 }

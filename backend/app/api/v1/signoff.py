@@ -26,6 +26,8 @@ class SignoffApproveRequest(BaseModel):
 
 class EnterSignoffReviewRequest(BaseModel):
     formal_report_count: int
+    signer_one: str
+    signer_two: str
 
 
 def _is_project_party(db: Session, work_order: WorkOrder, current_user: User) -> bool:
@@ -102,6 +104,13 @@ def _ensure_formal_report_count(value: int) -> int:
     if value < 1:
         raise HTTPException(status_code=400, detail="报告出具数量必须大于 0")
     return value
+
+
+def _ensure_signer_name(value: str, label: str) -> str:
+    signer = (value or "").strip()
+    if not signer:
+        raise HTTPException(status_code=400, detail=f"请填写{label}")
+    return signer
 
 
 @router.post("/work-orders/{work_order_id}/request-owner-confirm")
@@ -248,12 +257,16 @@ def enter_signoff_review(
     if chief is None:
         raise HTTPException(status_code=400, detail="系统未配置首席评估师账号")
     formal_report_count = _ensure_formal_report_count(payload.formal_report_count)
+    signer_one = _ensure_signer_name(payload.signer_one, "签字评估师一")
+    signer_two = _ensure_signer_name(payload.signer_two, "签字评估师二")
 
     project = _get_project(db, work_order)
     work_order.current_status = WorkOrderStatus.SIGNOFF_REVIEWING.value
     work_order.current_handler_user_id = chief.id
     work_order.chief_appraiser_user_id = chief.id
     work_order.formal_report_count = formal_report_count
+    work_order.signer_one = signer_one
+    work_order.signer_two = signer_two
     work_order.signoff_status = "REVIEWING"
     create_workflow_log(
         db,

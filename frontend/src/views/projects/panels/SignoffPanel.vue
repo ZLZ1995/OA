@@ -39,6 +39,12 @@
             </el-tag>
           </div>
         </el-form-item>
+        <el-form-item label="签字评估师" required>
+          <el-space wrap>
+            <el-input v-model="signerOne" placeholder="签字评估师一" style="width: 220px" />
+            <el-input v-model="signerTwo" placeholder="签字评估师二" style="width: 220px" />
+          </el-space>
+        </el-form-item>
         <el-form-item label="报告出具数量" required>
           <el-input-number v-model="formalReportCount" :min="1" :precision="0" style="width: 180px" />
         </el-form-item>
@@ -148,6 +154,8 @@ const auth = useAuthStore()
 const files = ref<WorkOrderFileItem[]>([])
 const printRoomOptions = ref<UserItem[]>([])
 const formalReportCount = ref(1)
+const signerOne = ref('')
+const signerTwo = ref('')
 const approveDialogVisible = ref(false)
 const approveSubmitting = ref(false)
 const approveDraft = ref<{ print_room_handler_id?: number }>({
@@ -266,11 +274,19 @@ async function onFinalContractSelected(file: UploadFile) {
 
 async function onEnterSignoff() {
   if (!props.workOrderId) return
+  if (!signerOne.value.trim() || !signerTwo.value.trim()) {
+    ElMessage.warning('请填写两名签字评估师')
+    return
+  }
   if (!formalReportCount.value || formalReportCount.value < 1) {
     ElMessage.warning('请填写报告出具数量')
     return
   }
-  await enterSignoffReview(props.workOrderId, { formal_report_count: formalReportCount.value })
+  await enterSignoffReview(props.workOrderId, {
+    formal_report_count: formalReportCount.value,
+    signer_one: signerOne.value.trim(),
+    signer_two: signerTwo.value.trim(),
+  })
   ElMessage.success('已进入签发审核')
   emit('changed')
 }
@@ -327,12 +343,22 @@ function download(file: WorkOrderFileItem) {
 
 onMounted(() => {
   formalReportCount.value = props.flowInfo?.formal_report_count || 1
+  signerOne.value = props.flowInfo?.signer_one || ''
+  signerTwo.value = props.flowInfo?.signer_two || ''
   loadFiles()
 })
 watch(
-  () => [props.workOrderId, props.flowInfo?.current_work_order_status, props.flowInfo?.formal_report_count],
+  () => [
+    props.workOrderId,
+    props.flowInfo?.current_work_order_status,
+    props.flowInfo?.formal_report_count,
+    props.flowInfo?.signer_one,
+    props.flowInfo?.signer_two,
+  ],
   () => {
     formalReportCount.value = props.flowInfo?.formal_report_count || formalReportCount.value || 1
+    signerOne.value = props.flowInfo?.signer_one || signerOne.value || ''
+    signerTwo.value = props.flowInfo?.signer_two || signerTwo.value || ''
     loadFiles()
   }
 )

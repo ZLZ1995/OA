@@ -292,9 +292,13 @@ async function onReplaceInput(row: WorkOrderFileItem, event: Event) {
 
 async function rollback() {
   if (!props.workOrderId) return
-  await rollbackThird({ work_order_id: props.workOrderId, remark: remark.value || undefined })
-  ElMessage.success('已撤回至三审')
-  emit('changed')
+  try {
+    await rollbackThird({ work_order_id: props.workOrderId, remark: remark.value || undefined })
+    ElMessage.success('已撤回至三审')
+    emit('changed')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '撤回至三审失败')
+  }
 }
 
 async function contractError() {

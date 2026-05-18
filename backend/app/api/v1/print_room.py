@@ -145,7 +145,9 @@ def rollback_to_third(
         raise HTTPException(status_code=404, detail="工单不存在")
     from_status = WorkOrderStatus(work_order.current_status)
     to_status = WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM
-    if from_status != WorkOrderStatus.PRINTROOM_PROCESSING:
+    if from_status == WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM:
+        to_status = WorkOrderStatus.THIRD_REVIEWING
+    elif from_status != WorkOrderStatus.PRINTROOM_PROCESSING:
         raise HTTPException(status_code=400, detail="当前状态不可撤回至三审")
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
