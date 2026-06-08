@@ -1,5 +1,7 @@
 import http from './http'
 
+const FILE_UPLOAD_TIMEOUT_MS = 120000
+
 export interface WorkOrderFileItem {
   id: number
   work_order_id: number
@@ -33,7 +35,8 @@ export async function uploadWorkOrderFile(payload: {
   const { data } = await http.post('/files/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
-    }
+    },
+    timeout: FILE_UPLOAD_TIMEOUT_MS
   })
   return data as WorkOrderFileItem
 }
@@ -44,7 +47,8 @@ export async function replaceWorkOrderFile(fileId: number, file: File) {
   const { data } = await http.post(`/files/${fileId}/replace`, formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
-    }
+    },
+    timeout: FILE_UPLOAD_TIMEOUT_MS
   })
   return data as WorkOrderFileItem
 }

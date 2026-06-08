@@ -881,10 +881,21 @@ async function reloadRoundData() {
   await Promise.all([loadCandidates(), loadFiles()])
 }
 
+async function uploadReviewFile(payload: Parameters<typeof uploadWorkOrderFile>[0], successMessage?: string) {
+  try {
+    await uploadWorkOrderFile(payload)
+    if (successMessage) ElMessage.success(successMessage)
+    await loadFiles()
+  } catch (error: any) {
+    ElMessage.error(error?.code === 'ECONNABORTED' ? '文件上传超时，请稍后重试或检查网络' : (error?.response?.data?.detail || '文件上传失败'))
+    throw error
+  }
+}
+
 async function onReportSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
   if (isReviewLocked.value) return ElMessage.warning(props.flowInfo?.review_submit_lock_reason || '报告送审暂不可办理')
-  await uploadWorkOrderFile({
+  await uploadReviewFile({
     work_order_id: props.workOrderId,
     file_category: 'REPORT_ZIP',
     business_stage: reviewStage(reviewRound.value),
@@ -896,7 +907,7 @@ async function onReportSelected(file: UploadFile) {
 
 async function onReplySelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
-  await uploadWorkOrderFile({
+  await uploadReviewFile({
     work_order_id: props.workOrderId,
     file_category: 'REVIEW_REPLY',
     business_stage: reviewStage(reviewRound.value),
@@ -908,7 +919,7 @@ async function onReplySelected(file: UploadFile) {
 
 async function onExternalAuditOpinionSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
-  await uploadWorkOrderFile({
+  await uploadReviewFile({
     work_order_id: props.workOrderId,
     file_category: externalAuditUploadCategory.value,
     business_stage: reviewStage(reviewRound.value),
