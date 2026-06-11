@@ -83,7 +83,7 @@ def test_project_export_includes_progress_labels() -> None:
     rows = _collect_rows(db, None, None, None, None, None, None, None, None, None, None)
     progress_by_no = {row["project_no"]: row["project_progress"] for row in rows}
 
-    assert progress_by_no[active_project.project_code] == "进行中"
+    assert progress_by_no[active_project.project_code] == "发票开具"
     assert progress_by_no[archived_project.project_code] == "已归档"
     assert progress_by_no[voided_project.project_code] == "已作废"
 

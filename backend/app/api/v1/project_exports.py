@@ -25,7 +25,7 @@ from app.services.project_field_normalizer import (
     normalize_report_type,
     normalize_undertaking_unit,
 )
-from app.services.project_flow import get_project_source_display
+from app.services.project_flow import get_project_source_display, normalize_project_step
 
 router = APIRouter(prefix="/project-exports", tags=["项目清单导出"])
 
@@ -42,12 +42,14 @@ def _format_date(value: datetime | date | None) -> str:
     return value.strftime("%Y-%m-%d")
 
 
-def _project_progress(project: Project, work_order: WorkOrder | None) -> str:
+def _project_progress(project: Project, work_order: WorkOrder | None, archived: bool = False) -> str:
     if project.termination_status == "APPROVED":
         return "已作废"
-    if project.archived_at is not None or (work_order and work_order.current_status == "ARCHIVED"):
-        return "已归档"
-    return "进行中"
+    return normalize_project_step(
+        work_order.current_status if work_order else None,
+        archived or project.archived_at is not None or (work_order and work_order.current_status == "ARCHIVED"),
+        project.project_source,
+    )
 
 
 def _user_name(db: Session, user_id: int | None) -> str:
@@ -243,7 +245,7 @@ def _collect_rows(
                 "project_no": project.project_code,
                 "project_name": project.project_name,
                 "project_created_date": _format_date(project_created_date),
-                "project_progress": "已删除" if project.deleted_at else ("重复项目待删除" if project.duplicate_delete_required else _project_progress(project, work_order)),
+                "project_progress": "已删除" if project.deleted_at else ("重复项目待删除" if project.duplicate_delete_required else _project_progress(project, work_order, archived_at is not None)),
                 "report_no": record.paper_report_no if record else "",
                 "project_leader_name": leader_display_name,
                 "undertaking_unit": undertaking_unit_value,

@@ -8,7 +8,7 @@
       :closable="false"
       style="margin-bottom: 12px"
     />
-    <el-form v-if="isAdmin" inline @submit.prevent>
+    <el-form v-if="isAdmin" inline class="account-form" @submit.prevent>
       <el-form-item label="账号">
         <el-input v-model="form.username" placeholder="例如 user01" />
       </el-form-item>
@@ -33,9 +33,20 @@
       <el-form-item>
         <el-button type="primary" @click="onCreate">新增账号</el-button>
       </el-form-item>
+      <el-form-item class="account-search">
+        <el-input
+          v-model="searchKeyword"
+          clearable
+          placeholder="搜索账号/姓名，回车筛选"
+          style="width: 240px"
+          @keyup.enter="onSearch"
+          @clear="onResetSearch"
+        />
+        <el-button @click="onResetSearch">重置</el-button>
+      </el-form-item>
     </el-form>
 
-    <el-table :data="rows" style="margin-top: 12px" v-loading="loading">
+    <el-table :data="displayedRows" style="margin-top: 12px" v-loading="loading">
       <el-table-column prop="username" label="账号" min-width="130" />
       <el-table-column prop="real_name" label="姓名" min-width="120" />
       <el-table-column label="角色" min-width="280">
@@ -115,7 +126,17 @@ const roleDraftMap = ref<Record<number, string[]>>({})
 const resetDialogVisible = ref(false)
 const resetTarget = ref<UserItem | null>(null)
 const resetPassword = ref('')
+const searchKeyword = ref('')
+const appliedSearchKeyword = ref('')
 const isAdmin = computed(() => (auth.user?.roles || []).includes('ADMIN'))
+const displayedRows = computed(() => {
+  const keyword = appliedSearchKeyword.value.trim().toLowerCase()
+  if (!keyword) return rows.value
+  return rows.value.filter((item) =>
+    item.username.toLowerCase().includes(keyword) ||
+    item.real_name.toLowerCase().includes(keyword)
+  )
+})
 
 const form = reactive({
   username: '',
@@ -187,6 +208,15 @@ async function onCreate() {
 
 function onRoleDraftChange(userId: number, roles: string[]) {
   roleDraftMap.value[userId] = [...roles]
+}
+
+function onSearch() {
+  appliedSearchKeyword.value = searchKeyword.value.trim()
+}
+
+function onResetSearch() {
+  searchKeyword.value = ''
+  appliedSearchKeyword.value = ''
 }
 
 async function onSaveRoles(row: UserItem) {
@@ -261,3 +291,20 @@ onMounted(async () => {
   await Promise.all([loadUsers(), loadRoles()])
 })
 </script>
+
+<style scoped>
+.account-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.account-search {
+  margin-left: auto;
+}
+
+.account-search :deep(.el-form-item__content) {
+  display: flex;
+  gap: 8px;
+}
+</style>
