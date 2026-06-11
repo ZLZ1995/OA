@@ -27,6 +27,8 @@ CONTRACT_DRAFT_FILE_CATEGORY = "CONTRACT_DRAFT"
 FINAL_CONTRACT_SCAN_FILE_CATEGORY = "FINAL_CONTRACT_SCAN"
 CONTRACT_DRAFT_STAGE = "CONTRACT_DRAFT"
 FINAL_CONTRACT_SCAN_STAGE = "FINAL_CONTRACT_SCAN"
+STAMPED_CONTRACT_SCAN_FILE_CATEGORY = "STAMPED_CONTRACT_SCAN"
+STAMPED_CONTRACT_SCAN_STAGE = "PRINT_ROOM_CONTRACT_SCAN"
 FORMAL_REPORT_FILE_CATEGORY = "FORMAL_REPORT"
 FORMAL_REPORT_STAGE = "FORMAL_REPORT"
 REVIEW_STAGE_PREFIX = "REVIEW_"
@@ -169,6 +171,13 @@ def _ensure_upload_permission(
             raise HTTPException(status_code=403, detail="仅三审老师可上传合同扫描件")
 
 
+    if file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY:
+        if work_order.current_status != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
+            raise HTTPException(status_code=400, detail="仅待文印室处理状态可上传盖章扫描件")
+        if current_user.id != work_order.print_room_handler_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
+            raise HTTPException(status_code=403, detail="仅当前文印室人员可上传盖章扫描件")
+        return
+
     if file_category == "REPORT_SCAN":
         _advance_legacy_print_room_status(work_order)
         if work_order.current_status != WorkOrderStatus.PRINTROOM_PROCESSING.value:
@@ -232,7 +241,7 @@ def upload_file(
     )
     next_version = 1 if not latest else latest.version_no + 1
 
-    single_current_stage_categories = {FORMAL_REPORT_FILE_CATEGORY, FINAL_CONTRACT_SCAN_FILE_CATEGORY}
+    single_current_stage_categories = {FORMAL_REPORT_FILE_CATEGORY, FINAL_CONTRACT_SCAN_FILE_CATEGORY, STAMPED_CONTRACT_SCAN_FILE_CATEGORY}
     append_only_categories = {"EXTERNAL_AUDIT_OPINION", "EXTERNAL_AUDIT_REPLY", "EXTERNAL_REVIEW_OPINION"}
     current_filter = [
         WorkOrderFile.work_order_id == work_order_id,
@@ -329,6 +338,12 @@ def delete_work_order_file(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == row.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+    if row.file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY:
+        if work_order.current_status != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
+            raise HTTPException(status_code=400, detail="当前状态不可替换盖章扫描件")
+        if current_user.id != work_order.print_room_handler_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
+            raise HTTPException(status_code=403, detail="仅当前文印室人员可替换盖章扫描件")
+
     _ensure_review_package_unlocked(work_order, row)
 
     if row.file_category in {"REPORT_ZIP", "REVIEW_REPLY"}:

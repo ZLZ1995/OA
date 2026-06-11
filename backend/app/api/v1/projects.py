@@ -269,6 +269,9 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
                 WorkOrderStatus.CONTRACT_REVIEWING.value,
                 WorkOrderStatus.CONTRACT_REJECTED.value,
                 WorkOrderStatus.CONTRACT_APPROVED.value,
+                WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value,
+                WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value,
+                WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value,
             } else history_contract_status
         ),
         contract_review_status_display=(
@@ -280,6 +283,9 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
                 WorkOrderStatus.CONTRACT_REVIEWING.value,
                 WorkOrderStatus.CONTRACT_REJECTED.value,
                 WorkOrderStatus.CONTRACT_APPROVED.value,
+                WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value,
+                WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value,
+                WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value,
             }
             else history_contract_status_display
         ),
@@ -760,6 +766,9 @@ def get_project_flow(
                 WorkOrderStatus.CONTRACT_REVIEWING.value,
                 WorkOrderStatus.CONTRACT_REJECTED.value,
                 WorkOrderStatus.CONTRACT_APPROVED.value,
+                WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value,
+                WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value,
+                WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value,
             } else history_contract_status
         ),
         contract_review_status_display=(
@@ -771,6 +780,9 @@ def get_project_flow(
                 WorkOrderStatus.CONTRACT_REVIEWING.value,
                 WorkOrderStatus.CONTRACT_REJECTED.value,
                 WorkOrderStatus.CONTRACT_APPROVED.value,
+                WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value,
+                WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value,
+                WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value,
             }
             else history_contract_status_display
         ),

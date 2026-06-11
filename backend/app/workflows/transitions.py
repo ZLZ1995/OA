@@ -22,6 +22,7 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
     WorkOrderStatus.CONTRACT_REVIEWING: {
         WorkOrderStatus.CONTRACT_REJECTED,
         WorkOrderStatus.CONTRACT_APPROVED,
+        WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS,
     },
     WorkOrderStatus.CONTRACT_REJECTED: {
         WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT,
@@ -30,6 +31,17 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
     WorkOrderStatus.CONTRACT_APPROVED: {
         WorkOrderStatus.FIRST_REVIEWING,
         WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
+    },
+    WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS: {
+        WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM,
+    },
+    WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM: {
+        WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS,
+        WorkOrderStatus.CONTRACT_PROCESS_COMPLETED,
+    },
+    WorkOrderStatus.CONTRACT_PROCESS_COMPLETED: {
+        WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
+        WorkOrderStatus.FIRST_REVIEWING,
     },
     WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT: {WorkOrderStatus.FIRST_REVIEWING},
     WorkOrderStatus.FIRST_REVIEWING: {

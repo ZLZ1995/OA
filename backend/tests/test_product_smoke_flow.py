@@ -149,18 +149,18 @@ def test_smoke_02_project_members_complete_moves_to_contract_upload() -> None:
     batch_create_project_member(
         payload=ProjectMemberBatchCreate(project_id=project.id, user_ids=[users["leader"].id], member_role="项目负责人"),
         db=db,
-        _={"ADMIN", "PROJECT_LEADER"},
+        current_user=users["leader"],
     )
     batch_create_project_member(
         payload=ProjectMemberBatchCreate(project_id=project.id, user_ids=[users["member"].id], member_role="项目组成员"),
         db=db,
-        _={"ADMIN", "PROJECT_LEADER"},
+        current_user=users["leader"],
     )
     complete_project_members(
         payload=ProjectMemberCompleteRequest(project_id=project.id),
         db=db,
         current_user=users["leader"],
-        _={"PROJECT_LEADER"},
+        
     )
 
     db.refresh(work_order)
@@ -177,7 +177,7 @@ def test_smoke_02a_project_member_leader_role_is_persisted_as_leader() -> None:
     batch_create_project_member(
         payload=ProjectMemberBatchCreate(project_id=project.id, user_ids=[users["leader"].id], member_role="项目负责人"),
         db=db,
-        _={"ADMIN", "PROJECT_LEADER"},
+        current_user=users["leader"],
     )
 
     leader_member = (
@@ -202,7 +202,6 @@ def test_smoke_03_contract_review_approval_moves_to_report_submit() -> None:
         payload=ContractReviewSubmitRequest(work_order_id=work_order.id, reviewer_user_id=users["contract"].id, comment="提交合同初审"),
         db=db,
         current_user=users["leader"],
-        _={"PROJECT_LEADER"},
     )
     approve_contract_review(
         record_id=submitted.id,

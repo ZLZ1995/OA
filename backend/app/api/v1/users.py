@@ -52,7 +52,6 @@ def _get_visible_active_user_or_404(
 def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
 ) -> UserListResponse:
     query = db.query(User).filter(User.is_active.is_(True))
     if not _is_super_admin(current_user):

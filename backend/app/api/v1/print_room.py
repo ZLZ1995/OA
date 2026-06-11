@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.api.v1.contract_reviews import get_contract_review_status_display
 from app.db.session import get_db
 from app.models.contract import Contract
 from app.models.print_room_record import PrintRoomRecord
@@ -13,27 +14,66 @@ from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
 from app.schemas.print_room import (
+    ContractPrintRoomInfoResponse,
     IssueOfficialContractRequest,
     IssuePaperReportRequest,
+    PrintRoomContractFileResponse,
+    PrintRoomContractParticipant,
     PrintRoomInfoResponse,
     PrintRoomRecordResponse,
     PrintRoomRollbackRequest,
     TransferPrintRoomRequest,
 )
 from app.services.project_role_conflict_service import get_project_party_user_ids, validate_support_role_not_project_party
-from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
+from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
 from app.workflows.transitions import can_transit
 
 router = APIRouter(prefix="/print-room", tags=["文印室"])
 
+FINAL_CONTRACT_SCAN_FILE_CATEGORY = "FINAL_CONTRACT_SCAN"
+FINAL_CONTRACT_SCAN_STAGE = "FINAL_CONTRACT_SCAN"
+STAMPED_CONTRACT_SCAN_FILE_CATEGORY = "STAMPED_CONTRACT_SCAN"
+STAMPED_CONTRACT_SCAN_STAGE = "PRINT_ROOM_CONTRACT_SCAN"
+
+
+def _user_name(db: Session, user_id: int | None) -> str | None:
+    if not user_id:
+        return None
+    return db.query(User.real_name).filter(User.id == user_id).scalar()
+
+
+def _participant(db: Session, user_id: int | None) -> PrintRoomContractParticipant:
+    return PrintRoomContractParticipant(user_id=user_id, user_name=_user_name(db, user_id))
+
+
+def _serialize_contract_file(db: Session, row: WorkOrderFile) -> PrintRoomContractFileResponse:
+    return PrintRoomContractFileResponse(
+        id=row.id,
+        origin_file_name=row.origin_file_name,
+        file_size=row.file_size,
+        uploaded_at=row.uploaded_at,
+        uploaded_by_user_id=row.uploaded_by,
+        uploaded_by_user_name=_user_name(db, row.uploaded_by),
+        is_current=row.is_current,
+    )
+
 
 def _has_current_final_contract_scan(db: Session, work_order_id: int) -> bool:
     return db.query(WorkOrderFile.id).filter(
         WorkOrderFile.work_order_id == work_order_id,
-        WorkOrderFile.file_category == "FINAL_CONTRACT_SCAN",
-        WorkOrderFile.business_stage == "FINAL_CONTRACT_SCAN",
+        WorkOrderFile.file_category == FINAL_CONTRACT_SCAN_FILE_CATEGORY,
+        WorkOrderFile.business_stage == FINAL_CONTRACT_SCAN_STAGE,
+        WorkOrderFile.is_current.is_(True),
+    ).first() is not None
+
+
+def _has_current_stamped_contract_scan(db: Session, work_order_id: int) -> bool:
+    return db.query(WorkOrderFile.id).filter(
+        WorkOrderFile.work_order_id == work_order_id,
+        WorkOrderFile.file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY,
+        WorkOrderFile.business_stage == STAMPED_CONTRACT_SCAN_STAGE,
         WorkOrderFile.is_current.is_(True),
     ).first() is not None
 
@@ -53,7 +93,7 @@ def _ensure_print_room_handler(work_order: WorkOrder, current_user: User) -> Non
     if any(item.role.code == "ADMIN" for item in current_user.roles):
         return
     if work_order.print_room_handler_id != current_user.id:
-        raise HTTPException(status_code=403, detail="仅当前文印室办理人员可处理报告出具")
+        raise HTTPException(status_code=403, detail="仅当前文印室办理人员可处理")
 
 
 def _advance_legacy_print_room_status(work_order: WorkOrder) -> None:
@@ -77,12 +117,192 @@ def get_print_room_info(
     record = db.query(PrintRoomRecord).filter(PrintRoomRecord.work_order_id == work_order_id).first()
     return PrintRoomInfoResponse(
         work_order_id=work_order_id,
+        current_status=work_order.current_status if work_order else None,
+        current_status_display=work_order.current_status if work_order else None,
         contract_no=contract.contract_no if contract else None,
         paper_report_no=record.paper_report_no if record else None,
         copy_count=record.copy_count if record else None,
         formal_report_count=work_order.formal_report_count if work_order else None,
         remark=record.remark if record else None,
     )
+
+
+@router.get("/contracts/work-orders/{work_order_id}", response_model=ContractPrintRoomInfoResponse)
+def get_contract_print_room_info(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ContractPrintRoomInfoResponse:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    contract_files = (
+        db.query(WorkOrderFile)
+        .filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.file_category == "CONTRACT_DRAFT",
+            WorkOrderFile.is_current.is_(True),
+        )
+        .order_by(WorkOrderFile.version_no.desc())
+        .all()
+    )
+    stamped_files = (
+        db.query(WorkOrderFile)
+        .filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY,
+            WorkOrderFile.business_stage == STAMPED_CONTRACT_SCAN_STAGE,
+            WorkOrderFile.is_current.is_(True),
+        )
+        .order_by(WorkOrderFile.version_no.desc())
+        .all()
+    )
+    is_admin = any(item.role.code == "ADMIN" for item in current_user.roles)
+    is_print_room_handler = bool(work_order.print_room_handler_id and work_order.print_room_handler_id == current_user.id)
+    is_project_leader = work_order.project_leader_id == current_user.id
+    current_status = work_order.current_status
+    return ContractPrintRoomInfoResponse(
+        work_order_id=work_order_id,
+        current_status=current_status,
+        current_status_display=get_contract_review_status_display(current_status),
+        project_leader=_participant(db, work_order.project_leader_id),
+        contract_reviewer=_participant(db, work_order.contract_reviewer_id),
+        print_room_handler=_participant(db, work_order.print_room_handler_id),
+        original_contract_files=[_serialize_contract_file(db, row) for row in contract_files],
+        stamped_contract_scan_files=[_serialize_contract_file(db, row) for row in stamped_files],
+        can_upload_scan=current_status == WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value and (is_print_room_handler or is_admin),
+        can_send_to_project_leader=current_status == WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value and _has_current_stamped_contract_scan(db, work_order_id) and (is_print_room_handler or is_admin),
+        can_return_to_print_room=current_status == WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value and (is_project_leader or is_admin),
+        can_confirm_complete=current_status == WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value and (is_project_leader or is_admin),
+    )
+
+
+@router.post("/contracts/send-to-project-leader")
+def send_contract_to_project_leader(
+    payload: PrintRoomRollbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(require_roles("PRINT_ROOM", "ADMIN")),
+) -> dict[str, str]:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    _ensure_print_room_handler(work_order, current_user)
+    if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS:
+        raise HTTPException(status_code=400, detail="当前状态不可发送项目负责人")
+    if not _has_current_stamped_contract_scan(db, work_order.id):
+        raise HTTPException(status_code=400, detail="请先上传盖章扫描件后再发送")
+
+    from_status = WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS
+    to_status = WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM
+    if not can_transit(from_status, to_status):
+        raise HTTPException(status_code=400, detail="非法状态迁移")
+    work_order.current_status = to_status.value
+    work_order.current_handler_user_id = work_order.project_leader_id
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=from_status.value,
+        to_status=to_status.value,
+        action_type="SEND_TO_PROJECT_LEADER_CONFIRM",
+        operator_user_id=current_user.id,
+        remark=payload.remark,
+    )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.project_leader_id,
+            action_name="SEND_TO_PROJECT_LEADER_CONFIRM",
+            comment=payload.remark,
+        )
+    db.commit()
+    return {"message": "已发送项目负责人确认"}
+
+
+@router.post("/contracts/return-to-print-room")
+def return_contract_to_print_room(
+    payload: PrintRoomRollbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
+) -> dict[str, str]:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    if not payload.remark or not payload.remark.strip():
+        raise HTTPException(status_code=400, detail="请输入退回原因")
+    if not any(item.role.code == "ADMIN" for item in current_user.roles) and work_order.project_leader_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅项目负责人可退回文印室")
+    if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM:
+        raise HTTPException(status_code=400, detail="当前状态不可退回文印室")
+
+    from_status = WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM
+    to_status = WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS
+    if not can_transit(from_status, to_status):
+        raise HTTPException(status_code=400, detail="非法状态迁移")
+    work_order.current_status = to_status.value
+    work_order.current_handler_user_id = work_order.print_room_handler_id
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=from_status.value,
+        to_status=to_status.value,
+        action_type="RETURN_TO_PRINT_ROOM",
+        operator_user_id=current_user.id,
+        remark=payload.remark,
+    )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project and work_order.print_room_handler_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.print_room_handler_id,
+            action_name="RETURN_TO_PRINT_ROOM",
+            comment=payload.remark,
+        )
+    db.commit()
+    return {"message": "已退回文印室"}
+
+
+@router.post("/contracts/confirm-complete")
+def confirm_contract_complete(
+    payload: PrintRoomRollbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
+) -> dict[str, str]:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    if not any(item.role.code == "ADMIN" for item in current_user.roles) and work_order.project_leader_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅项目负责人可确认办结")
+    if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM:
+        raise HTTPException(status_code=400, detail="当前状态不可确认办结")
+
+    from_status = WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM
+    to_status = WorkOrderStatus.CONTRACT_PROCESS_COMPLETED
+    if not can_transit(from_status, to_status):
+        raise HTTPException(status_code=400, detail="非法状态迁移")
+    work_order.current_status = to_status.value
+    work_order.current_handler_user_id = work_order.project_leader_id
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=from_status.value,
+        to_status=to_status.value,
+        action_type="CONFIRM_CONTRACT_COMPLETE",
+        operator_user_id=current_user.id,
+        remark=payload.remark,
+    )
+    db.commit()
+    return {"message": "合同流程已办结"}
 
 
 @router.post("/transfer-print-room")
@@ -106,7 +326,7 @@ def transfer_to_print_room(
     validate_support_role_not_project_party(
         payload.handler_user_id,
         get_project_party_user_ids(db, work_order.project_id, work_order),
-        "??????",
+        "文印室办理人",
     )
     handler = db.query(User).filter(User.id == payload.handler_user_id, User.is_active.is_(True)).first()
     if not handler or not any(item.role.code == "PRINT_ROOM" for item in handler.roles):
