@@ -93,7 +93,6 @@ def test_submit_contract_review_requires_contract_reviewer_role() -> None:
             payload=ContractReviewSubmitRequest(work_order_id=work_order.id, reviewer_user_id=reviewer.id),
             db=db,
             current_user=leader,
-            _={"PROJECT_LEADER"},
         )
 
     assert exc_info.value.status_code == 400
@@ -113,7 +112,6 @@ def test_contract_review_approve_moves_to_contract_approved() -> None:
         payload=ContractReviewSubmitRequest(work_order_id=work_order.id, reviewer_user_id=reviewer.id),
         db=db,
         current_user=leader,
-        _={"PROJECT_LEADER"},
     )
 
     result = approve_contract_review(
@@ -144,7 +142,6 @@ def test_contract_review_reject_moves_back_to_project_side() -> None:
         payload=ContractReviewSubmitRequest(work_order_id=work_order.id, reviewer_user_id=reviewer.id),
         db=db,
         current_user=leader,
-        _={"PROJECT_LEADER"},
     )
 
     result = reject_contract_review(

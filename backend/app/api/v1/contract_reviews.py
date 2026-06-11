@@ -12,6 +12,7 @@ from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
 from app.schemas.contract_review import (
+    ContractReviewApproveTransferRequest,
     ContractReviewDecisionRequest,
     ContractReviewFileResponse,
     ContractReviewRecordListResponse,
@@ -19,8 +20,8 @@ from app.schemas.contract_review import (
     ContractReviewSubmitRequest,
 )
 from app.services.project_role_conflict_service import get_project_party_user_ids, validate_not_project_party
-from app.services.workflow_notification_service import send_workflow_notification
 from app.services.workflow_log_service import create_workflow_log
+from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
 from app.workflows.transitions import can_transit
 
@@ -36,6 +37,9 @@ CONTRACT_STATUS_LABELS = {
     WorkOrderStatus.CONTRACT_REVIEWING.value: "合同审核中",
     WorkOrderStatus.CONTRACT_REJECTED.value: "合同审核退回",
     WorkOrderStatus.CONTRACT_APPROVED.value: "合同审核通过",
+    WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value: "待文印室处理",
+    WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value: "待项目负责人确认",
+    WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value: "合同流程办结",
 }
 
 
@@ -53,6 +57,18 @@ def _ensure_contract_reviewer(db: Session, user_id: int) -> None:
     )
     if not exists:
         raise HTTPException(status_code=400, detail="请选择有效的合同审核人")
+
+
+def _ensure_print_room_handler(db: Session, user_id: int) -> None:
+    exists = (
+        db.query(UserRole.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .join(User, User.id == UserRole.user_id)
+        .filter(User.id == user_id, User.is_active.is_(True), Role.code == "PRINT_ROOM")
+        .first()
+    )
+    if not exists:
+        raise HTTPException(status_code=400, detail="请选择有效的文印室人员")
 
 
 def _ensure_project_operator(db: Session, work_order: WorkOrder, user: User) -> None:
@@ -136,7 +152,6 @@ def submit_contract_review(
     payload: ContractReviewSubmitRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER")),
 ) -> ContractReviewRecordResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
@@ -146,7 +161,7 @@ def submit_contract_review(
     validate_not_project_party(
         payload.reviewer_user_id,
         get_project_party_user_ids(db, work_order.project_id, work_order),
-        "?????",
+        "合同审核人",
     )
 
     contract_file = _get_current_contract_file(db, work_order.id)
@@ -259,6 +274,78 @@ def approve_contract_review(
             sender_user=current_user,
             receiver_user_id=work_order.project_leader_id,
             action_name="APPROVE_CONTRACT_REVIEW",
+            comment=payload.comment,
+            biz_id=approve_record.id,
+        )
+    db.commit()
+    db.refresh(approve_record)
+    return _serialize_record(db, approve_record)
+
+
+@router.post("/{record_id}/approve-and-transfer", response_model=ContractReviewRecordResponse)
+def approve_and_transfer_contract_review(
+    record_id: int,
+    payload: ContractReviewApproveTransferRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: set[str] = Depends(require_roles("CONTRACT_REVIEWER", "ADMIN")),
+) -> ContractReviewRecordResponse:
+    record = db.query(ContractReviewRecord).filter(ContractReviewRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="合同审核记录不存在")
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == record.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    if work_order.contract_reviewer_id != current_user.id and not any(item.role.code == "ADMIN" for item in current_user.roles):
+        raise HTTPException(status_code=403, detail="仅当前合同审核人可通过合同并转发文印室")
+    if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.CONTRACT_REVIEWING:
+        raise HTTPException(status_code=400, detail="当前状态不可审核通过")
+
+    _ensure_print_room_handler(db, payload.print_room_handler_id)
+    validate_not_project_party(
+        payload.print_room_handler_id,
+        get_project_party_user_ids(db, work_order.project_id, work_order),
+        "文印室办理人",
+    )
+
+    from_status = WorkOrderStatus.CONTRACT_REVIEWING
+    to_status = WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS
+    if not can_transit(from_status, to_status):
+        raise HTTPException(status_code=400, detail="非法状态迁移")
+
+    work_order.current_status = to_status.value
+    work_order.current_handler_user_id = payload.print_room_handler_id
+    work_order.print_room_handler_id = payload.print_room_handler_id
+
+    approve_record = ContractReviewRecord(
+        work_order_id=work_order.id,
+        project_id=work_order.project_id,
+        action_type="APPROVE_AND_TRANSFER_PRINT_ROOM",
+        operator_user_id=current_user.id,
+        reviewer_user_id=current_user.id,
+        comment=payload.comment or "合同审核通过，已转发文印室",
+        contract_file_id=record.contract_file_id,
+        review_attachment_file_id=payload.review_attachment_file_id,
+    )
+    db.add(approve_record)
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=from_status.value,
+        to_status=to_status.value,
+        action_type="APPROVE_AND_TRANSFER_PRINT_ROOM",
+        operator_user_id=current_user.id,
+        remark=payload.comment,
+    )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=payload.print_room_handler_id,
+            action_name="APPROVE_AND_TRANSFER_PRINT_ROOM",
             comment=payload.comment,
             biz_id=approve_record.id,
         )

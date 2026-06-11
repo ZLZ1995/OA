@@ -55,6 +55,19 @@ def _ensure_internal_project(project: Project) -> None:
     return None
 
 
+def _ensure_project_member_operator(db: Session, project: Project, current_user: User) -> None:
+    if any(item.role.code == "ADMIN" for item in current_user.roles):
+        return
+    if current_user.id in {project.business_user_id, project.project_leader_id}:
+        return
+    is_member = db.query(ProjectMember.id).filter(
+        ProjectMember.project_id == project.id,
+        ProjectMember.user_id == current_user.id,
+    ).first()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="仅项目方人员可维护项目成员")
+
+
 @router.get("", response_model=ProjectMemberListResponse)
 def list_project_members(
     project_id: int,
@@ -75,12 +88,13 @@ def list_project_members(
 def batch_create_project_member(
     payload: ProjectMemberBatchCreate,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
+    current_user: User = Depends(get_current_user),
 ) -> ProjectMemberListResponse:
     project = db.query(Project).filter(Project.id == payload.project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     _ensure_internal_project(project)
+    _ensure_project_member_operator(db, project, current_user)
 
     db_role = _parse_member_role(payload.member_role)
     if db_role == "LEADER" and len(payload.user_ids) != 1:
@@ -131,7 +145,7 @@ def update_project_member(
     member_id: int,
     payload: ProjectMemberUpdate,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
+    current_user: User = Depends(get_current_user),
 ) -> ProjectMemberResponse:
     row = db.query(ProjectMember).filter(ProjectMember.id == member_id).first()
     if not row:
@@ -140,6 +154,7 @@ def update_project_member(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     _ensure_internal_project(project)
+    _ensure_project_member_operator(db, project, current_user)
 
     row.member_role = _parse_member_role(payload.member_role)
     db.commit()
@@ -156,12 +171,12 @@ def complete_project_members(
     payload: ProjectMemberCompleteRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
 ) -> dict[str, str]:
     project = db.query(Project).filter(Project.id == payload.project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     _ensure_internal_project(project)
+    _ensure_project_member_operator(db, project, current_user)
 
     leader = (
         db.query(ProjectMember)
@@ -215,7 +230,7 @@ def complete_project_members(
 def delete_project_member(
     member_id: int,
     db: Session = Depends(get_db),
-    _: set[str] = Depends(require_roles("ADMIN", "PROJECT_LEADER")),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     row = db.query(ProjectMember).filter(ProjectMember.id == member_id).first()
     if not row:
@@ -224,5 +239,6 @@ def delete_project_member(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     _ensure_internal_project(project)
+    _ensure_project_member_operator(db, project, current_user)
     db.delete(row)
     db.commit()

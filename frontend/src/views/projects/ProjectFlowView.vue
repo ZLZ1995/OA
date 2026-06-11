@@ -162,6 +162,9 @@ const visibleFlowNodes = computed(() => {
     return availableNodes.value.filter(node => node.key === 'review')
   }
   if (roleName === '文印室' || roles.includes('PRINT_ROOM')) {
+    if (['WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM'].includes(currentStatus)) {
+      return availableNodes.value.filter(node => ['basic', 'contractReview'].includes(node.key))
+    }
     return availableNodes.value.filter(node => ['issue', 'mailing'].includes(node.key))
   }
   if (roleName === '财务' || roles.includes('FINANCE')) {

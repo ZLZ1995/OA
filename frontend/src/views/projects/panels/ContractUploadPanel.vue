@@ -74,7 +74,6 @@ import { computed, onMounted, ref, watch, type ComponentPublicInstance } from 'v
 import { ElMessage, type UploadFile } from 'element-plus'
 import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
 import {
-  completeContractUpload,
   listWorkOrderFiles,
   uploadWorkOrderFile,
   downloadWorkOrderFile,
@@ -82,12 +81,19 @@ import {
 } from '@/api/files'
 import { submitContractReview } from '@/api/contractReviews'
 import { listUserCandidates, type UserItem } from '@/api/users'
-import { updateWorkOrder } from '@/api/workorders'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import type { UploadProgressState } from '@/types/upload'
 
-const props = defineProps<{ workOrderId?: number; canEdit: boolean; flowInfo?: ProjectFlowData; userRoles?: string[] }>()
-const emit = defineEmits<{ (e: 'changed'): void }>()
+const props = defineProps<{
+  workOrderId?: number
+  canEdit: boolean
+  flowInfo?: ProjectFlowData
+  userRoles?: string[]
+  projectId?: number
+  canOperate?: boolean
+  userRoleInProject?: string
+}>()
+const emit = defineEmits<{ (e: 'changed'): void; (e: 'navigate', key: string): void }>()
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -187,8 +193,6 @@ async function onComplete() {
 
   submitting.value = true
   try {
-    await updateWorkOrder(props.workOrderId, { contract_reviewer_id: reviewerId.value })
-    await completeContractUpload(props.workOrderId)
     await submitContractReview({
       work_order_id: props.workOrderId,
       reviewer_user_id: reviewerId.value,
