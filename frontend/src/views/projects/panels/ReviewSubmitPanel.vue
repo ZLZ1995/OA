@@ -94,10 +94,11 @@
                   <div class="file-zone-title">待审报告资料包</div>
                   <div class="file-zone-subtitle">评估报告、计算表、测算依据等本轮送审材料集中在这里维护。</div>
                 </div>
-                <el-upload v-if="canEditReportPackage" :auto-upload="false" :on-change="onReportSelected" :show-file-list="false">
+                <el-upload v-if="canEditReportPackage" :auto-upload="false" :on-change="onReportSelected" :show-file-list="false" :disabled="isUploadingAnyReviewAsset">
                   <el-button type="primary" plain>{{ isReplyFlow ? '上传修改后报告包' : '上传待审报告包' }}</el-button>
                 </el-upload>
               </div>
+              <UploadProgressInline :progress="reportPackageUploadProgress" />
               <div class="review-upload-actions">
                 <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
                 <el-tag v-else-if="canCarryForwardApprovedFile" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
@@ -125,10 +126,11 @@
                   <div class="file-zone-title">审核意见 / 回复</div>
                   <div class="file-zone-subtitle">审核老师上传意见，项目负责人上传回复，和待审报告资料包互不覆盖。</div>
                 </div>
-                <el-upload v-if="canUploadReplyFile" :auto-upload="false" :on-change="onReplySelected" :show-file-list="false">
+                <el-upload v-if="canUploadReplyFile" :auto-upload="false" :on-change="onReplySelected" :show-file-list="false" :disabled="isUploadingAnyReviewAsset">
                   <el-button plain>上传审核意见回复</el-button>
                 </el-upload>
               </div>
+              <UploadProgressInline :progress="replyUploadProgress" />
               <el-alert
                 v-if="isReplyFlow"
                 type="warning"
@@ -159,10 +161,11 @@
                   <div class="file-zone-title">外审意见 / 复核意见</div>
                   <div class="file-zone-subtitle">上传外部审核意见、外部复核意见等支撑文件，随外部复核轮次流转。</div>
                 </div>
-                <el-upload v-if="canUploadExternalAuditOpinionFile" :auto-upload="false" :on-change="onExternalAuditOpinionSelected" :show-file-list="false">
+                <el-upload v-if="canUploadExternalAuditOpinionFile" :auto-upload="false" :on-change="onExternalAuditOpinionSelected" :show-file-list="false" :disabled="isUploadingAnyReviewAsset">
                   <el-button type="primary" plain>{{ externalAuditUploadButtonText }}</el-button>
                 </el-upload>
               </div>
+              <UploadProgressInline :progress="externalAuditUploadProgress" />
               <div class="file-row-list" v-if="externalAuditOpinionFiles.length">
                 <div v-for="file in externalAuditOpinionFiles" :key="file.id" class="file-row">
                   <div class="file-row-main">
@@ -182,7 +185,7 @@
       </el-form-item>
       <el-form-item>
         <el-space wrap>
-          <el-button v-if="!showReviewerChangePanel" type="primary" :disabled="!canSubmitReview || requiresManualUploadBeforeSubmit" @click="onSubmit">
+          <el-button v-if="!showReviewerChangePanel" type="primary" :disabled="!canSubmitReview || requiresManualUploadBeforeSubmit || isUploadingAnyReviewAsset" @click="onSubmit">
             {{ isReplyFlow ? '提交审核意见回复' : '提交审核' }}
           </el-button>
           <el-button v-if="canRecallRouting" type="danger" plain @click="onRecallRouting">
@@ -192,7 +195,7 @@
             更换审核人
           </el-button>
           <template v-if="showReviewerChangePanel">
-            <el-button type="warning" :disabled="!canSubmitReviewerChange" @click="onSubmitWithReviewerChange">
+            <el-button type="warning" :disabled="!canSubmitReviewerChange || isUploadingAnyReviewAsset" @click="onSubmitWithReviewerChange">
               提交并更换审核人
             </el-button>
             <el-button plain @click="cancelReviewerChangePanel">取消更换</el-button>
@@ -228,9 +231,10 @@
           <el-input v-model="reviewComment" type="textarea" :rows="3" placeholder="请输入审核意见" />
         </el-form-item>
         <el-form-item label="意见附件">
-          <el-upload :auto-upload="false" :on-change="onOpinionSelected" :show-file-list="false">
+          <el-upload :auto-upload="false" :on-change="onOpinionSelected" :show-file-list="false" :disabled="isUploadingAnyReviewAsset">
             <el-button>上传审核意见文件</el-button>
           </el-upload>
+          <UploadProgressInline :progress="opinionUploadProgress" />
           <div class="file-list" v-if="opinionFiles.length">
             <el-tag v-for="file in opinionFiles" :key="file.id" type="info" effect="plain">
               {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
@@ -311,9 +315,10 @@
       />
       <el-form label-width="120px">
         <el-form-item label="正式报告文件">
-          <el-upload :auto-upload="false" :on-change="onFormalReportSelected" :show-file-list="false">
+          <el-upload :auto-upload="false" :on-change="onFormalReportSelected" :show-file-list="false" :disabled="isUploadingAnyReviewAsset">
             <el-button type="primary">上传正式报告文件</el-button>
           </el-upload>
+          <UploadProgressInline :progress="formalReportUploadProgress" />
           <div class="file-list" v-if="formalReportFiles.length">
             <el-tag v-for="file in formalReportFiles" :key="file.id" type="info" effect="plain">
               {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
@@ -321,9 +326,10 @@
           </div>
         </el-form-item>
         <el-form-item label="合同扫描件">
-          <el-upload :auto-upload="false" :on-change="onFinalContractSelected" :show-file-list="false">
+          <el-upload :auto-upload="false" :on-change="onFinalContractSelected" :show-file-list="false" :disabled="isUploadingAnyReviewAsset">
             <el-button type="primary">上传合同扫描件</el-button>
           </el-upload>
+          <UploadProgressInline :progress="finalContractUploadProgress" />
           <div class="file-list" v-if="finalContractFiles.length">
             <el-tag v-for="file in finalContractFiles" :key="file.id" type="success" effect="plain">
               {{ file.origin_file_name }}（{{ formatFileSize(file.file_size) }}）
@@ -345,7 +351,7 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="success" :disabled="formalReportFiles.length === 0" @click="onTransferPrintRoom">转发文印室</el-button>
+          <el-button type="success" :disabled="formalReportFiles.length === 0 || isUploadingAnyReviewAsset" @click="onTransferPrintRoom">转发文印室</el-button>
         </el-form-item>
       </el-form>
     </template>
@@ -387,6 +393,8 @@ import { transferPrintRoom } from '@/api/printRoom'
 import { listUserCandidates, type UserItem } from '@/api/users'
 import { markHasExternalAudit, markNoExternalAudit, requestOwnerExternalAuditConfirm } from '@/api/signoff'
 import ReviewUploadRequirementBox from '@/components/common/ReviewUploadRequirementBox.vue'
+import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
+import type { UploadProgressState } from '@/types/upload'
 
 const props = defineProps<{ workOrderId?: number; canEdit: boolean; userRoles: string[]; flowInfo?: ProjectFlowData }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
@@ -435,6 +443,12 @@ const routingRound = ref<'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECON
 const routingReviewerUserId = ref<number>()
 const routingSubmitting = ref(false)
 const loading = ref(false)
+const reportPackageUploadProgress = ref<UploadProgressState | null>(null)
+const replyUploadProgress = ref<UploadProgressState | null>(null)
+const externalAuditUploadProgress = ref<UploadProgressState | null>(null)
+const opinionUploadProgress = ref<UploadProgressState | null>(null)
+const formalReportUploadProgress = ref<UploadProgressState | null>(null)
+const finalContractUploadProgress = ref<UploadProgressState | null>(null)
 
 const statusCode = computed(() => props.flowInfo?.current_work_order_status || '')
 const isStateOwnedAsset = computed(() => props.flowInfo?.project.evaluation_business_nature === '国有资产评估业务')
@@ -452,6 +466,14 @@ const isLeaderSubmitNextStage = computed(() => isLeaderSelectNextStage.value && 
 const isReportUploadLocked = computed(() => reusePreviousFile.value || isLockedCarryForwardStage.value || canCarryForwardApprovedFile.value || isLeaderSelectNextStage.value || isReviewerSelectNextStage.value)
 const canEditReportPackage = computed(() => canSubmitReview.value && !isReportUploadLocked.value && !showReviewerChangePanel.value)
 const canUploadReplyFile = computed(() => canSubmitReview.value && isReplyFlow.value && !showReviewerChangePanel.value)
+const isUploadingAnyReviewAsset = computed(() => [
+  reportPackageUploadProgress.value,
+  replyUploadProgress.value,
+  externalAuditUploadProgress.value,
+  opinionUploadProgress.value,
+  formalReportUploadProgress.value,
+  finalContractUploadProgress.value,
+].some(progress => progress?.status === 'uploading'))
 const canRecallRouting = computed(() => {
   if (!currentUserId.value) return false
   if (reviewRound.value === 'SECOND') return statusCode.value === 'SECOND_REVIEWING' && props.flowInfo?.first_reviewer_id === currentUserId.value
@@ -881,9 +903,19 @@ async function reloadRoundData() {
   await Promise.all([loadCandidates(), loadFiles()])
 }
 
-async function uploadReviewFile(payload: Parameters<typeof uploadWorkOrderFile>[0], successMessage?: string) {
+async function uploadReviewFile(
+  payload: Parameters<typeof uploadWorkOrderFile>[0],
+  progressRef?: { value: UploadProgressState | null },
+  successMessage?: string
+) {
   try {
-    await uploadWorkOrderFile(payload)
+    await uploadWorkOrderFile({
+      ...payload,
+      onProgress: (progress) => {
+        if (progressRef) progressRef.value = progress
+        payload.onProgress?.(progress)
+      }
+    })
     if (successMessage) ElMessage.success(successMessage)
     await loadFiles()
   } catch (error: any) {
@@ -900,7 +932,7 @@ async function onReportSelected(file: UploadFile) {
     file_category: 'REPORT_ZIP',
     business_stage: reviewStage(reviewRound.value),
     file: file.raw
-  })
+  }, reportPackageUploadProgress)
   ElMessage.success('待审报告资料包已上传')
   await loadFiles()
 }
@@ -912,7 +944,7 @@ async function onReplySelected(file: UploadFile) {
     file_category: 'REVIEW_REPLY',
     business_stage: reviewStage(reviewRound.value),
     file: file.raw
-  })
+  }, replyUploadProgress)
   ElMessage.success('审核意见回复已上传')
   await loadFiles()
 }
@@ -924,14 +956,22 @@ async function onExternalAuditOpinionSelected(file: UploadFile) {
     file_category: externalAuditUploadCategory.value,
     business_stage: reviewStage(reviewRound.value),
     file: file.raw
-  })
+  }, externalAuditUploadProgress)
   ElMessage.success(`${reviewFileTypeLabel({ file_category: externalAuditUploadCategory.value } as WorkOrderFileItem)}文件已上传`)
   await loadFiles()
 }
 
 async function onOpinionSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
-  await uploadWorkOrderFile({ work_order_id: props.workOrderId, file_category: reviewOpinionCategory.value, business_stage: reviewStage(reviewRound.value), file: file.raw })
+  await uploadWorkOrderFile({
+    work_order_id: props.workOrderId,
+    file_category: reviewOpinionCategory.value,
+    business_stage: reviewStage(reviewRound.value),
+    file: file.raw,
+    onProgress: (progress) => {
+      opinionUploadProgress.value = progress
+    }
+  })
   ElMessage.success('审核意见文件已上传')
   await loadFiles()
 }
@@ -946,7 +986,15 @@ async function onFormalReportSelected(file: UploadFile) {
     signer_two: signerTwo.value,
     formal_report_count: formalReportCount.value
   })
-  await uploadWorkOrderFile({ work_order_id: props.workOrderId, file_category: 'FORMAL_REPORT', business_stage: 'FORMAL_REPORT', file: file.raw })
+  await uploadWorkOrderFile({
+    work_order_id: props.workOrderId,
+    file_category: 'FORMAL_REPORT',
+    business_stage: 'FORMAL_REPORT',
+    file: file.raw,
+    onProgress: (progress) => {
+      formalReportUploadProgress.value = progress
+    }
+  })
   ElMessage.success('正式报告文件已上传')
   await loadFiles()
   emit('changed')
@@ -955,7 +1003,15 @@ async function onFormalReportSelected(file: UploadFile) {
 async function onFinalContractSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
   if (!canUploadFormalReport.value) return ElMessage.warning('仅三审老师可上传合同扫描件')
-  await uploadWorkOrderFile({ work_order_id: props.workOrderId, file_category: 'FINAL_CONTRACT_SCAN', business_stage: 'FINAL_CONTRACT_SCAN', file: file.raw })
+  await uploadWorkOrderFile({
+    work_order_id: props.workOrderId,
+    file_category: 'FINAL_CONTRACT_SCAN',
+    business_stage: 'FINAL_CONTRACT_SCAN',
+    file: file.raw,
+    onProgress: (progress) => {
+      finalContractUploadProgress.value = progress
+    }
+  })
   ElMessage.success('合同扫描件已上传')
   await loadFiles()
   emit('changed')

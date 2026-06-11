@@ -69,14 +69,15 @@
       </el-form-item>
 
       <el-form-item label="报告扫描件">
-        <el-upload v-if="canPrintRoom" :auto-upload="false" :on-change="onScanSelected" :show-file-list="false">
-          <el-button type="primary">上传报告扫描件</el-button>
+        <el-upload v-if="canPrintRoom" :auto-upload="false" :on-change="onScanSelected" :show-file-list="false" :disabled="isUploading">
+          <el-button type="primary" :disabled="isUploading">上传报告扫描件</el-button>
         </el-upload>
+        <UploadProgressInline :progress="uploadProgress" />
         <div v-if="reportScanFiles.length" class="download-list">
           <div v-for="file in reportScanFiles" :key="file.id" class="download-item">
             <span>{{ file.origin_file_name }}</span>
             <el-button type="primary" link @click="download(file)">下载</el-button>
-            <el-button v-if="canReplaceReportScan" type="warning" link @click="triggerReplace(file.id)">重新上传</el-button>
+            <el-button v-if="canReplaceReportScan" type="warning" link :disabled="isUploading" @click="triggerReplace(file.id)">重新上传</el-button>
             <input
               :ref="el => setReplaceInput(file.id, el)"
               class="hidden-file-input"
@@ -97,7 +98,7 @@
       <el-form-item>
         <div class="issue-actions">
           <el-button type="primary" :disabled="!canPrintRoom" @click="issueContract">保存正式合同编号</el-button>
-          <el-button type="success" :disabled="!canPrintRoom || reportScanFiles.length === 0" @click="issueReport">登记纸质报告出具</el-button>
+          <el-button type="success" :disabled="!canPrintRoom || reportScanFiles.length === 0 || isUploading" @click="issueReport">登记纸质报告出具</el-button>
           <el-button v-if="canProjectMailingStart" type="primary" plain @click="goMailing">邮寄报告</el-button>
           <el-button type="warning" :disabled="!canPrintRoom" @click="rollback">撤回至三审</el-button>
           <el-button type="danger" plain :disabled="!canPrintRoom" @click="contractError">合同错误</el-button>
@@ -111,11 +112,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
+import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
 import { getPrintRoomInfo, issueOfficialContract, issuePaperReport, markContractError, reportError, rollbackThird } from '@/api/printRoom'
 import { downloadWorkOrderFile, listWorkOrderFiles, replaceWorkOrderFile, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { startReportMailing } from '@/api/reportMailing'
 import { useAuthStore } from '@/store/auth'
+import type { UploadProgressState } from '@/types/upload'
 
 const props = defineProps<{ workOrderId?: number; canOperate: boolean; userRoles?: string[]; flowInfo?: ProjectFlowData }>()
 const emit = defineEmits<{
@@ -135,6 +138,7 @@ const formalReportFiles = ref<WorkOrderFileItem[]>([])
 const reportScanFiles = ref<WorkOrderFileItem[]>([])
 const reviewPackageFiles = ref<WorkOrderFileItem[]>([])
 const replaceInputs = new Map<number, HTMLInputElement>()
+const uploadProgress = ref<UploadProgressState | null>(null)
 const REVIEW_STAGE_ORDER: Record<string, number> = {
   REVIEW_FIRST: 1,
   REVIEW_SECOND: 2,
@@ -178,6 +182,7 @@ const canProjectMailingStart = computed(() => Boolean(
   !isPrintRoomRole.value &&
   ['PAPER_REPORT_ISSUED', 'WAIT_INVOICE_INFO', 'INVOICE_INFO_REJECTED', 'INVOICE_PROCESSING', 'INVOICE_ISSUED', 'REPORT_MAILING', 'REPORT_MAILING_COMPLETED'].includes(props.flowInfo?.current_work_order_status || '')
 ))
+const isUploading = computed(() => uploadProgress.value?.status === 'uploading')
 
 async function loadFiles() {
   signerOne.value = props.flowInfo?.signer_one || ''
@@ -266,6 +271,9 @@ async function onScanSelected(file: UploadFile) {
       file_category: 'REPORT_SCAN',
       business_stage: 'REPORT_SCAN',
       file: file.raw,
+      onProgress: (progress) => {
+        uploadProgress.value = progress
+      }
     })
     ElMessage.success('报告扫描件已上传')
     await loadFiles()
@@ -288,7 +296,9 @@ async function onReplaceInput(row: WorkOrderFileItem, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  await replaceWorkOrderFile(row.id, file)
+  await replaceWorkOrderFile(row.id, file, (progress) => {
+    uploadProgress.value = progress
+  })
   ElMessage.success('报告扫描件已替换')
   input.value = ''
   await loadFiles()

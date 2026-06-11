@@ -30,9 +30,10 @@
       <el-input v-model="comment" type="textarea" :rows="3" :disabled="!canSubmitContract" />
     </el-form-item>
     <el-form-item label="上传合同初稿">
-      <el-upload :auto-upload="false" :on-change="onSelect" :show-file-list="false" :disabled="!canEditContract">
-        <el-button type="primary" :disabled="!canEditContract">上传合同初稿扫描件</el-button>
+      <el-upload :auto-upload="false" :on-change="onSelect" :show-file-list="false" :disabled="!canEditContract || isUploading">
+        <el-button type="primary" :disabled="!canEditContract || isUploading">上传合同初稿扫描件</el-button>
       </el-upload>
+      <UploadProgressInline :progress="uploadProgress" />
     </el-form-item>
   </el-form>
 
@@ -44,7 +45,7 @@
       <template #default="{ row }">
         <el-space>
           <el-button type="primary" link @click="download(row)">下载</el-button>
-          <el-button type="warning" link :disabled="!canEditContract" @click="triggerReplace(row.id)">重新上传</el-button>
+          <el-button type="warning" link :disabled="!canEditContract || isUploading" @click="triggerReplace(row.id)">重新上传</el-button>
         </el-space>
         <input
           :ref="el => setReplaceInput(row.id, el)"
@@ -59,7 +60,7 @@
   <div class="panel-actions">
     <el-button
       type="primary"
-      :disabled="!canSubmitContract || !workOrderId || contracts.length === 0 || !reviewerId"
+      :disabled="!canSubmitContract || !workOrderId || contracts.length === 0 || !reviewerId || isUploading"
       :loading="submitting"
       @click="onComplete"
     >
@@ -71,6 +72,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
+import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
 import {
   completeContractUpload,
   listWorkOrderFiles,
@@ -82,6 +84,7 @@ import { submitContractReview } from '@/api/contractReviews'
 import { listUserCandidates, type UserItem } from '@/api/users'
 import { updateWorkOrder } from '@/api/workorders'
 import type { ProjectFlowData } from '@/api/projectFlow'
+import type { UploadProgressState } from '@/types/upload'
 
 const props = defineProps<{ workOrderId?: number; canEdit: boolean; flowInfo?: ProjectFlowData; userRoles?: string[] }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
@@ -93,11 +96,13 @@ const reviewerOptions = ref<UserItem[]>([])
 const reviewerId = ref<number>()
 const comment = ref('')
 const replaceInputs = new Map<number, HTMLInputElement>()
+const uploadProgress = ref<UploadProgressState | null>(null)
 
 const statusCode = computed(() => props.flowInfo?.current_work_order_status || '')
 const isLocked = computed(() => statusCode.value === 'CONTRACT_APPROVED')
 const canEditContract = computed(() => props.canEdit && !isLocked.value && statusCode.value !== 'CONTRACT_REVIEWING')
 const canSubmitContract = computed(() => props.canEdit && !isLocked.value)
+const isUploading = computed(() => uploadProgress.value?.status === 'uploading')
 const statusTagType = computed(() => {
   if (statusCode.value === 'CONTRACT_APPROVED') return 'success'
   if (statusCode.value === 'CONTRACT_REJECTED') return 'warning'
@@ -133,7 +138,10 @@ async function onSelect(file: UploadFile) {
     work_order_id: props.workOrderId,
     file_category: 'CONTRACT_DRAFT',
     business_stage: 'CONTRACT_DRAFT',
-    file: file.raw
+    file: file.raw,
+    onProgress: (progress) => {
+      uploadProgress.value = progress
+    }
   })
   ElMessage.success('合同初稿上传成功')
   await load()
@@ -147,6 +155,9 @@ async function onReplace(row: WorkOrderFileItem, file: File) {
     file_category: 'CONTRACT_DRAFT',
     business_stage: 'CONTRACT_DRAFT',
     file,
+    onProgress: (progress) => {
+      uploadProgress.value = progress
+    }
   })
   ElMessage.success('合同初稿新版本已上传')
   await load()
