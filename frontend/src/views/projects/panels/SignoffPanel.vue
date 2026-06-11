@@ -20,9 +20,10 @@
       <el-divider>上传签发资料</el-divider>
       <el-form label-width="120px">
         <el-form-item label="报告附件">
-          <el-upload :auto-upload="false" :on-change="onFormalReportSelected" :show-file-list="false">
-            <el-button type="primary">{{ formalReportFiles.length ? '重新上传报告附件' : '上传报告附件' }}</el-button>
+          <el-upload :auto-upload="false" :on-change="onFormalReportSelected" :show-file-list="false" :disabled="isUploading">
+            <el-button type="primary" :disabled="isUploading">{{ formalReportFiles.length ? '重新上传报告附件' : '上传报告附件' }}</el-button>
           </el-upload>
+          <UploadProgressInline :progress="formalReportUploadProgress" />
           <div v-if="formalReportFiles.length" class="file-list">
             <el-tag v-for="file in formalReportFiles" :key="file.id" type="info" effect="plain">
               {{ file.origin_file_name }}
@@ -30,9 +31,10 @@
           </div>
         </el-form-item>
         <el-form-item label="合同扫描件">
-          <el-upload :auto-upload="false" :on-change="onFinalContractSelected" :show-file-list="false">
-            <el-button type="primary">{{ contractFiles.length ? '重新上传合同扫描件' : '上传合同扫描件' }}</el-button>
+          <el-upload :auto-upload="false" :on-change="onFinalContractSelected" :show-file-list="false" :disabled="isUploading">
+            <el-button type="primary" :disabled="isUploading">{{ contractFiles.length ? '重新上传合同扫描件' : '上传合同扫描件' }}</el-button>
           </el-upload>
+          <UploadProgressInline :progress="contractUploadProgress" />
           <div v-if="contractFiles.length" class="file-list">
             <el-tag v-for="file in contractFiles" :key="file.id" type="success" effect="plain">
               {{ file.origin_file_name }}
@@ -49,7 +51,7 @@
           <el-input-number v-model="formalReportCount" :min="1" :precision="0" style="width: 180px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="success" :disabled="!formalReportFiles.length || !contractFiles.length" @click="onEnterSignoff">
+          <el-button type="success" :disabled="!formalReportFiles.length || !contractFiles.length || isUploading" @click="onEnterSignoff">
             进入签发审核
           </el-button>
         </el-form-item>
@@ -136,6 +138,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
+import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile, type WorkOrderFileItem } from '@/api/files'
 import {
@@ -146,6 +149,7 @@ import {
 } from '@/api/signoff'
 import { listUserCandidates, type UserItem } from '@/api/users'
 import { useAuthStore } from '@/store/auth'
+import type { UploadProgressState } from '@/types/upload'
 
 const props = defineProps<{ workOrderId?: number; flowInfo?: ProjectFlowData; userRoles: string[]; canEdit: boolean }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
@@ -161,6 +165,8 @@ const approveSubmitting = ref(false)
 const approveDraft = ref<{ print_room_handler_id?: number }>({
   print_room_handler_id: undefined,
 })
+const formalReportUploadProgress = ref<UploadProgressState | null>(null)
+const contractUploadProgress = ref<UploadProgressState | null>(null)
 
 const currentUserId = computed(() => auth.user?.id)
 const canOwnerUpload = computed(() =>
@@ -176,6 +182,10 @@ const canAssignPrintRoomAfterSignoff = computed(() =>
   props.flowInfo?.current_work_order_status === 'THIRD_APPROVED_WAIT_PRINTROOM' &&
   (props.userRoles.includes('CHIEF_APPRAISER') || props.userRoles.includes('ADMIN')) &&
   !props.flowInfo?.print_room_handler_id
+)
+const isUploading = computed(() =>
+  formalReportUploadProgress.value?.status === 'uploading' ||
+  contractUploadProgress.value?.status === 'uploading'
 )
 
 const REVIEW_REPORT_STAGE_PRIORITY = [
@@ -255,6 +265,9 @@ async function onFormalReportSelected(file: UploadFile) {
     file_category: 'FORMAL_REPORT',
     business_stage: 'FORMAL_REPORT',
     file: file.raw,
+    onProgress: (progress) => {
+      formalReportUploadProgress.value = progress
+    }
   })
   ElMessage.success('报告附件已上传')
   await loadFiles()
@@ -267,6 +280,9 @@ async function onFinalContractSelected(file: UploadFile) {
     file_category: 'FINAL_CONTRACT_SCAN',
     business_stage: 'FINAL_CONTRACT_SCAN',
     file: file.raw,
+    onProgress: (progress) => {
+      contractUploadProgress.value = progress
+    }
   })
   ElMessage.success('合同扫描件已上传')
   await loadFiles()

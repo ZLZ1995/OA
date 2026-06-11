@@ -82,13 +82,14 @@
     <template v-if="canFinance">
       <el-divider>财务处理</el-divider>
       <div class="finance-actions">
-        <el-upload :auto-upload="false" :on-change="onInvoiceFileSelected" :show-file-list="false">
-          <el-button type="primary" :disabled="!canFinanceProcess">上传电子票</el-button>
+        <el-upload :auto-upload="false" :on-change="onInvoiceFileSelected" :show-file-list="false" :disabled="!canFinanceProcess || isUploading">
+          <el-button type="primary" :disabled="!canFinanceProcess || isUploading">上传电子票</el-button>
         </el-upload>
-        <el-button type="success" :disabled="!canFinanceProcess || invoiceFiles.length === 0" @click="onComplete">
+        <el-button type="success" :disabled="!canFinanceProcess || invoiceFiles.length === 0 || isUploading" @click="onComplete">
           确认完成
         </el-button>
       </div>
+      <UploadProgressInline :progress="uploadProgress" />
     </template>
 
     <el-divider>发票下载</el-divider>
@@ -96,7 +97,7 @@
       <div v-for="file in invoiceFiles" :key="file.id" class="download-item">
         <span>{{ file.origin_file_name }}</span>
         <el-button type="primary" link @click="download(file)">下载</el-button>
-        <el-button v-if="canFinanceProcess" type="warning" link @click="triggerReplace(file.id)">重新上传</el-button>
+        <el-button v-if="canFinanceProcess" type="warning" link :disabled="isUploading" @click="triggerReplace(file.id)">重新上传</el-button>
         <input
           :ref="el => setReplaceInput(file.id, el)"
           class="hidden-file-input"
@@ -125,6 +126,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
+import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
 import {
   completeInvoice,
   confirmInvoice,
@@ -139,6 +141,7 @@ import { downloadWorkOrderFile, listWorkOrderFiles, replaceWorkOrderFile, upload
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { listUserCandidates, type UserItem } from '@/api/users'
 import { isFinanceRoleInCurrentFlow } from './invoicePermissions'
+import type { UploadProgressState } from '@/types/upload'
 
 const props = defineProps<{
   workOrderId?: number
@@ -158,6 +161,7 @@ const invoiceUnit = ref('中勤')
 const amount = ref(0)
 const financeHandlerId = ref<number>()
 const replaceInputs = new Map<number, HTMLInputElement>()
+const uploadProgress = ref<UploadProgressState | null>(null)
 
 const projectAmount = computed(() => props.flowInfo?.project.project_amount ?? null)
 const canFinance = computed(() => isFinanceRoleInCurrentFlow(props.userRoleInProject))
@@ -177,6 +181,7 @@ const canSubmitInfo = computed(() => {
 })
 const canWithdraw = computed(() => !canFinance.value && currentInvoice.value?.status === 'SUBMITTED')
 const canProjectConfirm = computed(() => !canFinance.value && currentInvoice.value?.status === 'FINANCE_COMPLETED')
+const isUploading = computed(() => uploadProgress.value?.status === 'uploading')
 const submitButtonText = computed(() => (currentInvoice.value?.status === 'REJECTED' ? '重新提交开票信息' : '提交开票信息'))
 const statusAlertType = computed(() => {
   if (currentInvoice.value?.status === 'REJECTED' || currentInvoice.value?.status === 'PROJECT_RETURNED') return 'warning'
@@ -273,7 +278,10 @@ async function onInvoiceFileSelected(file: UploadFile) {
       work_order_id: props.workOrderId,
       file_category: 'INVOICE_FILE',
       business_stage: 'INVOICE',
-      file: file.raw
+      file: file.raw,
+      onProgress: (progress) => {
+        uploadProgress.value = progress
+      }
     })
     ElMessage.success('电子票已上传')
     await load()
@@ -297,7 +305,9 @@ async function onReplaceInput(row: WorkOrderFileItem, event: Event) {
   const file = input.files?.[0]
   if (!file) return
   try {
-    await replaceWorkOrderFile(row.id, file)
+    await replaceWorkOrderFile(row.id, file, (progress) => {
+      uploadProgress.value = progress
+    })
     ElMessage.success('电子票已重新上传')
     input.value = ''
     await load()
