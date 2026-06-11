@@ -169,18 +169,27 @@ const formalReportUploadProgress = ref<UploadProgressState | null>(null)
 const contractUploadProgress = ref<UploadProgressState | null>(null)
 
 const currentUserId = computed(() => auth.user?.id)
+const canHandleProjectSignoffByRole = computed(() => {
+  const undertakingUnit = props.flowInfo?.project.undertaking_unit || ''
+  return (
+    props.userRoles.includes('ADMIN') ||
+    props.userRoles.includes('CHIEF_APPRAISER') ||
+    (undertakingUnit === '中勤' && props.userRoles.includes('CHIEF_APPRAISER_ZQ')) ||
+    (undertakingUnit === '中立国际' && props.userRoles.includes('CHIEF_APPRAISER_ZLGJ'))
+  )
+})
 const canOwnerUpload = computed(() =>
   props.flowInfo?.current_work_order_status === 'WAIT_OWNER_SIGNOFF_UPLOAD' &&
   ['项目负责人', '项目组成员', '创建人'].includes(props.flowInfo?.user_role_in_project || '')
 )
 const canSignoff = computed(() =>
   props.flowInfo?.current_work_order_status === 'SIGNOFF_REVIEWING' &&
-  (props.userRoles.includes('CHIEF_APPRAISER') || props.userRoles.includes('ADMIN')) &&
+  canHandleProjectSignoffByRole.value &&
   (!props.flowInfo?.chief_appraiser_user_id || props.flowInfo?.chief_appraiser_user_id === currentUserId.value)
 )
 const canAssignPrintRoomAfterSignoff = computed(() =>
   props.flowInfo?.current_work_order_status === 'THIRD_APPROVED_WAIT_PRINTROOM' &&
-  (props.userRoles.includes('CHIEF_APPRAISER') || props.userRoles.includes('ADMIN')) &&
+  canHandleProjectSignoffByRole.value &&
   !props.flowInfo?.print_room_handler_id
 )
 const isUploading = computed(() =>

@@ -14,6 +14,7 @@ from app.schemas.work_order import (
     WorkOrderResponse,
     WorkOrderUpdate,
 )
+from app.services.chief_appraiser_service import CHIEF_APPRAISER_ROLE_CODES
 from app.services.project_role_conflict_service import get_project_party_user_ids, validate_not_project_party, validate_signers_not_reviewers
 from app.workflows.states import WorkOrderStatus
 
@@ -161,7 +162,7 @@ def update_work_order(
     payload: WorkOrderUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    role_codes: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER", "THIRD_REVIEWER", "CONTRACT_REVIEWER", "CHIEF_APPRAISER")),
+    role_codes: set[str] = Depends(require_roles("ADMIN", "SALES", "PROJECT_LEADER", "PROJECT_MEMBER", "THIRD_REVIEWER", "CONTRACT_REVIEWER", *CHIEF_APPRAISER_ROLE_CODES)),
 ) -> WorkOrderResponse:
     row = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not row:

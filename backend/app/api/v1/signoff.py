@@ -12,6 +12,14 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.work_order import WorkOrder
 from app.services.archive_sync_service import sync_signoff_files_to_archive
+from app.services.chief_appraiser_service import (
+    CHIEF_APPRAISER_ROLE_CODES,
+    ensure_project_chief_permission,
+    ensure_supported_chief_unit,
+    get_project_chief_appraiser,
+    get_project_chief_role_codes,
+    user_has_role_code,
+)
 from app.services.project_role_conflict_service import get_project_party_user_ids, validate_support_role_not_project_party
 from app.services.workflow_log_service import create_workflow_log
 from app.services.workflow_notification_service import send_workflow_notification
@@ -43,22 +51,7 @@ def _get_project(db: Session, work_order: WorkOrder) -> Project | None:
     return db.query(Project).filter(Project.id == work_order.project_id).first()
 
 
-def _get_chief_appraiser(db: Session) -> User | None:
-    return (
-        db.query(User)
-        .join(UserRole, UserRole.user_id == User.id)
-        .join(Role, Role.id == UserRole.role_id)
-        .filter(
-            User.is_active.is_(True),
-            User.username != settings.initial_admin_username,
-            Role.code == "CHIEF_APPRAISER",
-        )
-        .order_by(User.id.asc())
-        .first()
-    )
-
-
-def _resolve_signoff_chief_appraiser(db: Session, work_order: WorkOrder) -> User | None:
+def _resolve_signoff_chief_appraiser(db: Session, project: Project | None, work_order: WorkOrder) -> User | None:
     if work_order.chief_appraiser_user_id:
         assigned = (
             db.query(User)
@@ -68,13 +61,17 @@ def _resolve_signoff_chief_appraiser(db: Session, work_order: WorkOrder) -> User
                 User.id == work_order.chief_appraiser_user_id,
                 User.is_active.is_(True),
                 User.username != settings.initial_admin_username,
-                Role.code == "CHIEF_APPRAISER",
+                Role.code.in_(get_project_chief_role_codes(project)),
             )
             .first()
         )
         if assigned:
             return assigned
-    return _get_chief_appraiser(db)
+    return get_project_chief_appraiser(
+        db,
+        project,
+        exclude_username=settings.initial_admin_username,
+    )
 
 
 def _ensure_print_room_handler(db: Session, work_order: WorkOrder, handler_user_id: int) -> User:
@@ -111,6 +108,10 @@ def _ensure_signer_name(value: str, label: str) -> str:
     if not signer:
         raise HTTPException(status_code=400, detail=f"请填写{label}")
     return signer
+
+
+def _ensure_signoff_role_access(project: Project | None, work_order: WorkOrder, current_user: User) -> None:
+    ensure_project_chief_permission(current_user, project, work_order)
 
 
 @router.post("/work-orders/{work_order_id}/request-owner-confirm")
@@ -253,14 +254,15 @@ def enter_signoff_review(
     if work_order.current_status != WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value:
         raise HTTPException(status_code=400, detail="当前状态不可进入签发审核")
 
-    chief = _resolve_signoff_chief_appraiser(db, work_order)
+    project = _get_project(db, work_order)
+    ensure_supported_chief_unit(project)
+    chief = _resolve_signoff_chief_appraiser(db, project, work_order)
     if chief is None:
-        raise HTTPException(status_code=400, detail="系统未配置首席评估师账号")
+        raise HTTPException(status_code=400, detail="系统未配置当前承做单位对应的首席评估师账号")
     formal_report_count = _ensure_formal_report_count(payload.formal_report_count)
     signer_one = _ensure_signer_name(payload.signer_one, "签字评估师一")
     signer_two = _ensure_signer_name(payload.signer_two, "签字评估师二")
 
-    project = _get_project(db, work_order)
     work_order.current_status = WorkOrderStatus.SIGNOFF_REVIEWING.value
     work_order.current_handler_user_id = chief.id
     work_order.chief_appraiser_user_id = chief.id
@@ -297,11 +299,14 @@ def approve_signoff(
     payload: SignoffApproveRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("CHIEF_APPRAISER", "ADMIN")),
+    _: set[str] = Depends(require_roles(*CHIEF_APPRAISER_ROLE_CODES, "ADMIN")),
 ) -> dict[str, str]:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+    project = _get_project(db, work_order)
+    _ensure_signoff_role_access(project, work_order, current_user)
+
     is_repair_assign = (
         work_order.current_status == WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
         and work_order.signoff_status == "APPROVED"
@@ -312,7 +317,6 @@ def approve_signoff(
     handler = _ensure_print_room_handler(db, work_order, payload.print_room_handler_id)
     formal_report_count = _ensure_formal_report_count(work_order.formal_report_count or 0)
 
-    project = _get_project(db, work_order)
     from_status = work_order.current_status
     to_status = WorkOrderStatus.PRINTROOM_PROCESSING
     work_order.current_status = to_status.value
@@ -350,15 +354,16 @@ def return_signoff_to_third_review(
     work_order_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("CHIEF_APPRAISER", "ADMIN")),
+    _: set[str] = Depends(require_roles(*CHIEF_APPRAISER_ROLE_CODES, "ADMIN")),
 ) -> dict[str, str]:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+    project = _get_project(db, work_order)
+    _ensure_signoff_role_access(project, work_order, current_user)
     if work_order.current_status != WorkOrderStatus.SIGNOFF_REVIEWING.value:
         raise HTTPException(status_code=400, detail="当前状态不可退回三审")
 
-    project = _get_project(db, work_order)
     work_order.current_status = WorkOrderStatus.THIRD_REVIEWING.value
     work_order.current_handler_user_id = work_order.third_reviewer_id
     work_order.signoff_status = "RETURNED_TO_THIRD"
@@ -392,15 +397,16 @@ def return_signoff_to_owner_upload(
     work_order_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("CHIEF_APPRAISER", "ADMIN")),
+    _: set[str] = Depends(require_roles(*CHIEF_APPRAISER_ROLE_CODES, "ADMIN")),
 ) -> dict[str, str]:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
+    project = _get_project(db, work_order)
+    _ensure_signoff_role_access(project, work_order, current_user)
     if work_order.current_status != WorkOrderStatus.SIGNOFF_REVIEWING.value:
         raise HTTPException(status_code=400, detail="当前状态不可退回项目负责人")
 
-    project = _get_project(db, work_order)
     work_order.current_status = WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value
     work_order.current_handler_user_id = work_order.project_leader_id
     work_order.signoff_status = "RETURNED_TO_OWNER"
