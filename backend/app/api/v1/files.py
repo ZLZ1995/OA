@@ -16,6 +16,7 @@ from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
 from app.schemas.file import WorkOrderFileListResponse, WorkOrderFileResponse
 from app.services.archive_sync_service import SIGNOFF_SYNC_SOURCE_TYPE, is_signoff_source_category, refresh_archive_synced_file_by_source
+from app.services.chief_appraiser_service import CHIEF_APPRAISER_ROLE_CODES
 from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
 from app.storage.local_storage import save_upload_file
 from app.workflows.states import WorkOrderStatus
@@ -198,7 +199,7 @@ def upload_file(
             "SECOND_REVIEWER",
             "THIRD_REVIEWER",
             "ARCHIVE_MANAGER",
-            "CHIEF_APPRAISER",
+            *CHIEF_APPRAISER_ROLE_CODES,
         )
     ),
 ) -> WorkOrderFileResponse:
@@ -361,7 +362,7 @@ def replace_work_order_file(
             "SECOND_REVIEWER",
             "THIRD_REVIEWER",
             "ARCHIVE_MANAGER",
-            "CHIEF_APPRAISER",
+            *CHIEF_APPRAISER_ROLE_CODES,
         )
     ),
 ) -> WorkOrderFileResponse:

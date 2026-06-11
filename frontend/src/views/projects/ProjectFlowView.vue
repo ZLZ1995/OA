@@ -146,6 +146,12 @@ const visibleFlowNodes = computed(() => {
   const roleName = flow.value?.user_role_in_project || ''
   const roles = userRoles.value
   const currentStatus = flow.value?.current_work_order_status || ''
+  const undertakingUnit = flow.value?.project.undertaking_unit || ''
+  const canHandleSignoff =
+    roles.includes('ADMIN') ||
+    roles.includes('CHIEF_APPRAISER') ||
+    (undertakingUnit === '中勤' && roles.includes('CHIEF_APPRAISER_ZQ')) ||
+    (undertakingUnit === '中立国际' && roles.includes('CHIEF_APPRAISER_ZLGJ'))
   const canSeeAll = ['管理员', '项目负责人', '项目组成员', '创建人'].includes(roleName)
 
   if (canSeeAll) return availableNodes.value
@@ -161,7 +167,7 @@ const visibleFlowNodes = computed(() => {
   if (roleName === '财务' || roles.includes('FINANCE')) {
     return availableNodes.value.filter(node => node.key === 'invoice')
   }
-  if (roleName === '首席评估师' || roles.includes('CHIEF_APPRAISER')) {
+  if (roleName === '首席评估师' || canHandleSignoff) {
     return availableNodes.value.filter(node => node.key === 'signoff')
   }
   if (roles.includes('ARCHIVE_MANAGER')) {

@@ -14,6 +14,7 @@ from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.workflow_log import WorkflowLog
 from app.schemas.workbench import WorkbenchProjectItem, WorkbenchResponse
+from app.services.chief_appraiser_service import CHIEF_APPRAISER_ROLE_CODES, work_order_matches_project_chief
 from app.services.project_flow import get_project_leader_display_name, get_user_role_in_project, normalize_project_step
 
 router = APIRouter(prefix="/workbench", tags=["项目工作台"])
@@ -200,7 +201,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         )
     if "CONTRACT_REVIEWER" in role_codes or "ADMIN" in role_codes:
         role_pool_filters.append(WorkOrder.contract_reviewer_id == current_user.id)
-    if "CHIEF_APPRAISER" in role_codes or "ADMIN" in role_codes:
+    if role_codes.intersection(CHIEF_APPRAISER_ROLE_CODES) or "ADMIN" in role_codes:
         role_pool_filters.append(
             and_(
                 WorkOrder.current_status == "SIGNOFF_REVIEWING",
@@ -344,7 +345,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             step = "项目终止/废止审核"
         elif work_order.current_status == "CONTRACT_REVIEWING" and work_order.contract_reviewer_id == current_user.id:
             step = "合同初稿审核"
-        elif work_order.current_status == "SIGNOFF_REVIEWING" and work_order.chief_appraiser_user_id == current_user.id:
+        elif work_order.current_status == "SIGNOFF_REVIEWING" and work_order_matches_project_chief(current_user, project, work_order):
             step = "签发审核"
         elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
             step = "财务开票"

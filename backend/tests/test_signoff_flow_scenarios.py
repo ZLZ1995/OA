@@ -235,11 +235,11 @@ def test_external_third_review_approve_moves_to_owner_signoff_upload() -> None:
 
 
 def test_final_real_scenario_owner_upload_enters_signoff_and_approves() -> None:
-    from app.api.v1.signoff import enter_signoff_review, approve_signoff
+    from app.api.v1.signoff import EnterSignoffReviewRequest, SignoffApproveRequest, enter_signoff_review, approve_signoff
 
     db = _build_session()
     leader, _, _, _, _, work_order = _seed_bundle(db, "非国有资产评估业务")
-    chief_role = _seed_role(db, "CHIEF_APPRAISER", "首席评估师")
+    chief_role = _seed_role(db, "CHIEF_APPRAISER_ZQ", "中勤首席评估师")
     chief = _seed_user(db, "chief", "Chief", [chief_role])
     print_room_role = _seed_role(db, "PRINT_ROOM", "文印室")
     print_room = _seed_user(db, "printroom", "PrintRoom", [print_room_role])
@@ -248,24 +248,36 @@ def test_final_real_scenario_owner_upload_enters_signoff_and_approves() -> None:
     work_order.print_room_handler_id = print_room.id
     db.commit()
 
-    enter_signoff_review(work_order.id, db=db, current_user=leader, _={"PROJECT_LEADER"})
+    enter_signoff_review(
+        work_order.id,
+        payload=EnterSignoffReviewRequest(formal_report_count=2, signer_one="甲", signer_two="乙"),
+        db=db,
+        current_user=leader,
+        _={"PROJECT_LEADER"},
+    )
     db.refresh(work_order)
     assert work_order.current_status == "SIGNOFF_REVIEWING"
     assert work_order.current_handler_user_id == chief.id
 
-    approve_signoff(work_order.id, db=db, current_user=chief, _={"CHIEF_APPRAISER"})
+    approve_signoff(
+        work_order.id,
+        payload=SignoffApproveRequest(print_room_handler_id=print_room.id),
+        db=db,
+        current_user=chief,
+        _={"CHIEF_APPRAISER_ZQ"},
+    )
     db.refresh(work_order)
-    assert work_order.current_status == "THIRD_APPROVED_WAIT_PRINTROOM"
+    assert work_order.current_status == "PRINTROOM_PROCESSING"
     assert work_order.current_handler_user_id == print_room.id
 
 
 def test_enter_signoff_review_uses_assigned_chief_appraiser_and_workbench_todo() -> None:
-    from app.api.v1.signoff import enter_signoff_review
+    from app.api.v1.signoff import EnterSignoffReviewRequest, enter_signoff_review
     from app.api.v1.workbench import get_workbench
 
     db = _build_session()
     leader, _, _, _, _, work_order = _seed_bundle(db, "非国有资产评估业务")
-    chief_role = _seed_role(db, "CHIEF_APPRAISER", "首席评估师")
+    chief_role = _seed_role(db, "CHIEF_APPRAISER_ZQ", "中勤首席评估师")
     other_chief = _seed_user(db, "other_chief", "OtherChief", [chief_role])
     assigned_chief = _seed_user(db, "fusheng", "付胜", [chief_role])
     work_order.current_status = "WAIT_OWNER_SIGNOFF_UPLOAD"
@@ -273,7 +285,13 @@ def test_enter_signoff_review_uses_assigned_chief_appraiser_and_workbench_todo()
     work_order.chief_appraiser_user_id = assigned_chief.id
     db.commit()
 
-    enter_signoff_review(work_order.id, db=db, current_user=leader, _={"PROJECT_LEADER"})
+    enter_signoff_review(
+        work_order.id,
+        payload=EnterSignoffReviewRequest(formal_report_count=2, signer_one="甲", signer_two="乙"),
+        db=db,
+        current_user=leader,
+        _={"PROJECT_LEADER"},
+    )
 
     db.refresh(work_order)
     assigned_workbench = get_workbench(db=db, current_user=assigned_chief)
@@ -286,22 +304,28 @@ def test_enter_signoff_review_uses_assigned_chief_appraiser_and_workbench_todo()
 
 
 def test_enter_signoff_review_ignores_hidden_super_admin_chief_role() -> None:
-    from app.api.v1.signoff import enter_signoff_review
+    from app.api.v1.signoff import EnterSignoffReviewRequest, enter_signoff_review
     from app.api.v1.workbench import get_workbench
     from app.api.v1.users import list_user_candidates
 
     db = _build_session()
     leader, _, _, _, _, work_order = _seed_bundle(db, "非国有资产评估业务")
     admin_role = _seed_role(db, "ADMIN", "管理员")
-    chief_role = _seed_role(db, "CHIEF_APPRAISER", "首席评估师")
+    chief_role = _seed_role(db, "CHIEF_APPRAISER_ZQ", "中勤首席评估师")
     super_admin = _seed_user(db, "zhongqin123", "系统管理员", [admin_role, chief_role])
     fusheng = _seed_user(db, "fusheng", "付胜", [chief_role])
     work_order.current_status = "WAIT_OWNER_SIGNOFF_UPLOAD"
     work_order.current_handler_user_id = leader.id
     db.commit()
 
-    candidates = list_user_candidates("CHIEF_APPRAISER", db=db, _=leader)
-    enter_signoff_review(work_order.id, db=db, current_user=leader, _={"PROJECT_LEADER"})
+    candidates = list_user_candidates("CHIEF_APPRAISER_ZQ", db=db, _=leader)
+    enter_signoff_review(
+        work_order.id,
+        payload=EnterSignoffReviewRequest(formal_report_count=2, signer_one="甲", signer_two="乙"),
+        db=db,
+        current_user=leader,
+        _={"PROJECT_LEADER"},
+    )
 
     db.refresh(work_order)
     fusheng_workbench = get_workbench(db=db, current_user=fusheng)
@@ -312,3 +336,32 @@ def test_enter_signoff_review_ignores_hidden_super_admin_chief_role() -> None:
     assert work_order.chief_appraiser_user_id == fusheng.id
     assert [item.id for item in fusheng_workbench.todo_projects] == [work_order.project_id]
     assert super_admin_workbench.todo_projects == []
+
+
+def test_signoff_rejects_cross_unit_chief_approval() -> None:
+    from fastapi import HTTPException
+    from app.api.v1.signoff import SignoffApproveRequest, approve_signoff
+
+    db = _build_session()
+    leader, _, _, _, _, work_order = _seed_bundle(db, "闈炲浗鏈夎祫浜ц瘎浼颁笟鍔?")
+    zlgj_role = _seed_role(db, "CHIEF_APPRAISER_ZLGJ", "中立国际首席评估师")
+    print_room_role = _seed_role(db, "PRINT_ROOM", "文印室")
+    wrong_chief = _seed_user(db, "wrong_chief", "WrongChief", [zlgj_role])
+    print_room = _seed_user(db, "printroom2", "PrintRoom2", [print_room_role])
+    work_order.current_status = "SIGNOFF_REVIEWING"
+    work_order.current_handler_user_id = wrong_chief.id
+    work_order.chief_appraiser_user_id = wrong_chief.id
+    work_order.formal_report_count = 2
+    db.commit()
+
+    try:
+        approve_signoff(
+            work_order.id,
+            payload=SignoffApproveRequest(print_room_handler_id=print_room.id),
+            db=db,
+            current_user=wrong_chief,
+            _={"CHIEF_APPRAISER_ZLGJ"},
+        )
+        assert False, "expected cross-unit chief approval to be rejected"
+    except HTTPException as exc:
+        assert exc.status_code == 403

@@ -58,6 +58,8 @@ def _seed_roles_and_users(db: Session) -> dict[str, User]:
         "SECOND_REVIEWER": _seed_role(db, "SECOND_REVIEWER", "二审人员"),
         "THIRD_REVIEWER": _seed_role(db, "THIRD_REVIEWER", "三审人员"),
         "CHIEF_APPRAISER": _seed_role(db, "CHIEF_APPRAISER", "首席评估师"),
+        "CHIEF_APPRAISER_ZQ": _seed_role(db, "CHIEF_APPRAISER_ZQ", "中勤首席评估师"),
+        "CHIEF_APPRAISER_ZLGJ": _seed_role(db, "CHIEF_APPRAISER_ZLGJ", "中立国际首席评估师"),
         "PRINT_ROOM": _seed_role(db, "PRINT_ROOM", "文印室"),
         "FINANCE": _seed_role(db, "FINANCE", "财务人员"),
         "ARCHIVE_MANAGER": _seed_role(db, "ARCHIVE_MANAGER", "档案管理员"),
@@ -71,7 +73,7 @@ def _seed_roles_and_users(db: Session) -> dict[str, User]:
         "first": _seed_user(db, "first", "一审", [roles["FIRST_REVIEWER"]]),
         "second": _seed_user(db, "second", "二审", [roles["SECOND_REVIEWER"]]),
         "third": _seed_user(db, "third", "三审", [roles["THIRD_REVIEWER"]]),
-        "chief": _seed_user(db, "chief", "首席评估师", [roles["CHIEF_APPRAISER"]]),
+        "chief": _seed_user(db, "chief", "首席评估师", [roles["CHIEF_APPRAISER_ZQ"]]),
         "print_room": _seed_user(db, "printroom", "文印室", [roles["PRINT_ROOM"]]),
         "finance": _seed_user(db, "finance", "财务", [roles["FINANCE"]]),
         "archive": _seed_user(db, "archive", "档案", [roles["ARCHIVE_MANAGER"]]),
@@ -217,7 +219,7 @@ def test_smoke_03_contract_review_approval_moves_to_report_submit() -> None:
 
 def test_smoke_04_review_and_signoff_move_to_print_room() -> None:
     from app.api.v1.reviews import _submit_review_impl as submit_review, decide_review
-    from app.api.v1.signoff import approve_signoff, enter_signoff_review
+    from app.api.v1.signoff import EnterSignoffReviewRequest, SignoffApproveRequest, approve_signoff, enter_signoff_review
 
     db = _build_session()
     users, _, work_order = _create_project_bundle(db)
@@ -245,11 +247,23 @@ def test_smoke_04_review_and_signoff_move_to_print_room() -> None:
 
     _add_current_file(db, work_order, "FORMAL_REPORT", "FORMAL_REPORT", users["leader"], "formal.pdf")
     _add_current_file(db, work_order, "FINAL_CONTRACT_SCAN", "FINAL_CONTRACT_SCAN", users["leader"], "contract-scan.pdf")
-    enter_signoff_review(work_order.id, db=db, current_user=users["leader"], _={"PROJECT_LEADER"})
-    approve_signoff(work_order.id, db=db, current_user=users["chief"], _={"CHIEF_APPRAISER"})
+    enter_signoff_review(
+        work_order.id,
+        payload=EnterSignoffReviewRequest(formal_report_count=2, signer_one="甲", signer_two="乙"),
+        db=db,
+        current_user=users["leader"],
+        _={"PROJECT_LEADER"},
+    )
+    approve_signoff(
+        work_order.id,
+        payload=SignoffApproveRequest(print_room_handler_id=users["print_room"].id),
+        db=db,
+        current_user=users["chief"],
+        _={"CHIEF_APPRAISER_ZQ"},
+    )
 
     db.refresh(work_order)
-    assert work_order.current_status == WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value
+    assert work_order.current_status == WorkOrderStatus.PRINTROOM_PROCESSING.value
 
 
 def test_signoff_upload_keeps_only_latest_current_attachment_and_contract_scan(tmp_path, monkeypatch) -> None:
