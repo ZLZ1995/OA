@@ -85,6 +85,14 @@ def _ensure_project_operator(db: Session, work_order: WorkOrder, user: User) -> 
         raise HTTPException(status_code=403, detail="仅项目方人员可操作合同审核")
 
 
+def _ensure_project_operator_or_contract_reviewer(db: Session, work_order: WorkOrder, user: User) -> None:
+    if any(item.role.code == "ADMIN" for item in user.roles):
+        return
+    if work_order.contract_reviewer_id == user.id:
+        return
+    _ensure_project_operator(db, work_order, user)
+
+
 def _get_current_contract_file(db: Session, work_order_id: int) -> WorkOrderFile | None:
     return (
         db.query(WorkOrderFile)
@@ -381,7 +389,7 @@ def transfer_approved_contract_to_print_room(
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    _ensure_project_operator(db, work_order, current_user)
+    _ensure_project_operator_or_contract_reviewer(db, work_order, current_user)
     if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.CONTRACT_APPROVED:
         raise HTTPException(status_code=400, detail="当前状态不可转发文印室")
 

@@ -205,6 +205,45 @@ def test_contract_approved_can_be_transferred_to_print_room() -> None:
     assert work_order.print_room_handler_id == print_room.id
 
 
+def test_contract_reviewer_can_transfer_approved_contract_to_print_room() -> None:
+    from app.api.v1.contract_reviews import approve_contract_review, submit_contract_review, transfer_approved_contract_to_print_room
+
+    db = _build_session()
+    leader_role = _seed_role(db, "PROJECT_LEADER", "项目负责人")
+    reviewer_role = _seed_role(db, "CONTRACT_REVIEWER", "合同审核人")
+    print_room_role = _seed_role(db, "PRINT_ROOM", "文印室")
+    leader = _seed_user(db, "leader", [leader_role])
+    reviewer = _seed_user(db, "reviewer", [reviewer_role])
+    print_room = _seed_user(db, "printroom", [print_room_role])
+    _, work_order = _seed_project_and_work_order(db, leader, leader)
+
+    submit_record = submit_contract_review(
+        payload=ContractReviewSubmitRequest(work_order_id=work_order.id, reviewer_user_id=reviewer.id),
+        db=db,
+        current_user=leader,
+    )
+    approve_contract_review(
+        record_id=submit_record.id,
+        payload=ContractReviewDecisionRequest(comment="ok"),
+        db=db,
+        current_user=reviewer,
+        _={"CONTRACT_REVIEWER"},
+    )
+
+    result = transfer_approved_contract_to_print_room(
+        work_order_id=work_order.id,
+        payload=ContractReviewTransferApprovedRequest(print_room_handler_id=print_room.id, comment="transfer"),
+        db=db,
+        current_user=reviewer,
+    )
+
+    db.refresh(work_order)
+    assert result.action_type == "TRANSFER_APPROVED_PRINT_ROOM"
+    assert work_order.current_status == "WAIT_PRINT_ROOM_PROCESS"
+    assert work_order.current_handler_user_id == print_room.id
+    assert work_order.print_room_handler_id == print_room.id
+
+
 def test_contract_review_reject_moves_back_to_project_side() -> None:
     from app.api.v1.contract_reviews import reject_contract_review, submit_contract_review
 
