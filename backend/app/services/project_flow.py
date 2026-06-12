@@ -23,6 +23,7 @@ STATUS_TO_STEP = {
     "CONTRACT_REVIEWING": "合同初稿审核",
     "CONTRACT_REJECTED": "合同初稿审核",
     "CONTRACT_APPROVED": "报告送审",
+    "CONTRACT_PROCESS_COMPLETED": "报告送审",
     "WAIT_FIRST_REVIEW_SUBMIT": "报告送审",
     "FIRST_REVIEWING": "一审",
     "FIRST_REVIEW_REJECTED": "报告送审",

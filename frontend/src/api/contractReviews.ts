@@ -5,7 +5,7 @@ export interface ContractReviewRecordItem {
   id: number
   work_order_id: number
   project_id: number
-  action_type: 'SUBMIT_CONTRACT' | 'APPROVE_CONTRACT' | 'APPROVE_AND_TRANSFER_PRINT_ROOM' | 'REJECT_CONTRACT'
+  action_type: 'SUBMIT_CONTRACT' | 'APPROVE_CONTRACT' | 'APPROVE_AND_TRANSFER_PRINT_ROOM' | 'TRANSFER_APPROVED_PRINT_ROOM' | 'REJECT_CONTRACT'
   operator_user_id: number
   operator_user_name?: string | null
   reviewer_user_id: number
@@ -42,6 +42,14 @@ export async function approveAndTransferContractReview(
   payload: { comment?: string; review_attachment_file_id?: number; print_room_handler_id: number }
 ) {
   const { data } = await http.post(`/contract-reviews/${recordId}/approve-and-transfer`, payload)
+  return data as ContractReviewRecordItem
+}
+
+export async function transferApprovedContractToPrintRoom(
+  workOrderId: number,
+  payload: { comment?: string; print_room_handler_id: number }
+) {
+  const { data } = await http.post(`/contract-reviews/work-orders/${workOrderId}/transfer-approved`, payload)
   return data as ContractReviewRecordItem
 }
 

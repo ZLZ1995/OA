@@ -25,6 +25,11 @@ class ContractReviewApproveTransferRequest(ContractReviewDecisionRequest):
     print_room_handler_id: int
 
 
+class ContractReviewTransferApprovedRequest(BaseModel):
+    print_room_handler_id: int
+    comment: str | None = None
+
+
 class ContractReviewRecordResponse(BaseModel):
     id: int
     work_order_id: int

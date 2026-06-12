@@ -265,6 +265,28 @@ def test_smoke_04_review_and_signoff_move_to_print_room() -> None:
     assert work_order.current_status == WorkOrderStatus.PRINTROOM_PROCESSING.value
 
 
+def test_first_review_can_start_after_contract_print_room_completion() -> None:
+    from app.api.v1.reviews import _submit_review_impl as submit_review
+
+    db = _build_session()
+    users, _, work_order = _create_project_bundle(db)
+    work_order.current_status = WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value
+    work_order.current_handler_user_id = users["leader"].id
+    _add_current_file(db, work_order, "REPORT_ZIP", "REVIEW_FIRST", users["leader"], "review.zip")
+    db.commit()
+
+    submit_review(
+        payload=ReviewSubmitRequest(work_order_id=work_order.id, review_round="FIRST", reviewer_user_id=users["first"].id, comment="提交一审"),
+        db=db,
+        current_user=users["leader"],
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == WorkOrderStatus.FIRST_REVIEWING.value
+    assert work_order.current_handler_user_id == users["first"].id
+
+
 def test_signoff_upload_keeps_only_latest_current_attachment_and_contract_scan(tmp_path, monkeypatch) -> None:
     from app.api.v1.files import upload_file
     from app.core.config import settings

@@ -65,6 +65,28 @@
       </el-form>
     </el-card>
 
+    <el-card v-if="canTransferApprovedContract" shadow="never" style="margin-bottom: 16px">
+      <template #header>转送文印室</template>
+      <el-form label-width="120px">
+        <el-form-item label="文印室人员">
+          <el-select v-model="printRoomHandlerId" placeholder="请选择文印室人员" style="width: 280px">
+            <el-option
+              v-for="user in printRoomOptions"
+              :key="user.id"
+              :label="`${user.real_name}(${user.username})`"
+              :value="user.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="转送说明">
+          <el-input v-model="printRoomRemark" type="textarea" :rows="2" placeholder="可选，转送给文印室时附言" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="success" @click="onTransferApprovedContract">转送文印室</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <el-card v-if="showPrintRoomSection" shadow="never" style="margin-bottom: 16px">
       <template #header>文印室处理</template>
       <el-descriptions :column="2" border style="margin-bottom: 16px">
@@ -157,6 +179,7 @@ import {
   approveAndTransferContractReview,
   rejectContractReview,
   listContractReviewRecords,
+  transferApprovedContractToPrintRoom,
   type ContractReviewRecordItem
 } from '@/api/contractReviews'
 import { confirmContractComplete, returnContractToPrintRoom, sendContractToProjectLeader } from '@/api/printRoom'
@@ -199,6 +222,16 @@ const canProjectLeaderConfirm = computed(() => Boolean(
   (props.flowInfo?.project.project_leader_id === currentUserId.value || isAdmin.value)
 ))
 
+const canTransferApprovedContract = computed(() => Boolean(
+  currentUserId.value &&
+  props.flowInfo?.current_work_order_status === 'CONTRACT_APPROVED' &&
+  (
+    props.flowInfo?.project.project_leader_id === currentUserId.value ||
+    ['项目负责人', '项目组成员', '创建人'].includes(props.flowInfo?.user_role_in_project || '') ||
+    isAdmin.value
+  )
+))
+
 const showPrintRoomSection = computed(() => ['WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(props.flowInfo?.current_work_order_status || ''))
 const showLeaderConfirmSection = computed(() => ['WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(props.flowInfo?.current_work_order_status || ''))
 
@@ -206,6 +239,7 @@ function actionLabel(actionType: ContractReviewRecordItem['action_type']) {
   if (actionType === 'SUBMIT_CONTRACT') return '提交审核'
   if (actionType === 'APPROVE_CONTRACT') return '审核通过'
   if (actionType === 'APPROVE_AND_TRANSFER_PRINT_ROOM') return '审核通过并转文印室'
+  if (actionType === 'TRANSFER_APPROVED_PRINT_ROOM') return '转送文印室'
   return '退回修改'
 }
 
@@ -286,6 +320,18 @@ async function onReject() {
   ElMessage.success('已退回修改')
   reviewComment.value = ''
   reviewAttachment.value = null
+  emit('changed')
+}
+
+async function onTransferApprovedContract() {
+  if (!props.workOrderId) return
+  if (!printRoomHandlerId.value) return ElMessage.warning('请选择文印室人员')
+  await transferApprovedContractToPrintRoom(props.workOrderId, {
+    comment: printRoomRemark.value || undefined,
+    print_room_handler_id: printRoomHandlerId.value
+  })
+  ElMessage.success('已转送文印室')
+  printRoomRemark.value = ''
   emit('changed')
 }
 

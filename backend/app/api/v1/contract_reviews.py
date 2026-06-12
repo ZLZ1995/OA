@@ -18,6 +18,7 @@ from app.schemas.contract_review import (
     ContractReviewRecordListResponse,
     ContractReviewRecordResponse,
     ContractReviewSubmitRequest,
+    ContractReviewTransferApprovedRequest,
 )
 from app.services.project_role_conflict_service import get_project_party_user_ids, validate_not_project_party
 from app.services.workflow_log_service import create_workflow_log
@@ -130,6 +131,22 @@ def _serialize_record(db: Session, record: ContractReviewRecord) -> ContractRevi
         review_attachment_file=_serialize_file(review_file),
         created_at=record.created_at,
     )
+
+
+def _latest_review_contract_file_id(db: Session, work_order_id: int) -> int | None:
+    record = (
+        db.query(ContractReviewRecord)
+        .filter(
+            ContractReviewRecord.work_order_id == work_order_id,
+            ContractReviewRecord.contract_file_id.isnot(None),
+        )
+        .order_by(ContractReviewRecord.created_at.desc(), ContractReviewRecord.id.desc())
+        .first()
+    )
+    if record:
+        return record.contract_file_id
+    contract_file = _get_current_contract_file(db, work_order_id)
+    return contract_file.id if contract_file else None
 
 
 @router.get("", response_model=ContractReviewRecordListResponse)
@@ -352,6 +369,72 @@ def approve_and_transfer_contract_review(
     db.commit()
     db.refresh(approve_record)
     return _serialize_record(db, approve_record)
+
+
+@router.post("/work-orders/{work_order_id}/transfer-approved", response_model=ContractReviewRecordResponse)
+def transfer_approved_contract_to_print_room(
+    work_order_id: int,
+    payload: ContractReviewTransferApprovedRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ContractReviewRecordResponse:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    _ensure_project_operator(db, work_order, current_user)
+    if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.CONTRACT_APPROVED:
+        raise HTTPException(status_code=400, detail="当前状态不可转发文印室")
+
+    _ensure_print_room_handler(db, payload.print_room_handler_id)
+    validate_not_project_party(
+        payload.print_room_handler_id,
+        get_project_party_user_ids(db, work_order.project_id, work_order),
+        "文印室办理人",
+    )
+
+    from_status = WorkOrderStatus.CONTRACT_APPROVED
+    to_status = WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS
+    if not can_transit(from_status, to_status):
+        raise HTTPException(status_code=400, detail="非法状态迁移")
+
+    work_order.current_status = to_status.value
+    work_order.current_handler_user_id = payload.print_room_handler_id
+    work_order.print_room_handler_id = payload.print_room_handler_id
+
+    transfer_record = ContractReviewRecord(
+        work_order_id=work_order.id,
+        project_id=work_order.project_id,
+        action_type="TRANSFER_APPROVED_PRINT_ROOM",
+        operator_user_id=current_user.id,
+        reviewer_user_id=work_order.contract_reviewer_id or current_user.id,
+        comment=payload.comment or "合同已审核通过，补充转发文印室",
+        contract_file_id=_latest_review_contract_file_id(db, work_order.id),
+    )
+    db.add(transfer_record)
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=from_status.value,
+        to_status=to_status.value,
+        action_type="TRANSFER_APPROVED_PRINT_ROOM",
+        operator_user_id=current_user.id,
+        remark=payload.comment,
+    )
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=payload.print_room_handler_id,
+            action_name="APPROVE_AND_TRANSFER_PRINT_ROOM",
+            comment=payload.comment,
+            biz_id=transfer_record.id,
+        )
+    db.commit()
+    db.refresh(transfer_record)
+    return _serialize_record(db, transfer_record)
 
 
 @router.post("/{record_id}/reject", response_model=ContractReviewRecordResponse)
