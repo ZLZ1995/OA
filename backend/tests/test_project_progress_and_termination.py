@@ -41,6 +41,7 @@ def _seed_project(
     *,
     project_code: str,
     termination_status: str | None = None,
+    current_status: str = "WAIT_INVOICE_INFO",
 ) -> tuple[Project, WorkOrder]:
     project = Project(
         project_code=project_code,
@@ -58,7 +59,7 @@ def _seed_project(
         work_order_no=f"WO-{project.id}",
         project_id=project.id,
         title="WO",
-        current_status="WAIT_INVOICE_INFO",
+        current_status=current_status,
         current_handler_user_id=leader.id,
         initiator_user_id=leader.id,
         project_leader_id=leader.id,
@@ -83,9 +84,41 @@ def test_project_export_includes_progress_labels() -> None:
     rows = _collect_rows(db, None, None, None, None, None, None, None, None, None, None)
     progress_by_no = {row["project_no"]: row["project_progress"] for row in rows}
 
-    assert progress_by_no[active_project.project_code] == "发票开具"
+    assert progress_by_no[active_project.project_code] == "待提交开票信息"
     assert progress_by_no[archived_project.project_code] == "已归档"
     assert progress_by_no[voided_project.project_code] == "已作废"
+
+
+def test_project_export_displays_specific_review_submit_progress() -> None:
+    from app.api.v1.project_exports import _collect_rows
+
+    db = _build_session()
+    leader = _seed_user(db)
+    contract_approved, _ = _seed_project(
+        db,
+        leader,
+        project_code="P-CONTRACT-APPROVED",
+        current_status="CONTRACT_APPROVED",
+    )
+    wait_first, _ = _seed_project(
+        db,
+        leader,
+        project_code="P-WAIT-FIRST",
+        current_status="WAIT_FIRST_REVIEW_SUBMIT",
+    )
+    first_rejected, _ = _seed_project(
+        db,
+        leader,
+        project_code="P-FIRST-REJECTED",
+        current_status="FIRST_REVIEW_REJECTED",
+    )
+
+    rows = _collect_rows(db, None, None, None, None, None, None, None, None, None, None)
+    progress_by_no = {row["project_no"]: row["project_progress"] for row in rows}
+
+    assert progress_by_no[contract_approved.project_code] == "合同审核通过，待上传待审报告"
+    assert progress_by_no[wait_first.project_code] == "待提交一审"
+    assert progress_by_no[first_rejected.project_code] == "一审退回待回复"
 
 
 def test_approved_termination_is_excluded_from_todo_projects() -> None:

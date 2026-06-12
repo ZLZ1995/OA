@@ -42,13 +42,70 @@ def _format_date(value: datetime | date | None) -> str:
     return value.strftime("%Y-%m-%d")
 
 
+EXPORT_PROGRESS_LABELS = {
+    "PROJECT_CREATED": "项目已创建，待完善项目组成员",
+    "WORK_ORDER_CREATED": "待完善项目组成员",
+    "WAIT_CONTRACT_UPLOAD": "待上传合同初稿",
+    "CONTRACT_UPLOADED": "合同初稿已上传，待提交审核",
+    "WAIT_PRINTROOM_OFFICIAL_CONTRACT": "待文印室处理正式合同",
+    "WAIT_CONTRACT_REVIEW_SUBMIT": "待提交合同初稿审核",
+    "CONTRACT_REVIEWING": "合同初稿审核中",
+    "CONTRACT_REJECTED": "合同初稿退回待修改",
+    "CONTRACT_APPROVED": "合同审核通过，待上传待审报告",
+    "WAIT_FIRST_REVIEW_SUBMIT": "待提交一审",
+    "FIRST_REVIEWING": "一审审核中",
+    "FIRST_REVIEW_REJECTED": "一审退回待回复",
+    "FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND": "一审通过，待提交二审",
+    "FIRST_APPROVED_WAIT_FIRST_SELECT_SECOND": "一审通过，待选择二审老师",
+    "WAIT_SECOND_REVIEW_SUBMIT": "待提交二审",
+    "SECOND_REVIEWING": "二审审核中",
+    "SECOND_REVIEW_REJECTED": "二审退回待回复",
+    "SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD": "二审通过，待提交三审",
+    "SECOND_APPROVED_WAIT_SECOND_SELECT_THIRD": "二审通过，待选择三审老师",
+    "WAIT_THIRD_REVIEW_SUBMIT": "待提交三审",
+    "THIRD_REVIEWING": "三审审核中",
+    "THIRD_REVIEW_REJECTED": "三审退回待回复",
+    "THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND": "三审通过，待确认外部审核",
+    "WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM": "待确认外部审核",
+    "WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT": "待提交外部一审复核",
+    "EXTERNAL_FIRST_REVIEWING": "外部一审复核中",
+    "EXTERNAL_FIRST_REJECTED": "外部一审复核退回待回复",
+    "EXTERNAL_FIRST_APPROVED_WAIT_RECALL_OR_SECOND": "外部一审复核通过，待确认后续流向",
+    "WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT": "待提交外部二审复核",
+    "EXTERNAL_SECOND_REVIEWING": "外部二审复核中",
+    "EXTERNAL_SECOND_REJECTED": "外部二审复核退回待回复",
+    "EXTERNAL_SECOND_APPROVED_WAIT_RECALL_OR_THIRD": "外部二审复核通过，待确认后续流向",
+    "WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT": "待提交外部三审复核",
+    "EXTERNAL_THIRD_REVIEWING": "外部三审复核中",
+    "EXTERNAL_THIRD_REJECTED": "外部三审复核退回待回复",
+    "WAIT_OWNER_SIGNOFF_UPLOAD": "待上传签发审核文件",
+    "SIGNOFF_REVIEWING": "签发审核中",
+    "THIRD_APPROVED_WAIT_PRINTROOM": "待补充正式报告与合同扫描件",
+    "PRINTROOM_PROCESSING": "文印室报告出具中",
+    "PAPER_REPORT_ISSUED": "纸质报告已出具，待开票",
+    "REPORT_MAILING": "报告邮寄中",
+    "REPORT_MAILING_COMPLETED": "报告邮寄完成，待归档",
+    "WAIT_INVOICE_INFO": "待提交开票信息",
+    "INVOICE_INFO_REJECTED": "开票信息退回待修改",
+    "INVOICE_PROCESSING": "财务开票中",
+    "INVOICE_ISSUED": "发票已开具，待归档",
+    "WAIT_ARCHIVE_SUBMIT": "待提交归档",
+    "ARCHIVE_REVIEWING": "归档审核中",
+    "ARCHIVE_REJECTED": "归档退回待修改",
+    "ARCHIVED": "已归档",
+}
+
+
 def _project_progress(project: Project, work_order: WorkOrder | None, archived: bool = False) -> str:
     if project.termination_status == "APPROVED":
         return "已作废"
-    return normalize_project_step(
-        work_order.current_status if work_order else None,
-        archived or project.archived_at is not None or (work_order and work_order.current_status == "ARCHIVED"),
-        project.project_source,
+    is_archived = archived or project.archived_at is not None or (work_order and work_order.current_status == "ARCHIVED")
+    if is_archived:
+        return "已归档"
+    status = work_order.current_status if work_order else None
+    return EXPORT_PROGRESS_LABELS.get(
+        status or "",
+        normalize_project_step(status, False, project.project_source),
     )
 
 
