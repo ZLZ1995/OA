@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import SUPER_ADMIN_USERNAME, get_current_user, require_roles
 from app.api.v1.contract_reviews import get_contract_review_status_display
 from app.db.session import get_db
 from app.models.contract import Contract
@@ -46,6 +46,10 @@ def _user_name(db: Session, user_id: int | None) -> str | None:
 
 def _participant(db: Session, user_id: int | None) -> PrintRoomContractParticipant:
     return PrintRoomContractParticipant(user_id=user_id, user_name=_user_name(db, user_id))
+
+
+def _is_admin(user: User) -> bool:
+    return user.username == SUPER_ADMIN_USERNAME or any(item.role.code == "ADMIN" for item in user.roles)
 
 
 def _serialize_contract_file(db: Session, row: WorkOrderFile) -> PrintRoomContractFileResponse:
@@ -229,14 +233,13 @@ def return_contract_to_print_room(
     payload: PrintRoomRollbackRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
 ) -> dict[str, str]:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     if not payload.remark or not payload.remark.strip():
         raise HTTPException(status_code=400, detail="请输入退回原因")
-    if not any(item.role.code == "ADMIN" for item in current_user.roles) and work_order.project_leader_id != current_user.id:
+    if not _is_admin(current_user) and work_order.project_leader_id != current_user.id:
         raise HTTPException(status_code=403, detail="仅项目负责人可退回文印室")
     if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM:
         raise HTTPException(status_code=400, detail="当前状态不可退回文印室")
@@ -276,12 +279,11 @@ def confirm_contract_complete(
     payload: PrintRoomRollbackRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: set[str] = Depends(require_roles("PROJECT_LEADER", "ADMIN")),
 ) -> dict[str, str]:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    if not any(item.role.code == "ADMIN" for item in current_user.roles) and work_order.project_leader_id != current_user.id:
+    if not _is_admin(current_user) and work_order.project_leader_id != current_user.id:
         raise HTTPException(status_code=403, detail="仅项目负责人可确认办结")
     if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM:
         raise HTTPException(status_code=400, detail="当前状态不可确认办结")

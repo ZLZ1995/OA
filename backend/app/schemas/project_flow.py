@@ -18,6 +18,7 @@ class ProjectFlowProject(BaseModel):
     project_source: str = "INTERNAL"
     project_source_display: str = "评估一部"
     external_project_leader_name: str | None = None
+    project_leader_id: int | None = None
     project_leader_display_name: str | None = None
     display_project_leader_name: str | None = None
     contract_no: str | None = None

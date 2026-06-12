@@ -738,6 +738,7 @@ def get_project_flow(
             project_source=normalize_project_source(project.project_source),
             project_source_display=get_project_source_display(project.project_source),
             external_project_leader_name=normalize_external_project_leader_name(project.external_project_leader_name),
+            project_leader_id=project.project_leader_id,
             project_leader_display_name=get_project_leader_display_name(project, leader_name),
             display_project_leader_name=display_project_leader_name,
             contract_no=readonly_fields.get("contract_no"),

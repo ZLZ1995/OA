@@ -16,6 +16,7 @@ from app.schemas.contract_review import (
     ContractReviewSubmitRequest,
     ContractReviewTransferApprovedRequest,
 )
+from app.schemas.print_room import PrintRoomRollbackRequest
 
 
 def _build_session() -> Session:
@@ -242,6 +243,73 @@ def test_contract_reviewer_can_transfer_approved_contract_to_print_room() -> Non
     assert work_order.current_status == "WAIT_PRINT_ROOM_PROCESS"
     assert work_order.current_handler_user_id == print_room.id
     assert work_order.print_room_handler_id == print_room.id
+
+
+def test_project_flow_exposes_leader_for_contract_print_room_confirmation() -> None:
+    from app.api.v1.projects import get_project_flow
+
+    db = _build_session()
+    leader_role = _seed_role(db, "PROJECT_LEADER", "项目负责人")
+    leader = _seed_user(db, "leader", [leader_role])
+    project, work_order = _seed_project_and_work_order(db, leader, leader)
+    work_order.current_status = "WAIT_PROJECT_LEADER_CONTRACT_CONFIRM"
+    work_order.current_handler_user_id = leader.id
+    db.commit()
+
+    result = get_project_flow(project.id, db=db, current_user=leader)
+
+    assert result.project.project_leader_id == leader.id
+    assert result.current_work_order_status == "WAIT_PROJECT_LEADER_CONTRACT_CONFIRM"
+    assert result.current_handler_user_id == leader.id
+    assert result.project.current_step == "合同初稿审核"
+
+
+def test_contract_project_leader_without_global_role_can_confirm_complete() -> None:
+    from app.api.v1.print_room import confirm_contract_complete
+
+    db = _build_session()
+    print_room_role = _seed_role(db, "PRINT_ROOM", "文印室")
+    leader = _seed_user(db, "leader", [])
+    print_room = _seed_user(db, "printroom", [print_room_role])
+    _, work_order = _seed_project_and_work_order(db, leader, leader)
+    work_order.current_status = "WAIT_PROJECT_LEADER_CONTRACT_CONFIRM"
+    work_order.current_handler_user_id = leader.id
+    work_order.print_room_handler_id = print_room.id
+    db.commit()
+
+    confirm_contract_complete(
+        payload=PrintRoomRollbackRequest(work_order_id=work_order.id, remark="ok"),
+        db=db,
+        current_user=leader,
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == "CONTRACT_PROCESS_COMPLETED"
+    assert work_order.current_handler_user_id == leader.id
+
+
+def test_contract_project_leader_without_global_role_can_return_to_print_room() -> None:
+    from app.api.v1.print_room import return_contract_to_print_room
+
+    db = _build_session()
+    print_room_role = _seed_role(db, "PRINT_ROOM", "文印室")
+    leader = _seed_user(db, "leader", [])
+    print_room = _seed_user(db, "printroom", [print_room_role])
+    _, work_order = _seed_project_and_work_order(db, leader, leader)
+    work_order.current_status = "WAIT_PROJECT_LEADER_CONTRACT_CONFIRM"
+    work_order.current_handler_user_id = leader.id
+    work_order.print_room_handler_id = print_room.id
+    db.commit()
+
+    return_contract_to_print_room(
+        payload=PrintRoomRollbackRequest(work_order_id=work_order.id, remark="need fix"),
+        db=db,
+        current_user=leader,
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == "WAIT_PRINT_ROOM_PROCESS"
+    assert work_order.current_handler_user_id == print_room.id
 
 
 def test_contract_review_reject_moves_back_to_project_side() -> None:
