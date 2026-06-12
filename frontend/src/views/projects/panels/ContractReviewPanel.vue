@@ -226,6 +226,8 @@ const canTransferApprovedContract = computed(() => Boolean(
   currentUserId.value &&
   props.flowInfo?.current_work_order_status === 'CONTRACT_APPROVED' &&
   (
+    props.flowInfo?.contract_reviewer_id === currentUserId.value ||
+    props.userRoles?.some(role => ['CONTRACT_REVIEWER'].includes(role)) ||
     props.flowInfo?.project.project_leader_id === currentUserId.value ||
     ['项目负责人', '项目组成员', '创建人'].includes(props.flowInfo?.user_role_in_project || '') ||
     isAdmin.value
