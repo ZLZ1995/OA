@@ -38,6 +38,7 @@ router = APIRouter(prefix="/reviews", tags=["审核"])
 ROUND_SUBMIT_STATUS = {
     "FIRST": {
         WorkOrderStatus.CONTRACT_APPROVED,
+        WorkOrderStatus.CONTRACT_PROCESS_COMPLETED,
         WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
         WorkOrderStatus.FIRST_REVIEW_REJECTED,
     },
@@ -702,7 +703,10 @@ def _submit_review_impl(
         raise HTTPException(status_code=400, detail=msg)
 
     from_status = WorkOrderStatus(work_order.current_status)
-    if payload.review_round == "FIRST" and from_status == WorkOrderStatus.CONTRACT_APPROVED:
+    if payload.review_round == "FIRST" and from_status in {
+        WorkOrderStatus.CONTRACT_APPROVED,
+        WorkOrderStatus.CONTRACT_PROCESS_COMPLETED,
+    }:
         work_order.current_status = WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT.value
         from_status = WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT
 

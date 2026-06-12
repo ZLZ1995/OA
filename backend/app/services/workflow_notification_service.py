@@ -134,6 +134,19 @@ def build_workflow_message_templates(
                 "下一步：请提交一审"
             ),
         ),
+        "APPROVE_AND_TRANSFER_PRINT_ROOM": (
+            "请处理合同文印",
+            (
+                f"{sender_user.real_name}已完成合同初稿审核并转交文印室处理。\n"
+                f"项目编号：{project_code}\n"
+                f"项目名称：{project_name}\n"
+                f"客户名称：{client_name}\n"
+                f"工单号：{work_order_no}\n"
+                f"当前节点：{current_step}\n"
+                "下一步：请上传盖章扫描件并发送项目负责人确认\n"
+                f"备注：{comment_text}"
+            ),
+        ),
         "REJECT_CONTRACT_REVIEW": (
             "请修改后重提合同",
             (
@@ -499,6 +512,7 @@ def build_workflow_message_templates(
         "CONTRACT_UPLOAD_COMPLETED": "合同初稿已上传",
         "SUBMIT_CONTRACT_REVIEW": "合同审核已提交",
         "APPROVE_CONTRACT_REVIEW": "合同审核已完成",
+        "APPROVE_AND_TRANSFER_PRINT_ROOM": "合同文印已流转",
         "REJECT_CONTRACT_REVIEW": "合同初稿已退回",
         "SUBMIT_FIRST": "一审任务已提交",
         "SUBMIT_SECOND": "二审任务已提交",
