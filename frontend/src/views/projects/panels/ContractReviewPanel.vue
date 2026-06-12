@@ -218,8 +218,14 @@ const canPrintRoomProcess = computed(() => Boolean(
 ))
 
 const canProjectLeaderConfirm = computed(() => Boolean(
+  currentUserId.value &&
   props.flowInfo?.current_work_order_status === 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM' &&
-  (props.flowInfo?.project.project_leader_id === currentUserId.value || isAdmin.value)
+  (
+    props.flowInfo?.current_handler_user_id === currentUserId.value ||
+    props.flowInfo?.project.project_leader_id === currentUserId.value ||
+    props.flowInfo?.user_role_in_project === '项目负责人' ||
+    isAdmin.value
+  )
 ))
 
 const canTransferApprovedContract = computed(() => Boolean(
