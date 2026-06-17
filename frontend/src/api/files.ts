@@ -1,7 +1,9 @@
 import http from './http'
+import { ElMessage } from 'element-plus'
 import type { UploadProgressState } from '@/types/upload'
 
 const FILE_UPLOAD_TIMEOUT_MS = 120000
+const FILE_DOWNLOAD_TIMEOUT_MS = 300000
 
 export interface WorkOrderFileItem {
   id: number
@@ -163,15 +165,26 @@ export async function completeContractUpload(workOrderId: number) {
 }
 
 export async function downloadWorkOrderFile(fileId: number, filename?: string) {
-  const { data } = await http.get(`/files/${fileId}/download`, {
-    responseType: 'blob'
-  })
-  const url = window.URL.createObjectURL(data)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename || `file-${fileId}`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  window.URL.revokeObjectURL(url)
+  let url = ''
+  try {
+    const { data } = await http.get(`/files/${fileId}/download`, {
+      responseType: 'blob',
+      timeout: FILE_DOWNLOAD_TIMEOUT_MS
+    })
+    url = window.URL.createObjectURL(data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || `file-${fileId}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (error: any) {
+    const message = error?.code === 'ECONNABORTED'
+      ? '文件下载超时，请稍后重试或检查网络'
+      : (error?.response?.data?.detail || '文件下载失败')
+    ElMessage.error(message)
+    throw error
+  } finally {
+    if (url) window.URL.revokeObjectURL(url)
+  }
 }
