@@ -15,6 +15,47 @@
       :title="flowInfo?.review_submit_lock_reason || '报告送审暂不可办理'"
       style="margin-bottom: 12px"
     />
+    <section v-if="isExternalAuditConfirmStage" class="external-audit-confirm-card">
+      <div class="external-audit-confirm-header">
+        <div>
+          <div class="external-audit-confirm-title">外部审核确认</div>
+          <div class="external-audit-confirm-subtitle">{{ externalAuditConfirmDescription }}</div>
+        </div>
+        <el-tag :type="canOwnerChooseExternalAudit ? 'warning' : 'info'" effect="plain">{{ externalAuditConfirmStatusText }}</el-tag>
+      </div>
+      <template v-if="canRequestOwnerExternalAuditConfirm">
+        <el-alert
+          type="info"
+          :closable="false"
+          title="三审已通过，请先向项目负责人发送确认信息。"
+          show-icon
+          style="margin-bottom: 12px"
+        />
+        <el-button type="primary" :loading="externalAuditSubmitting" :disabled="externalAuditSubmitting" @click="onRequestOwnerExternalAuditConfirm">
+          向项目负责人发送确认信息
+        </el-button>
+      </template>
+      <template v-else-if="canOwnerChooseExternalAudit">
+        <el-alert
+          type="warning"
+          :closable="false"
+          title="请确认该项目是否涉及外部审核。选择后流程将进入外部复核或签发审核上传。"
+          show-icon
+          style="margin-bottom: 12px"
+        />
+        <el-space wrap>
+          <el-button type="success" :loading="externalAuditSubmitting" :disabled="externalAuditSubmitting" @click="onMarkNoExternalAudit">不涉及外部审核</el-button>
+          <el-button type="primary" plain :loading="externalAuditSubmitting" :disabled="externalAuditSubmitting" @click="onMarkHasExternalAudit">涉及外部审核</el-button>
+        </el-space>
+      </template>
+      <el-alert
+        v-else
+        type="info"
+        :closable="false"
+        :title="externalAuditConfirmWaitText"
+        show-icon
+      />
+    </section>
     <el-descriptions
       v-if="showProjectSummary"
       :column="2"
@@ -31,7 +72,7 @@
       <el-descriptions-item label="承接单位">{{ flowInfo?.project.undertaking_unit || '-' }}</el-descriptions-item>
     </el-descriptions>
 
-    <el-form label-width="120px">
+    <el-form v-if="!isExternalAuditConfirmStage" label-width="120px">
       <el-form-item label="审核轮次">
         <el-select v-model="reviewRound" style="width: 180px" :disabled="!canSubmitReview || isReviewLocked" @change="reloadRoundData">
           <el-option label="一审" value="FIRST" />
@@ -276,33 +317,6 @@
       </template>
     </el-dialog>
 
-    <template v-if="canRequestOwnerExternalAuditConfirm">
-      <el-divider>外部审核确认</el-divider>
-      <el-alert
-        type="info"
-        :closable="false"
-        title="本流程将流转至项目负责人处，请等待项目负责人反馈。"
-        show-icon
-        style="margin-bottom: 12px"
-      />
-      <el-button type="primary" @click="onRequestOwnerExternalAuditConfirm">向项目负责人发送确认信息</el-button>
-    </template>
-
-    <template v-if="canOwnerChooseExternalAudit">
-      <el-divider>项目负责人确认</el-divider>
-      <el-alert
-        type="warning"
-        :closable="false"
-        title="请确认该项目是否涉及外部审核。"
-        show-icon
-        style="margin-bottom: 12px"
-      />
-      <el-space wrap>
-        <el-button type="success" @click="onMarkNoExternalAudit">不涉及外部审核</el-button>
-        <el-button type="primary" plain @click="onMarkHasExternalAudit">涉及外部审核</el-button>
-      </el-space>
-    </template>
-
     <template v-if="showFormalReportPanel">
       <el-divider>三审通过后资料</el-divider>
       <el-alert
@@ -442,6 +456,7 @@ const routingDialogVisible = ref(false)
 const routingRound = ref<'FIRST' | 'SECOND' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND'>('FIRST')
 const routingReviewerUserId = ref<number>()
 const routingSubmitting = ref(false)
+const externalAuditSubmitting = ref(false)
 const loading = ref(false)
 const reportPackageUploadProgress = ref<UploadProgressState | null>(null)
 const replyUploadProgress = ref<UploadProgressState | null>(null)
@@ -555,6 +570,9 @@ const canUploadFormalReport = computed(() => {
   )
 })
 const showFormalReportPanel = computed(() => false)
+const isExternalAuditConfirmStage = computed(() =>
+  ['THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND', 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM'].includes(statusCode.value)
+)
 const canRequestOwnerExternalAuditConfirm = computed(() =>
   statusCode.value === 'THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND' &&
   Boolean(currentUserId.value && currentUserId.value === props.flowInfo?.third_reviewer_id) &&
@@ -564,6 +582,22 @@ const canOwnerChooseExternalAudit = computed(() =>
   statusCode.value === 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM' &&
   isReviewSubmitter.value
 )
+const externalAuditConfirmStatusText = computed(() => {
+  if (statusCode.value === 'THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND') return '待发送确认'
+  if (statusCode.value === 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM') return '待项目负责人确认'
+  return '外部审核确认'
+})
+const externalAuditConfirmDescription = computed(() => {
+  if (statusCode.value === 'THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND') {
+    return '三审已通过，需先由三审老师发送确认信息，再由项目负责人判断是否进入外部复核。'
+  }
+  return '请项目负责人确认是否涉及外部审核，系统会按选择流转到外部复核或签发审核上传。'
+})
+const externalAuditConfirmWaitText = computed(() => {
+  if (statusCode.value === 'THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND') return '当前等待三审老师发送外部审核确认信息。'
+  if (statusCode.value === 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM') return '当前等待项目负责人确认是否涉及外部审核。'
+  return '当前暂无可办理的外部审核确认操作。'
+})
 const isExternalReviewRound = computed(() => reviewRound.value.startsWith('EXTERNAL_'))
 const canUploadExternalAuditOpinionFile = computed(() => canSubmitReview.value && isExternalReviewRound.value && !showReviewerChangePanel.value)
 const showExternalAuditOpinionPanel = computed(() =>
@@ -1198,23 +1232,38 @@ async function routeApprovedToLeader() {
 
 async function onRequestOwnerExternalAuditConfirm() {
   if (!props.workOrderId) return
-  await requestOwnerExternalAuditConfirm(props.workOrderId)
-  ElMessage.success('已发送项目负责人确认信息')
-  emit('changed')
+  externalAuditSubmitting.value = true
+  try {
+    await requestOwnerExternalAuditConfirm(props.workOrderId)
+    ElMessage.success('已发送项目负责人确认信息')
+    emit('changed')
+  } finally {
+    externalAuditSubmitting.value = false
+  }
 }
 
 async function onMarkNoExternalAudit() {
   if (!props.workOrderId) return
-  await markNoExternalAudit(props.workOrderId)
-  ElMessage.success('已进入附件上传流程')
-  emit('changed')
+  externalAuditSubmitting.value = true
+  try {
+    await markNoExternalAudit(props.workOrderId)
+    ElMessage.success('已进入附件上传流程')
+    emit('changed')
+  } finally {
+    externalAuditSubmitting.value = false
+  }
 }
 
 async function onMarkHasExternalAudit() {
   if (!props.workOrderId) return
-  await markHasExternalAudit(props.workOrderId)
-  ElMessage.success('已进入外部审核复核准备流程')
-  emit('changed')
+  externalAuditSubmitting.value = true
+  try {
+    await markHasExternalAudit(props.workOrderId)
+    ElMessage.success('已进入外部审核复核准备流程')
+    emit('changed')
+  } finally {
+    externalAuditSubmitting.value = false
+  }
 }
 
 async function onRecallRouting() {
@@ -1311,6 +1360,35 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.external-audit-confirm-card {
+  border: 1px solid #cfe0f2;
+  border-left: 4px solid #1f5f99;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: #f8fbff;
+}
+
+.external-audit-confirm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.external-audit-confirm-title {
+  color: #0c3157;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.external-audit-confirm-subtitle {
+  margin-top: 5px;
+  color: #5f7082;
+  line-height: 1.55;
 }
 
 .review-upload-block {
