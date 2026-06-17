@@ -92,6 +92,8 @@ const baseFlowNodes = [
   { key: 'contract', label: '合同初审上传' },
   { key: 'contractReview', label: '合同初审审核' },
   { key: 'review', label: '报告送审' },
+  { key: 'externalAuditConfirm', label: '外部审核确认' },
+  { key: 'externalReview', label: '外部审核复核' },
   { key: 'signoff', label: '签发审核' },
   { key: 'issue', label: '报告出具' },
   { key: 'mailing', label: '报告邮寄' },
@@ -105,6 +107,8 @@ const panelMap: Record<string, any> = {
   contract: ContractUploadPanel,
   contractReview: ContractReviewPanel,
   review: ReviewSubmitPanel,
+  externalAuditConfirm: ReviewSubmitPanel,
+  externalReview: ReviewSubmitPanel,
   signoff: SignoffPanel,
   issue: ReportIssuePanel,
   mailing: ReportMailingPanel,
@@ -159,7 +163,14 @@ const visibleFlowNodes = computed(() => {
     return availableNodes.value.filter(node => ['basic', 'contractReview'].includes(node.key))
   }
   if (roleName.includes('审老师') || roles.some(role => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].includes(role))) {
-    return availableNodes.value.filter(node => node.key === 'review')
+    const reviewerNodeKeys = new Set(['review'])
+    if (['THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND', 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM'].includes(currentStatus)) {
+      reviewerNodeKeys.add('externalAuditConfirm')
+    }
+    if (currentStatus.startsWith('WAIT_EXTERNAL_') || currentStatus.startsWith('EXTERNAL_')) {
+      reviewerNodeKeys.add('externalReview')
+    }
+    return availableNodes.value.filter(node => reviewerNodeKeys.has(node.key))
   }
   if (roleName === '文印室' || roles.includes('PRINT_ROOM')) {
     if (['WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM'].includes(currentStatus)) {
@@ -201,7 +212,35 @@ function resolveCurrentTodoLabel() {
   if (status === 'SECOND_APPROVED_WAIT_LEADER_SUBMIT_THIRD') {
     return isCurrentHandler && isProjectLeader ? '请选择三审老师并提交审核' : '待二审老师决定三审流向'
   }
+  if (status === 'THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND') {
+    return isCurrentHandler ? '请向项目负责人发送外部审核确认' : '待三审老师发送外部审核确认'
+  }
+  if (status === 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM') {
+    return isCurrentHandler || isProjectLeader ? '请确认是否涉及外部审核' : '待项目负责人确认是否涉及外部审核'
+  }
+  if (status === 'WAIT_EXTERNAL_FIRST_REVIEW_SUBMIT') {
+    return isCurrentHandler || isProjectLeader ? '请上传外审资料并提交外部一审复核' : '待项目负责人提交外部一审复核'
+  }
   return ''
+}
+
+function preferredNodeForCurrentStatus() {
+  const status = flow.value?.current_work_order_status || ''
+  if (['THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND', 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM'].includes(status)) {
+    return 'externalAuditConfirm'
+  }
+  if (status.startsWith('WAIT_EXTERNAL_') || status.startsWith('EXTERNAL_')) {
+    return 'externalReview'
+  }
+  return ''
+}
+
+function syncActiveNodeFromWorkflowStatus() {
+  const preferredNode = preferredNodeForCurrentStatus()
+  if (!preferredNode) return
+  if (availableNodes.value.some(node => node.key === preferredNode)) {
+    activeNode.value = preferredNode
+  }
 }
 
 function ensureVisibleActiveNode() {
@@ -275,8 +314,10 @@ async function load() {
     await auth.ensureUserLoaded()
     flow.value = await getProjectFlow(projectId)
     await loadWorkOrder()
+    syncActiveNodeFromWorkflowStatus()
     ensureVisibleActiveNode()
     syncActiveNodeFromTodoQuery()
+    syncActiveNodeFromWorkflowStatus()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '无权查看该项目')
   }

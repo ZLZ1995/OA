@@ -952,7 +952,7 @@ async function saveProject() {
   }
 }
 
-const TODO_PANEL_PRIORITY = ['contractReview', 'review', 'signoff', 'issue', 'mailing', 'invoice', 'archive'] as const
+const TODO_PANEL_PRIORITY = ['contractReview', 'externalAuditConfirm', 'externalReview', 'review', 'signoff', 'issue', 'mailing', 'invoice', 'archive'] as const
 
 function normalizeTodoText(value?: string | null) {
   return (value || '').trim().toUpperCase()
@@ -968,6 +968,8 @@ function resolveTodoPanel(row: WorkbenchProjectItem) {
   const matched = new Set<string>()
 
   if (combined.includes('合同') && (combined.includes('审核') || combined.includes('初审'))) matched.add('contractReview')
+  if (combined.includes('外部审核确认')) matched.add('externalAuditConfirm')
+  if (combined.includes('外部审核复核') || combined.includes('外部复核')) matched.add('externalReview')
   if (combined.includes('送审') || combined.includes('一审') || combined.includes('二审') || combined.includes('三审') || combined.includes('评审')) matched.add('review')
   if (combined.includes('签发')) matched.add('signoff')
   if (combined.includes('出具') || combined.includes('文印')) matched.add('issue')
