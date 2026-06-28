@@ -1,7 +1,10 @@
 <template>
   <el-card shadow="never" class="workflow-guide">
     <template #header>
-      <div class="title">工单流程导览</div>
+      <div class="title-group">
+        <div class="title">工单流程导览</div>
+        <div class="subtitle">辅助定位当前流程阶段，历史动作以下沉记录为准。</div>
+      </div>
     </template>
     <el-steps direction="vertical" :active="activeStep" finish-status="success">
       <el-step v-for="(step, idx) in steps" :key="step" :title="step" :description="descriptions[idx]" />
@@ -18,6 +21,24 @@ const activeStep = props.activeStep ?? 1
 </script>
 
 <style scoped>
-.workflow-guide { height: 100%; overflow: auto; }
-.title { font-weight: 600; }
+.workflow-guide {
+  height: 100%;
+  overflow: auto;
+}
+
+.title-group {
+  display: grid;
+  gap: 6px;
+}
+
+.title {
+  font-weight: 700;
+  color: #153a63;
+}
+
+.subtitle {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
 </style>

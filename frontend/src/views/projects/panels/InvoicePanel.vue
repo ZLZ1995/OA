@@ -33,80 +33,97 @@
       </el-descriptions>
     </template>
 
-    <el-form label-width="112px">
-      <el-form-item label="开票信息">
-        <el-input
-          v-model="invoiceInfo"
-          type="textarea"
-          :rows="3"
-          :disabled="!canSubmitInfo"
-          placeholder="请输入开票抬头、税号、地址电话、开户行账号等信息"
-        />
-      </el-form-item>
-      <el-form-item label="发票类型">
-        <el-select v-model="invoiceType" :disabled="!canSubmitInfo" style="width: 180px">
-          <el-option label="专票" value="专票" />
-          <el-option label="普票" value="普票" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="开票单位">
-        <el-select v-model="invoiceUnit" :disabled="!canSubmitInfo" style="width: 180px">
-          <el-option label="中勤" value="中勤" />
-          <el-option label="中立国际" value="中立国际" />
-          <el-option label="中众" value="中众" />
-          <el-option label="其他" value="其他" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="开票金额">
-        <el-input-number v-model="amount" :min="0" :precision="2" :disabled="!canSubmitInfo" />
-      </el-form-item>
-      <el-form-item v-if="!canFinance" label="办理财务人员">
-        <el-select v-model="financeHandlerId" :disabled="!canSubmitInfo" placeholder="请选择财务人员" style="width: 220px">
-          <el-option v-for="user in financeUsers" :key="user.id" :label="user.real_name || user.username" :value="user.id" />
-        </el-select>
-      </el-form-item>
-      <el-form-item>
-        <el-space wrap>
-          <el-button type="primary" :disabled="!canSubmitInfo" @click="onSubmitInfo">{{ submitButtonText }}</el-button>
-          <el-button v-if="canWithdraw" type="warning" plain @click="onWithdraw">撤回并修改</el-button>
-          <el-button v-if="canProjectConfirm" type="success" @click="onProjectConfirm">确认完成</el-button>
-          <el-button v-if="canProjectConfirm" type="danger" plain @click="onProjectReturn">退回修改</el-button>
-          <el-button v-if="canFinance" @click="copyInfo">一键复制</el-button>
-          <el-button v-if="canFinance" type="warning" plain :disabled="!canFinanceProcess" @click="onReject">
-            信息有误，返回上一级
-          </el-button>
-        </el-space>
-      </el-form-item>
-    </el-form>
+    <div class="invoice-layout">
+      <div class="invoice-main">
+        <el-form label-width="112px">
+          <el-form-item label="开票信息">
+            <el-input
+              v-model="invoiceInfo"
+              type="textarea"
+              :rows="3"
+              :disabled="!canSubmitInfo"
+              placeholder="请输入开票抬头、税号、地址电话、开户行账号等信息"
+            />
+          </el-form-item>
+          <el-form-item label="发票类型">
+            <el-select v-model="invoiceType" :disabled="!canSubmitInfo" style="width: 180px">
+              <el-option label="专票" value="专票" />
+              <el-option label="普票" value="普票" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="开票单位">
+            <el-select v-model="invoiceUnit" :disabled="!canSubmitInfo" style="width: 180px">
+              <el-option label="中勤" value="中勤" />
+              <el-option label="中立国际" value="中立国际" />
+              <el-option label="中众" value="中众" />
+              <el-option label="其他" value="其他" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="开票金额">
+            <el-input-number v-model="amount" :min="0" :precision="2" :disabled="!canSubmitInfo" />
+          </el-form-item>
+          <el-form-item v-if="!canFinance" label="办理财务人员">
+            <el-select v-model="financeHandlerId" :disabled="!canSubmitInfo" placeholder="请选择财务人员" style="width: 220px">
+              <el-option v-for="user in financeUsers" :key="user.id" :label="user.real_name || user.username" :value="user.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-space wrap>
+              <el-button type="primary" :disabled="!canSubmitInfo" @click="onSubmitInfo">{{ submitButtonText }}</el-button>
+              <el-button v-if="canWithdraw" type="warning" plain @click="onWithdraw">撤回并修改</el-button>
+              <el-button v-if="canProjectConfirm" type="success" @click="onProjectConfirm">确认完成</el-button>
+              <el-button v-if="canProjectConfirm" type="danger" plain @click="onProjectReturn">退回修改</el-button>
+              <el-button v-if="canFinance" @click="copyInfo">一键复制</el-button>
+              <el-button v-if="canFinance" type="warning" plain :disabled="!canFinanceProcess" @click="onReject">
+                信息有误，返回上一级
+              </el-button>
+            </el-space>
+          </el-form-item>
+        </el-form>
 
-    <template v-if="canFinance">
-      <el-divider>财务处理</el-divider>
-      <div class="finance-actions">
-        <el-upload :auto-upload="false" :on-change="onInvoiceFileSelected" :show-file-list="false" :disabled="!canFinanceProcess || isUploading">
-          <el-button type="primary" :disabled="!canFinanceProcess || isUploading">上传电子票</el-button>
-        </el-upload>
-        <el-button type="success" :disabled="!canFinanceProcess || invoiceFiles.length === 0 || isUploading" @click="onComplete">
-          确认完成
-        </el-button>
-      </div>
-      <UploadProgressInline :progress="uploadProgress" />
-    </template>
+        <template v-if="canFinance">
+          <el-divider>财务处理</el-divider>
+          <div class="finance-actions">
+            <el-upload :auto-upload="false" :on-change="onInvoiceFileSelected" :show-file-list="false" :disabled="!canFinanceProcess || isUploading">
+              <el-button type="primary" :disabled="!canFinanceProcess || isUploading">上传电子票</el-button>
+            </el-upload>
+            <el-button type="success" :disabled="!canFinanceProcess || invoiceFiles.length === 0 || isUploading" @click="onComplete">
+              确认完成
+            </el-button>
+          </div>
+          <UploadProgressInline :progress="uploadProgress" />
+        </template>
 
-    <el-divider>发票下载</el-divider>
-    <div v-if="invoiceFiles.length" class="download-list">
-      <div v-for="file in invoiceFiles" :key="file.id" class="download-item">
-        <span>{{ file.origin_file_name }}</span>
-        <el-button type="primary" link @click="download(file)">下载</el-button>
-        <el-button v-if="canFinanceProcess" type="warning" link :disabled="isUploading" @click="triggerReplace(file.id)">重新上传</el-button>
-        <input
-          :ref="el => setReplaceInput(file.id, el)"
-          class="hidden-file-input"
-          type="file"
-          @change="event => onReplaceInput(file, event)"
-        />
+        <el-divider>发票下载</el-divider>
+        <div v-if="invoiceFiles.length" class="download-list">
+          <div v-for="file in invoiceFiles" :key="file.id" class="download-item">
+            <span>{{ file.origin_file_name }}</span>
+            <el-button type="primary" link @click="download(file)">下载</el-button>
+            <el-button v-if="canFinanceProcess" type="warning" link :disabled="isUploading" @click="triggerReplace(file.id)">重新上传</el-button>
+            <input
+              :ref="el => setReplaceInput(file.id, el)"
+              class="hidden-file-input"
+              type="file"
+              @change="event => onReplaceInput(file, event)"
+            />
+          </div>
+        </div>
+        <span v-else>-</span>
       </div>
+
+      <aside class="invoice-side">
+        <div class="invoice-note-card">
+          <div class="invoice-note-title">开票状态</div>
+          <div class="invoice-note-status">{{ statusText || '待提交开票信息' }}</div>
+          <div class="invoice-note-subtitle">首屏优先展示是否可开票、金额关系和当前责任方。</div>
+          <ol class="invoice-note-list">
+            <li>开票前先核对项目金额与累计开票金额。</li>
+            <li>财务处理阶段需上传电子票后再确认完成。</li>
+            <li>如信息有误，应在当前页直接退回修改，不跳离本流程。</li>
+          </ol>
+        </div>
+      </aside>
     </div>
-    <span v-else>-</span>
 
     <el-divider>开票记录</el-divider>
     <el-table :data="invoices" size="small" empty-text="暂无开票记录">
@@ -438,6 +455,18 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
   gap: 6px;
 }
 
+.invoice-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+.invoice-main,
+.invoice-side {
+  min-width: 0;
+}
+
 .download-item {
   display: flex;
   align-items: center;
@@ -457,5 +486,45 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
 
 .invoice-summary {
   margin-bottom: 12px;
+}
+
+.invoice-note-card {
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.invoice-note-title {
+  color: #0c3157;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.invoice-note-status {
+  margin-top: 12px;
+  color: #153a63;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.invoice-note-subtitle {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.invoice-note-list {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+@media (max-width: 960px) {
+  .invoice-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

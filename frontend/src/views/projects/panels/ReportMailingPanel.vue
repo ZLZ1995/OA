@@ -18,90 +18,105 @@
     />
 
     <div class="mailing-layout">
-      <el-form v-if="showProjectEditForm" label-width="120px" class="mailing-form">
-        <el-form-item label="收件人">
-          <el-input v-model="form.receiver_name" />
-        </el-form-item>
-        <el-form-item label="联系电话">
-          <el-input v-model="form.receiver_phone" />
-        </el-form-item>
-        <el-form-item label="收件地址">
-          <el-input v-model="form.receiver_address" type="textarea" :rows="3" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="form.receiver_remark" type="textarea" :rows="2" />
-        </el-form-item>
-        <div class="mailing-actions">
-          <el-button type="primary" @click="submitMailing">{{ hasSubmittedOnce ? '重新提交' : '提交邮寄信息' }}</el-button>
-          <el-button v-if="canCancelEditing" @click="cancelEditing">取消修改</el-button>
-        </div>
-      </el-form>
+      <div class="mailing-main">
+        <el-form v-if="showProjectEditForm" label-width="120px" class="mailing-form">
+          <el-form-item label="收件人">
+            <el-input v-model="form.receiver_name" />
+          </el-form-item>
+          <el-form-item label="联系电话">
+            <el-input v-model="form.receiver_phone" />
+          </el-form-item>
+          <el-form-item label="收件地址">
+            <el-input v-model="form.receiver_address" type="textarea" :rows="3" />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="form.receiver_remark" type="textarea" :rows="2" />
+          </el-form-item>
+          <div class="mailing-actions">
+            <el-button type="primary" @click="submitMailing">{{ hasSubmittedOnce ? '重新提交' : '提交邮寄信息' }}</el-button>
+            <el-button v-if="canCancelEditing" @click="cancelEditing">取消修改</el-button>
+          </div>
+        </el-form>
 
-      <el-form v-else-if="showProjectSubmittedView" label-width="120px" class="mailing-form">
-        <el-form-item label="收件人">
-          <el-input :model-value="latestProjectRecord?.receiver_name || '-'" disabled />
-        </el-form-item>
-        <el-form-item label="联系电话">
-          <el-input :model-value="latestProjectRecord?.receiver_phone || '-'" disabled />
-        </el-form-item>
-        <el-form-item label="收件地址">
-          <el-input :model-value="latestProjectRecord?.receiver_address || '-'" type="textarea" :rows="3" disabled />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input :model-value="latestProjectRecord?.receiver_remark || '-'" type="textarea" :rows="2" disabled />
-        </el-form-item>
-        <el-alert type="success" :closable="false" title="邮寄信息已提交，等待文印室录入快递单号。" show-icon />
-        <div class="mailing-actions mailing-actions-top">
-          <el-button type="warning" plain @click="startModify">撤回并修改</el-button>
-        </div>
-      </el-form>
+        <el-form v-else-if="showProjectSubmittedView" label-width="120px" class="mailing-form">
+          <el-form-item label="收件人">
+            <el-input :model-value="latestProjectRecord?.receiver_name || '-'" disabled />
+          </el-form-item>
+          <el-form-item label="联系电话">
+            <el-input :model-value="latestProjectRecord?.receiver_phone || '-'" disabled />
+          </el-form-item>
+          <el-form-item label="收件地址">
+            <el-input :model-value="latestProjectRecord?.receiver_address || '-'" type="textarea" :rows="3" disabled />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input :model-value="latestProjectRecord?.receiver_remark || '-'" type="textarea" :rows="2" disabled />
+          </el-form-item>
+          <el-alert type="success" :closable="false" title="邮寄信息已提交，等待文印室录入快递单号。" show-icon />
+          <div class="mailing-actions mailing-actions-top">
+            <el-button type="warning" plain @click="startModify">撤回并修改</el-button>
+          </div>
+        </el-form>
 
-      <el-form v-else-if="canPrintRoomHandle" label-width="120px" class="mailing-form">
-        <el-form-item label="收件人">
-          <el-input :model-value="latestProjectRecord?.receiver_name || '-'" disabled />
-        </el-form-item>
-        <el-form-item label="联系电话">
-          <el-input :model-value="latestProjectRecord?.receiver_phone || '-'" disabled />
-        </el-form-item>
-        <el-form-item label="收件地址">
-          <el-input :model-value="latestProjectRecord?.receiver_address || '-'" type="textarea" :rows="3" disabled />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input :model-value="latestProjectRecord?.receiver_remark || '-'" type="textarea" :rows="2" disabled />
-        </el-form-item>
-        <el-form-item label="快递单号">
-          <el-input v-model="expressNo" />
-        </el-form-item>
-        <div class="mailing-actions">
-          <el-button @click="copyMailingInfo">一键复制信息</el-button>
-          <el-button type="primary" @click="submitExpress">提交快递单号</el-button>
-        </div>
-      </el-form>
+        <el-form v-else-if="canPrintRoomHandle" label-width="120px" class="mailing-form">
+          <el-form-item label="收件人">
+            <el-input :model-value="latestProjectRecord?.receiver_name || '-'" disabled />
+          </el-form-item>
+          <el-form-item label="联系电话">
+            <el-input :model-value="latestProjectRecord?.receiver_phone || '-'" disabled />
+          </el-form-item>
+          <el-form-item label="收件地址">
+            <el-input :model-value="latestProjectRecord?.receiver_address || '-'" type="textarea" :rows="3" disabled />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input :model-value="latestProjectRecord?.receiver_remark || '-'" type="textarea" :rows="2" disabled />
+          </el-form-item>
+          <el-form-item label="快递单号">
+            <el-input v-model="expressNo" />
+          </el-form-item>
+          <div class="mailing-actions">
+            <el-button @click="copyMailingInfo">一键复制信息</el-button>
+            <el-button type="primary" @click="submitExpress">提交快递单号</el-button>
+          </div>
+        </el-form>
 
-      <el-form v-else-if="canProjectConfirm" label-width="120px" class="mailing-form">
-        <el-form-item label="收件人">
-          <el-input :model-value="latestProjectRecord?.receiver_name || '-'" disabled />
-        </el-form-item>
-        <el-form-item label="联系电话">
-          <el-input :model-value="latestProjectRecord?.receiver_phone || '-'" disabled />
-        </el-form-item>
-        <el-form-item label="收件地址">
-          <el-input :model-value="latestProjectRecord?.receiver_address || '-'" type="textarea" :rows="3" disabled />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input :model-value="latestProjectRecord?.receiver_remark || '-'" type="textarea" :rows="2" disabled />
-        </el-form-item>
-        <el-form-item label="快递单号">
-          <el-input :model-value="latestPrintRoomRecord?.express_no || '-'" disabled />
-        </el-form-item>
-        <el-form-item v-if="latestInvalidatedExpressNo" label="失效快递单号">
-          <el-input :model-value="latestInvalidatedExpressNo" disabled />
-        </el-form-item>
-        <div class="mailing-actions">
-          <el-button type="success" @click="confirmMailing">确认已寄出</el-button>
-          <el-button type="warning" plain @click="startModify">更改邮寄信息</el-button>
+        <el-form v-else-if="canProjectConfirm" label-width="120px" class="mailing-form">
+          <el-form-item label="收件人">
+            <el-input :model-value="latestProjectRecord?.receiver_name || '-'" disabled />
+          </el-form-item>
+          <el-form-item label="联系电话">
+            <el-input :model-value="latestProjectRecord?.receiver_phone || '-'" disabled />
+          </el-form-item>
+          <el-form-item label="收件地址">
+            <el-input :model-value="latestProjectRecord?.receiver_address || '-'" type="textarea" :rows="3" disabled />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input :model-value="latestProjectRecord?.receiver_remark || '-'" type="textarea" :rows="2" disabled />
+          </el-form-item>
+          <el-form-item label="快递单号">
+            <el-input :model-value="latestPrintRoomRecord?.express_no || '-'" disabled />
+          </el-form-item>
+          <el-form-item v-if="latestInvalidatedExpressNo" label="失效快递单号">
+            <el-input :model-value="latestInvalidatedExpressNo" disabled />
+          </el-form-item>
+          <div class="mailing-actions">
+            <el-button type="success" @click="confirmMailing">确认已寄出</el-button>
+            <el-button type="warning" plain @click="startModify">更改邮寄信息</el-button>
+          </div>
+        </el-form>
+      </div>
+
+      <aside class="mailing-side">
+        <div class="mailing-note-card">
+          <div class="mailing-note-title">当前状态</div>
+          <div class="mailing-note-status">{{ latestRecord ? (actionTypeDisplayMap[latestRecord.action_type] || latestRecord.action_type) : '待填写邮寄信息' }}</div>
+          <div class="mailing-note-subtitle">当前页优先处理收件信息、快递单号和寄出确认。</div>
+          <ol class="mailing-note-list">
+            <li>项目方先确认收件人、电话和地址完整准确。</li>
+            <li>文印室录入快递单号后，项目方再做最终寄出确认。</li>
+            <li>邮寄记录下沉到页面底部统一查看。</li>
+          </ol>
         </div>
-      </el-form>
+      </aside>
     </div>
 
     <el-divider>邮寄记录</el-divider>
@@ -294,11 +309,12 @@ watch(() => [props.workOrderId, props.flowInfo?.mailing_status], load)
 <style scoped>
 .mailing-layout {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 16px;
 }
 
 .mailing-form {
-  max-width: 720px;
+  max-width: 760px;
 }
 
 .mailing-actions {
@@ -309,5 +325,50 @@ watch(() => [props.workOrderId, props.flowInfo?.mailing_status], load)
 
 .mailing-actions-top {
   margin-top: 12px;
+}
+
+.mailing-main,
+.mailing-side {
+  min-width: 0;
+}
+
+.mailing-note-card {
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.mailing-note-title {
+  color: #0c3157;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mailing-note-status {
+  margin-top: 12px;
+  color: #153a63;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.mailing-note-subtitle {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.mailing-note-list {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+@media (max-width: 960px) {
+  .mailing-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
