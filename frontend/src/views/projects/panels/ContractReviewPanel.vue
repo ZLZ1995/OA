@@ -89,55 +89,95 @@
 
     <el-card v-if="showPrintRoomSection" shadow="never" style="margin-bottom: 16px">
       <template #header>文印室处理</template>
-      <el-descriptions :column="2" border style="margin-bottom: 16px">
-        <el-descriptions-item label="当前文印室人员">{{ flowInfo?.project.print_room_handler_name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="项目负责人">{{ flowInfo?.project.project_leader_display_name || '-' }}</el-descriptions-item>
-      </el-descriptions>
-      <el-form label-width="140px">
-        <el-form-item label="上传盖章扫描件" v-if="canPrintRoomProcess">
-          <el-upload :auto-upload="false" :on-change="onStampedScanSelected" :show-file-list="false">
-            <el-button type="primary">上传盖章扫描件</el-button>
-          </el-upload>
-        </el-form-item>
-        <el-form-item label="发送说明" v-if="canPrintRoomProcess">
-          <el-input v-model="printRoomRemark" type="textarea" :rows="2" placeholder="可选，发送给项目负责人时附言" />
-        </el-form-item>
-        <el-form-item v-if="canPrintRoomProcess">
-          <el-button type="success" :disabled="stampedFiles.length === 0" @click="onSendToProjectLeader">发送给项目负责人</el-button>
-        </el-form-item>
-      </el-form>
-      <el-table :data="stampedFiles" empty-text="暂无盖章扫描件">
-        <el-table-column prop="origin_file_name" label="文件名" min-width="240" />
-        <el-table-column prop="uploaded_by_name" label="上传人" min-width="120" />
-        <el-table-column prop="uploaded_at" label="上传时间" min-width="190" />
-        <el-table-column label="操作" width="120">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="download(row)">下载</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="contract-stage-layout">
+        <div class="contract-stage-main">
+          <el-descriptions :column="2" border style="margin-bottom: 16px">
+            <el-descriptions-item label="当前文印室人员">{{ flowInfo?.project.print_room_handler_name || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="项目负责人">{{ flowInfo?.project.project_leader_display_name || '-' }}</el-descriptions-item>
+          </el-descriptions>
+          <el-form label-width="140px">
+            <el-form-item label="上传盖章扫描件" v-if="canPrintRoomProcess">
+              <el-upload :auto-upload="false" :on-change="onStampedScanSelected" :show-file-list="false">
+                <el-button type="primary">上传盖章扫描件</el-button>
+              </el-upload>
+            </el-form-item>
+            <el-form-item label="发送说明" v-if="canPrintRoomProcess">
+              <el-input v-model="printRoomRemark" type="textarea" :rows="2" placeholder="可选，发送给项目负责人时附言" />
+            </el-form-item>
+            <el-form-item v-if="canPrintRoomProcess">
+              <el-button type="success" :disabled="stampedFiles.length === 0" @click="onSendToProjectLeader">发送给项目负责人</el-button>
+            </el-form-item>
+          </el-form>
+          <el-table :data="stampedFiles" empty-text="暂无盖章扫描件">
+            <el-table-column prop="origin_file_name" label="文件名" min-width="240" />
+            <el-table-column prop="uploaded_by_name" label="上传人" min-width="120" />
+            <el-table-column prop="uploaded_at" label="上传时间" min-width="190" />
+            <el-table-column label="操作" width="120">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="download(row)">下载</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <aside class="contract-stage-side">
+          <div class="stage-note-card">
+            <div class="stage-note-title">当前环节所需文件要求</div>
+            <ol class="stage-note-list">
+              <li>上传已盖章合同扫描件。</li>
+              <li>确认文件清晰、页数完整、顺序正确。</li>
+              <li>发送前核对接收人为当前项目负责人。</li>
+            </ol>
+            <p class="stage-note-emphasis">本环节只处理合同盖章扫描件，不承载报告送审材料要求。</p>
+          </div>
+        </aside>
+      </div>
     </el-card>
 
     <el-card v-if="showLeaderConfirmSection" shadow="never" style="margin-bottom: 16px">
       <template #header>项目负责人确认</template>
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        title="文印室已上传盖章扫描件，请确认是否无误。"
-        style="margin-bottom: 16px"
-      />
-      <el-form label-width="120px">
-        <el-form-item label="退回原因">
-          <el-input v-model="leaderRemark" type="textarea" :rows="2" placeholder="退回文印室时请填写原因" />
-        </el-form-item>
-        <el-form-item v-if="canProjectLeaderConfirm">
-          <el-space>
-            <el-button type="danger" plain @click="onReturnToPrintRoom">退回文印室</el-button>
-            <el-button type="success" @click="onConfirmComplete">确认办结</el-button>
-          </el-space>
-        </el-form-item>
-      </el-form>
+      <div class="contract-stage-layout">
+        <div class="contract-stage-main">
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="文印室已上传盖章扫描件，请确认是否无误。"
+            style="margin-bottom: 16px"
+          />
+          <el-table :data="stampedFiles" empty-text="暂无盖章扫描件" style="margin-bottom: 16px">
+            <el-table-column prop="origin_file_name" label="文件名" min-width="240" />
+            <el-table-column prop="uploaded_by_name" label="上传人" min-width="120" />
+            <el-table-column prop="uploaded_at" label="上传时间" min-width="190" />
+            <el-table-column label="操作" width="120">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="download(row)">下载</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-form label-width="120px">
+            <el-form-item label="退回原因">
+              <el-input v-model="leaderRemark" type="textarea" :rows="2" placeholder="退回文印室时请填写原因" />
+            </el-form-item>
+            <el-form-item v-if="canProjectLeaderConfirm">
+              <el-space>
+                <el-button type="danger" plain @click="onReturnToPrintRoom">退回文印室</el-button>
+                <el-button type="success" @click="onConfirmComplete">确认办结</el-button>
+              </el-space>
+            </el-form-item>
+          </el-form>
+        </div>
+        <aside class="contract-stage-side">
+          <div class="stage-note-card">
+            <div class="stage-note-title">确认说明</div>
+            <ol class="stage-note-list">
+              <li>核对扫描件是否完整清晰。</li>
+              <li>核对页数、盖章位置与原合同是否一致。</li>
+              <li>如有问题，退回文印室重新上传。</li>
+            </ol>
+            <p class="stage-note-emphasis">本页不展示“待审文件要求”，仅保留负责人的确认说明。</p>
+          </div>
+        </aside>
+      </div>
     </el-card>
 
     <el-divider>合同流程记录</el-divider>
@@ -186,8 +226,19 @@ import { confirmContractComplete, returnContractToPrintRoom, sendContractToProje
 import { listUserCandidates, type UserItem } from '@/api/users'
 import { useAuthStore } from '@/store/auth'
 
-const props = defineProps<{ workOrderId?: number; flowInfo?: ProjectFlowData; userRoles?: string[] }>()
-const emit = defineEmits<{ (e: 'changed'): void }>()
+const props = defineProps<{
+  projectId?: number
+  workOrderId?: number
+  flowInfo?: ProjectFlowData
+  userRoles?: string[]
+  canEdit?: boolean
+  canOperate?: boolean
+  userRoleInProject?: string
+}>()
+const emit = defineEmits<{
+  (e: 'changed'): void
+  (e: 'navigate', key: string): void
+}>()
 const auth = useAuthStore()
 
 const loading = ref(false)
@@ -241,7 +292,7 @@ const canTransferApprovedContract = computed(() => Boolean(
   )
 ))
 
-const showPrintRoomSection = computed(() => ['WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(contractPrintRoomStatus.value))
+const showPrintRoomSection = computed(() => ['WAIT_PRINT_ROOM_PROCESS'].includes(contractPrintRoomStatus.value))
 const showLeaderConfirmSection = computed(() => ['WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(contractPrintRoomStatus.value))
 
 function actionLabel(actionType: ContractReviewRecordItem['action_type']) {
@@ -393,5 +444,53 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
   align-items: center;
   gap: 8px;
   margin-left: 12px;
+}
+
+.contract-stage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+.contract-stage-main {
+  min-width: 0;
+}
+
+.contract-stage-side {
+  min-width: 0;
+}
+
+.stage-note-card {
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.stage-note-title {
+  color: #0c3157;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.stage-note-list {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.stage-note-emphasis {
+  margin: 12px 0 0;
+  color: #d45b2c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 960px) {
+  .contract-stage-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

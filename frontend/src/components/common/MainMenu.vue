@@ -7,6 +7,7 @@
         <span>流程管理系统</span>
       </div>
     </div>
+    <div class="menu-section-label">业务入口</div>
     <el-menu :default-active="active" class="menu" router>
       <template v-for="item in visibleMenus" :key="item.key">
         <el-sub-menu v-if="item.children?.length" :index="item.key">
@@ -28,6 +29,7 @@
         </el-menu-item>
       </template>
     </el-menu>
+    <div class="menu-section-label secondary">帮助与反馈</div>
     <div class="menu-actions">
       <el-button plain class="feedback-btn" @click="feedbackVisible = true">问题反馈</el-button>
     </div>
@@ -177,6 +179,17 @@ async function submitFeedback() {
   border-right: 0;
 }
 
+.menu-section-label {
+  padding: 12px 16px 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.menu-section-label.secondary {
+  padding-top: 8px;
+}
+
 .menu :deep(.el-menu-item) {
   height: 44px;
   margin: 6px 10px;
@@ -214,11 +227,13 @@ async function submitFeedback() {
 .menu-actions {
   padding: 12px;
   border-top: 1px solid var(--zq-border-soft);
+  background: #fbfcfe;
 }
 
 .feedback-btn {
   width: 100%;
   margin-left: 0;
+  color: #475569;
 }
 
 .menu-item-title {

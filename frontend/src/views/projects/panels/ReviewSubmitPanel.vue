@@ -1401,13 +1401,13 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 
 .review-upload-main {
   flex: 1;
-  min-width: 260px;
+  min-width: 320px;
   display: grid;
   gap: 14px;
 }
 
 .review-upload-side {
-  width: 362px;
+  width: 320px;
   display: grid;
   gap: 14px;
 }
@@ -1422,7 +1422,7 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 .file-zone-card {
   border: 1px solid #d8e5f2;
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 16px;
   background: linear-gradient(135deg, #f8fbff 0%, #ffffff 68%);
   box-shadow: 0 8px 22px rgba(21, 78, 128, 0.06);
 }
@@ -1456,7 +1456,8 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 .file-zone-subtitle {
   color: #6b7d90;
   font-size: 12px;
-  margin-top: 4px;
+  margin-top: 6px;
+  line-height: 1.6;
 }
 
 .file-row-list {
@@ -1470,7 +1471,7 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 10px;
+  padding: 10px 12px;
   border: 1px solid #e4edf6;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.86);
@@ -1538,6 +1539,11 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   white-space: nowrap;
 }
 
+.review-upload-side :deep(.review-requirement-box) {
+  position: sticky;
+  top: 0;
+}
+
 @media (max-width: 900px) {
   .review-upload-block {
     flex-direction: column;
@@ -1550,6 +1556,10 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 
   .review-upload-side {
     width: 100%;
+  }
+
+  .review-upload-side :deep(.review-requirement-box) {
+    position: static;
   }
 
   .file-zone-header,

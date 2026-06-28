@@ -1,112 +1,134 @@
 <template>
-  <el-card class="page-card" shadow="never">
-    <template #header>&#39033;&#30446;&#21015;&#34920;</template>
+  <div class="project-list-page">
+    <el-card class="page-card project-list-card" shadow="never">
+      <template #header>
+        <div class="page-header">
+          <div>
+            <h2>{{ t.pageTitle }}</h2>
+            <p>{{ t.pageSubtitle }}</p>
+          </div>
+          <el-button type="primary" @click="createVisible = true">{{ t.createProject }}</el-button>
+        </div>
+      </template>
 
-    <el-form label-width="120px" @submit.prevent>
-      <el-row :gutter="12">
-        <el-col :span="8">
-          <el-form-item :label="t.projectCode">
-            <el-input v-model="form.project_code" :placeholder="t.projectCodePlaceholder" />
-            <div style="margin-top: 8px">
-              <el-button text type="primary" :loading="generatingCode" @click="onGenerateCode">{{ t.generateCode }}</el-button>
-            </div>
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.undertakingUnit">
-            <el-select v-model="form.undertaking_unit" style="width: 100%">
-              <el-option :label="u.zhongqin" :value="u.zhongqin" />
-              <el-option :label="u.zhongli" :value="u.zhongli" />
-              <el-option :label="u.zhongzhong" :value="u.zhongzhong" />
-              <el-option :label="u.other" :value="u.other" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.evalNature">
-            <el-select v-model="form.evaluation_business_nature" style="width: 100%">
-              <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.reportType">
-            <el-select v-model="form.report_type" style="width: 100%">
-              <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.projectName">
-            <el-input v-model="form.project_name" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.clientName">
-            <el-input v-model="form.client_name" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.baseDate">
-            <el-date-picker v-model="form.valuation_base_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.salesman">
-            <el-input v-model="form.business_salesman" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.projectSource">
-            <el-radio-group v-model="form.project_source">
-              <el-radio-button value="INTERNAL">{{ t.departmentOne }}</el-radio-button>
-              <el-radio-button value="EXTERNAL">{{ t.departmentTwo }}</el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item :label="t.projectLeader">
-            <el-input
-              v-if="form.project_source === 'EXTERNAL'"
-              v-model="form.external_project_leader_name"
-              :placeholder="t.projectLeaderPlaceholder"
-            />
-            <el-input v-else :model-value="currentUserDisplayName" disabled />
-          </el-form-item>
-        </el-col>
-        <el-col :span="24">
-          <el-form-item>
-            <el-button type="primary" @click="onCreate">{{ t.createProject }}</el-button>
-          </el-form-item>
-        </el-col>
-      </el-row>
-    </el-form>
+      <div class="filter-bar">
+        <el-input v-model="filters.keyword" :placeholder="t.keywordPlaceholder" clearable class="filter-item" />
+        <el-select v-model="filters.status" :placeholder="t.currentStatus" clearable class="filter-item">
+          <el-option v-for="status in statusOptions" :key="status" :label="status" :value="status" />
+        </el-select>
+        <el-select v-model="filters.reportType" :placeholder="t.reportType" clearable class="filter-item">
+          <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select v-model="filters.source" :placeholder="t.projectSource" clearable class="filter-item">
+          <el-option :label="t.departmentOne" value="评估一部" />
+          <el-option :label="t.departmentTwo" value="评估二部" />
+        </el-select>
+        <el-button @click="resetFilters">{{ t.reset }}</el-button>
+      </div>
 
-    <el-table :data="rows" style="margin-top: 12px" v-loading="loading">
-      <el-table-column prop="project_code" :label="t.projectCode" min-width="150" />
-      <el-table-column prop="project_name" :label="t.projectName" min-width="160" />
-      <el-table-column prop="client_name" :label="t.clientName" min-width="160" />
-      <el-table-column prop="evaluation_business_nature" :label="t.evalNature" min-width="160" />
-      <el-table-column prop="report_type" :label="t.reportType" min-width="110" />
-      <el-table-column prop="valuation_base_date" :label="t.baseDate" min-width="120" />
-      <el-table-column prop="business_salesman" :label="t.salesman" min-width="140" />
-      <el-table-column prop="project_source_display" :label="t.projectSource" min-width="100" />
-      <el-table-column prop="display_project_leader_name" :label="t.projectLeader" min-width="130" />
-      <el-table-column prop="contract_review_status_display" :label="t.contractReviewStatus" min-width="130" />
-      <el-table-column prop="status_display" :label="t.currentStatus" min-width="120" />
-      <el-table-column :label="t.actions" width="220" fixed="right">
-        <template #default="{ row }">
-          <el-button type="primary" link @click="goDetail(row.id)">{{ t.detail }}</el-button>
-          <el-button type="warning" link @click="onArchive(row)">{{ t.archive }}</el-button>
-          <el-button type="danger" link @click="onDelete(row)">{{ t.delete }}</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-  </el-card>
+      <el-table :data="filteredRows" v-loading="loading" class="project-table">
+        <el-table-column prop="project_code" :label="t.projectCode" min-width="150" />
+        <el-table-column prop="project_name" :label="t.projectName" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="client_name" :label="t.clientName" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="report_type" :label="t.reportType" min-width="110" />
+        <el-table-column prop="display_project_leader_name" :label="t.projectLeader" min-width="130" />
+        <el-table-column prop="contract_review_status_display" :label="t.contractReviewStatus" min-width="130" />
+        <el-table-column prop="status_display" :label="t.currentStatus" min-width="120" />
+        <el-table-column :label="t.actions" width="260" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="goDetail(row.id)">{{ t.enterProject }}</el-button>
+            <el-button type="warning" link @click="onArchive(row)">{{ t.archive }}</el-button>
+            <el-button type="danger" link @click="onDelete(row)">{{ t.delete }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-dialog v-model="createVisible" :title="t.createProject" width="920px">
+      <el-form label-width="120px" @submit.prevent>
+        <el-row :gutter="12">
+          <el-col :span="8">
+            <el-form-item :label="t.projectCode">
+              <el-input v-model="form.project_code" :placeholder="t.projectCodePlaceholder" />
+              <div class="inline-action">
+                <el-button text type="primary" :loading="generatingCode" @click="onGenerateCode">{{ t.generateCode }}</el-button>
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.undertakingUnit">
+              <el-select v-model="form.undertaking_unit" style="width: 100%">
+                <el-option :label="u.zhongqin" :value="u.zhongqin" />
+                <el-option :label="u.zhongli" :value="u.zhongli" />
+                <el-option :label="u.zhongzhong" :value="u.zhongzhong" />
+                <el-option :label="u.other" :value="u.other" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.evalNature">
+              <el-select v-model="form.evaluation_business_nature" style="width: 100%">
+                <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.reportType">
+              <el-select v-model="form.report_type" style="width: 100%">
+                <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.projectName">
+              <el-input v-model="form.project_name" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.clientName">
+              <el-input v-model="form.client_name" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.baseDate">
+              <el-date-picker v-model="form.valuation_base_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.salesman">
+              <el-input v-model="form.business_salesman" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.projectSource">
+              <el-radio-group v-model="form.project_source">
+                <el-radio-button value="INTERNAL">{{ t.departmentOne }}</el-radio-button>
+                <el-radio-button value="EXTERNAL">{{ t.departmentTwo }}</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="t.projectLeader">
+              <el-input
+                v-if="form.project_source === 'EXTERNAL'"
+                v-model="form.external_project_leader_name"
+                :placeholder="t.projectLeaderPlaceholder"
+              />
+              <el-input v-else :model-value="currentUserDisplayName" disabled />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">{{ t.cancel }}</el-button>
+        <el-button type="primary" @click="onCreate">{{ t.createProject }}</el-button>
+      </template>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import {
@@ -124,85 +146,137 @@ import {
 import { useAuthStore } from '@/store/auth'
 
 const t = {
-  projectCode: '\u9879\u76ee\u7f16\u53f7',
-  projectCodePlaceholder: '\u53ef\u7559\u7a7a\u81ea\u52a8\u751f\u6210',
-  generateCode: '\u751f\u6210\u7f16\u53f7',
-  undertakingUnit: '\u627f\u63a5\u5355\u4f4d',
-  evalNature: '\u8bc4\u4f30\u4e1a\u52a1\u6027\u8d28',
-  reportType: '\u62a5\u544a\u7c7b\u578b',
-  projectName: '\u9879\u76ee\u540d\u79f0',
-  clientName: '\u5ba2\u6237\u540d\u79f0',
-  baseDate: '\u8bc4\u4f30\u57fa\u51c6\u65e5',
-  salesman: '\u9879\u76ee\u627f\u63a5\u4e1a\u52a1\u5458',
-  projectSource: '\u9879\u76ee\u6765\u6e90',
-  departmentOne: '\u8bc4\u4f30\u4e00\u90e8',
-  departmentTwo: '\u8bc4\u4f30\u4e8c\u90e8',
-  projectLeader: '\u9879\u76ee\u8d1f\u8d23\u4eba',
-  projectLeaderPlaceholder: '\u8bf7\u8f93\u5165\u9879\u76ee\u8d1f\u8d23\u4eba\u59d3\u540d',
-  createProject: '\u65b0\u5efa\u9879\u76ee',
-  contractReviewStatus: '\u5408\u540c\u5ba1\u6838\u72b6\u6001',
-  currentStatus: '\u5f53\u524d\u72b6\u6001',
-  actions: '\u64cd\u4f5c',
-  detail: '\u8be6\u60c5',
-  archive: '\u5f52\u6863',
-  delete: '\u5220\u9664',
-  loginExpired: '\u767b\u5f55\u72b6\u6001\u5df2\u5931\u6548\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55',
-  fillBasicInfo: '\u8bf7\u586b\u5199\u5b8c\u6574\u9879\u76ee\u57fa\u7840\u4fe1\u606f',
-  fillSalesman: '\u8bf7\u586b\u5199\u9879\u76ee\u627f\u63a5\u4e1a\u52a1\u5458',
-  fillLeader: '\u8bc4\u4f30\u4e8c\u90e8\u9879\u76ee\u5fc5\u987b\u586b\u5199\u9879\u76ee\u8d1f\u8d23\u4eba',
-  created: '\u9879\u76ee\u521b\u5efa\u6210\u529f',
-  noPermission: '\u65e0\u6743\u9650\u521b\u5efa\u9879\u76ee',
-  paramError: '\u9879\u76ee\u53c2\u6570\u9519\u8bef\uff0c\u8bf7\u68c0\u67e5\u5fc5\u586b\u9879',
-  serverError: '\u670d\u52a1\u5668\u5f02\u5e38\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5',
-  createFailed: '\u521b\u5efa\u9879\u76ee\u5931\u8d25',
-  generated: '\u5df2\u751f\u6210\u9879\u76ee\u7f16\u53f7',
-  generateFailed: '\u751f\u6210\u9879\u76ee\u7f16\u53f7\u5931\u8d25',
-  deleteConfirmText: '\u786e\u8ba4\u5220\u9664\u8be5\u9879\u76ee\u5417\uff1f\u5220\u9664\u540e\u4e0d\u53ef\u6062\u590d\u3002',
-  deleteConfirmTitle: '\u5220\u9664\u786e\u8ba4',
-  deleted: '\u9879\u76ee\u5df2\u5220\u9664',
-  archiveConfirmText: '\u786e\u8ba4\u5f52\u6863\u8be5\u9879\u76ee\u5417\uff1f\u5f52\u6863\u540e\u8868\u793a\u8be5\u9879\u76ee\u6d41\u7a0b\u5df2\u7ed3\u675f\uff0c\u4e0d\u518d\u8fdb\u5165\u540e\u7eed\u5de5\u5355\u529e\u7406\u8303\u56f4\u3002',
-  archiveConfirmTitle: '\u5f52\u6863\u786e\u8ba4',
-  archived: '\u9879\u76ee\u5df2\u5f52\u6863',
+  pageTitle: '项目列表',
+  pageSubtitle: '按项目快速进入流程，创建入口收纳在右上角。',
+  projectCode: '项目编号',
+  projectCodePlaceholder: '可留空自动生成',
+  generateCode: '生成编号',
+  undertakingUnit: '承接单位',
+  evalNature: '评估业务性质',
+  reportType: '报告类型',
+  projectName: '项目名称',
+  clientName: '客户名称',
+  baseDate: '评估基准日',
+  salesman: '项目承接业务员',
+  projectSource: '项目来源',
+  departmentOne: '评估一部',
+  departmentTwo: '评估二部',
+  projectLeader: '项目负责人',
+  projectLeaderPlaceholder: '请输入项目负责人姓名',
+  createProject: '新建项目',
+  contractReviewStatus: '合同审核状态',
+  currentStatus: '当前状态',
+  actions: '操作',
+  enterProject: '进入项目',
+  archive: '归档',
+  delete: '删除',
+  reset: '重置',
+  cancel: '取消',
+  keywordPlaceholder: '搜索项目编号 / 名称 / 客户名称',
+  loginExpired: '登录状态已失效，请重新登录',
+  fillBasicInfo: '请填写完整项目基础信息',
+  fillSalesman: '请填写项目承接业务员',
+  fillLeader: '评估二部项目必须填写项目负责人',
+  created: '项目创建成功',
+  noPermission: '无权限创建项目',
+  paramError: '项目参数错误，请检查必填项',
+  serverError: '服务器异常，请稍后重试',
+  createFailed: '创建项目失败',
+  generated: '已生成项目编号',
+  generateFailed: '生成项目编号失败',
+  deleteConfirmText: '确认删除该项目吗？删除后不可恢复。',
+  deleteConfirmTitle: '删除确认',
+  deleted: '项目已删除',
+  archiveConfirmText: '确认归档该项目吗？归档后表示该项目流程已结束，不再进入后续工单办理范围。',
+  archiveConfirmTitle: '归档确认',
+  archived: '项目已归档',
 }
 
 const u = {
-  zhongqin: '\u4e2d\u52e4' as ProjectUndertakingUnit,
-  zhongli: '\u4e2d\u7acb\u56fd\u9645' as ProjectUndertakingUnit,
-  zhongzhong: '\u4e2d\u4f17' as ProjectUndertakingUnit,
-  other: '\u5176\u4ed6' as ProjectUndertakingUnit,
+  zhongqin: '中勤' as ProjectUndertakingUnit,
+  zhongli: '中立国际' as ProjectUndertakingUnit,
+  zhongzhong: '中众' as ProjectUndertakingUnit,
+  other: '其他' as ProjectUndertakingUnit,
 }
 
 const evaluationBusinessOptions: EvaluationBusinessNature[] = [
-  '\u56fd\u6709\u8d44\u4ea7\u8bc4\u4f30\u4e1a\u52a1',
-  '\u5883\u5916\u8d44\u4ea7\u8bc4\u4f30\u4e1a\u52a1',
-  '\u8bc1\u5238\u671f\u8d27\u8bc4\u4f30\u4e1a\u52a1',
-  '\u53f8\u6cd5\u8bc4\u4f30\u4e1a\u52a1',
-  '\u91d1\u878d\u8d44\u4ea7\u8bc4\u4f30\u4e1a\u52a1',
-  '\u73e0\u5b9d\u9996\u9970\u8bc4\u4f30\u4e1a\u52a1',
-  '\u5176\u4ed6',
+  '国有资产评估业务',
+  '境外资产评估业务',
+  '证券期货评估业务',
+  '司法评估业务',
+  '金融资产评估业务',
+  '珠宝首饰评估业务',
+  '其他',
 ]
 
-const reportTypeOptions: ReportType[] = ['\u8bc4\u4f30\u62a5\u544a', '\u4f30\u503c\u62a5\u544a', '\u54a8\u8be2\u62a5\u544a', '\u590d\u6838\u62a5\u544a', '\u8ffd\u6eaf\u6027\u62a5\u544a']
+const reportTypeOptions: ReportType[] = ['评估报告', '估值报告', '咨询报告', '复核报告', '追溯性报告']
 
 const auth = useAuthStore()
 const router = useRouter()
 const loading = ref(false)
 const rows = ref<ProjectItem[]>([])
+const createVisible = ref(false)
 const generatingCode = ref(false)
-const currentUserDisplayName = auth.user?.real_name || auth.user?.username || '\u5f53\u524d\u521b\u5efa\u4eba'
+const currentUserDisplayName = auth.user?.real_name || auth.user?.username || '当前创建人'
+
+const filters = reactive({
+  keyword: '',
+  status: '',
+  reportType: '',
+  source: '',
+})
 
 const form = reactive({
   project_code: '',
-  undertaking_unit: '\u4e2d\u52e4' as ProjectUndertakingUnit,
+  undertaking_unit: '中勤' as ProjectUndertakingUnit,
   project_name: '',
   client_name: '',
-  evaluation_business_nature: '\u56fd\u6709\u8d44\u4ea7\u8bc4\u4f30\u4e1a\u52a1' as EvaluationBusinessNature,
-  report_type: '\u8bc4\u4f30\u62a5\u544a' as ReportType,
+  evaluation_business_nature: '国有资产评估业务' as EvaluationBusinessNature,
+  report_type: '评估报告' as ReportType,
   valuation_base_date: '',
   business_salesman: '',
   project_source: 'INTERNAL' as ProjectSource,
   external_project_leader_name: '',
 })
+
+const statusOptions = computed(() =>
+  Array.from(new Set(rows.value.map(item => item.status_display).filter((value): value is string => Boolean(value)))),
+)
+
+const filteredRows = computed(() =>
+  rows.value.filter(row => {
+    const keyword = filters.keyword.trim().toLowerCase()
+    const matchesKeyword =
+      !keyword ||
+      row.project_code?.toLowerCase().includes(keyword) ||
+      row.project_name?.toLowerCase().includes(keyword) ||
+      row.client_name?.toLowerCase().includes(keyword)
+    const matchesStatus = !filters.status || row.status_display === filters.status
+    const matchesType = !filters.reportType || row.report_type === filters.reportType
+    const matchesSource = !filters.source || row.project_source_display === filters.source
+    return matchesKeyword && matchesStatus && matchesType && matchesSource
+  }),
+)
+
+function resetForm() {
+  form.project_code = ''
+  form.undertaking_unit = u.zhongqin
+  form.project_name = ''
+  form.client_name = ''
+  form.evaluation_business_nature = '国有资产评估业务'
+  form.report_type = '评估报告'
+  form.valuation_base_date = ''
+  form.business_salesman = ''
+  form.project_source = 'INTERNAL'
+  form.external_project_leader_name = ''
+}
+
+function resetFilters() {
+  filters.keyword = ''
+  filters.status = ''
+  filters.reportType = ''
+  filters.source = ''
+}
 
 async function loadProjects() {
   loading.value = true
@@ -266,16 +340,8 @@ async function onCreate() {
       project_leader_id: currentUser.id,
     })
     ElMessage.success(t.created)
-    form.project_code = ''
-    form.undertaking_unit = u.zhongqin
-    form.project_name = ''
-    form.client_name = ''
-    form.evaluation_business_nature = '\u56fd\u6709\u8d44\u4ea7\u8bc4\u4f30\u4e1a\u52a1'
-    form.report_type = '\u8bc4\u4f30\u62a5\u544a'
-    form.valuation_base_date = ''
-    form.business_salesman = ''
-    form.project_source = 'INTERNAL'
-    form.external_project_leader_name = ''
+    createVisible.value = false
+    resetForm()
     await loadProjects()
   } catch (error: any) {
     const status = error?.response?.status
@@ -321,3 +387,67 @@ function goDetail(projectId: number) {
 
 onMounted(loadProjects)
 </script>
+
+<style scoped>
+.project-list-page {
+  display: grid;
+  gap: 16px;
+}
+
+.project-list-card :deep(.el-card__header) {
+  padding-bottom: 12px;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-header h2,
+.page-header p {
+  margin: 0;
+}
+
+.page-header h2 {
+  font-size: 20px;
+  color: #153a63;
+}
+
+.page-header p {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(160px, 1fr)) auto;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.filter-item {
+  width: 100%;
+}
+
+.project-table :deep(.el-button + .el-button) {
+  margin-left: 8px;
+}
+
+.inline-action {
+  margin-top: 8px;
+}
+
+@media (max-width: 960px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-bar {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

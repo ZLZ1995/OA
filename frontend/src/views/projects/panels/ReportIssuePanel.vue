@@ -17,95 +17,111 @@
   />
 
   <template v-if="workOrderId">
-    <el-form label-width="120px">
-      <el-form-item label="正式合同编号">
-        <el-input v-model="contractNo" :disabled="!canPrintRoom" />
-      </el-form-item>
-      <el-form-item label="纸质报告编号">
-        <el-input v-model="paperReportNo" :disabled="!canPrintRoom" />
-      </el-form-item>
-      <el-form-item label="签字评估师">
-        <el-space direction="vertical" alignment="start">
-          <el-input v-model="signerOne" disabled placeholder="签字评估师一" style="width: 260px" />
-          <el-input v-model="signerTwo" disabled placeholder="签字评估师二" style="width: 260px" />
-        </el-space>
-      </el-form-item>
+    <div class="issue-stage-layout">
+      <div class="issue-stage-main">
+        <el-form label-width="120px">
+          <el-form-item label="正式合同编号">
+            <el-input v-model="contractNo" :disabled="!canPrintRoom" />
+          </el-form-item>
+          <el-form-item label="纸质报告编号">
+            <el-input v-model="paperReportNo" :disabled="!canPrintRoom" />
+          </el-form-item>
+          <el-form-item label="签字评估师">
+            <el-space direction="vertical" alignment="start">
+              <el-input v-model="signerOne" disabled placeholder="签字评估师一" style="width: 260px" />
+              <el-input v-model="signerTwo" disabled placeholder="签字评估师二" style="width: 260px" />
+            </el-space>
+          </el-form-item>
 
-      <el-form-item label="签发文件">
-        <div class="issue-file-grid">
-          <el-card shadow="never" class="issue-file-card">
-            <template #header>报告文件</template>
-            <div v-if="reviewPackageFiles.length" class="download-list">
-              <div v-for="file in reviewPackageFiles" :key="file.id" class="download-item">
+          <el-form-item label="签发文件">
+            <div class="issue-file-grid">
+              <el-card shadow="never" class="issue-file-card">
+                <template #header>报告文件</template>
+                <div v-if="reviewPackageFiles.length" class="download-list">
+                  <div v-for="file in reviewPackageFiles" :key="file.id" class="download-item">
+                    <span>{{ file.origin_file_name }}</span>
+                    <el-button type="primary" link @click="download(file)">下载</el-button>
+                  </div>
+                </div>
+                <span v-else>-</span>
+              </el-card>
+
+              <el-card shadow="never" class="issue-file-card">
+                <template #header>报告附件</template>
+                <div v-if="formalReportFiles.length" class="download-list">
+                  <div v-for="file in formalReportFiles" :key="file.id" class="download-item">
+                    <span>{{ file.origin_file_name }}</span>
+                    <el-button type="primary" link @click="download(file)">下载</el-button>
+                  </div>
+                </div>
+                <span v-else>-</span>
+              </el-card>
+
+              <el-card shadow="never" class="issue-file-card">
+                <template #header>合同扫描件</template>
+                <div v-if="contractFiles.length" class="download-list">
+                  <div v-for="file in contractFiles" :key="file.id" class="download-item">
+                    <span>{{ file.origin_file_name }}</span>
+                    <el-button type="primary" link @click="download(file)">下载</el-button>
+                  </div>
+                </div>
+                <span v-else>-</span>
+              </el-card>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="报告扫描件">
+            <el-upload v-if="canPrintRoom" :auto-upload="false" :on-change="onScanSelected" :show-file-list="false" :disabled="isUploading">
+              <el-button type="primary" :disabled="isUploading">上传报告扫描件</el-button>
+            </el-upload>
+            <UploadProgressInline :progress="uploadProgress" />
+            <div v-if="reportScanFiles.length" class="download-list">
+              <div v-for="file in reportScanFiles" :key="file.id" class="download-item">
                 <span>{{ file.origin_file_name }}</span>
                 <el-button type="primary" link @click="download(file)">下载</el-button>
+                <el-button v-if="canReplaceReportScan" type="warning" link :disabled="isUploading" @click="triggerReplace(file.id)">重新上传</el-button>
+                <input
+                  :ref="el => setReplaceInput(file.id, el)"
+                  class="hidden-file-input"
+                  type="file"
+                  @change="event => onReplaceInput(file, event)"
+                />
               </div>
             </div>
-            <span v-else>-</span>
-          </el-card>
+            <span v-if="!reportScanFiles.length && !canPrintRoom">-</span>
+          </el-form-item>
 
-          <el-card shadow="never" class="issue-file-card">
-            <template #header>报告附件</template>
-            <div v-if="formalReportFiles.length" class="download-list">
-              <div v-for="file in formalReportFiles" :key="file.id" class="download-item">
-                <span>{{ file.origin_file_name }}</span>
-                <el-button type="primary" link @click="download(file)">下载</el-button>
-              </div>
+          <el-form-item label="出具数量">
+            <el-input-number v-model="copyCount" :min="1" :disabled="!canPrintRoom" />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="remark" type="textarea" :rows="3" :disabled="!canPrintRoom" />
+          </el-form-item>
+          <el-form-item>
+            <div class="issue-actions">
+              <el-button type="primary" :disabled="!canPrintRoom" @click="issueContract">保存正式合同编号</el-button>
+              <el-button type="success" :disabled="!canPrintRoom || reportScanFiles.length === 0 || isUploading" @click="issueReport">登记纸质报告出具</el-button>
+              <el-button v-if="canProjectMailingStart" type="primary" plain @click="goMailing">邮寄报告</el-button>
+              <el-button type="warning" :disabled="!canPrintRoom" @click="rollback">撤回至三审</el-button>
+              <el-button type="danger" plain :disabled="!canPrintRoom" @click="contractError">合同错误</el-button>
+              <el-button v-if="canReportErrorBack" type="danger" plain @click="reportErrorBack">报告有误返回文印室</el-button>
             </div>
-            <span v-else>-</span>
-          </el-card>
+          </el-form-item>
+        </el-form>
+      </div>
 
-          <el-card shadow="never" class="issue-file-card">
-            <template #header>合同扫描件</template>
-            <div v-if="contractFiles.length" class="download-list">
-              <div v-for="file in contractFiles" :key="file.id" class="download-item">
-                <span>{{ file.origin_file_name }}</span>
-                <el-button type="primary" link @click="download(file)">下载</el-button>
-              </div>
-            </div>
-            <span v-else>-</span>
-          </el-card>
+      <aside class="issue-stage-side">
+        <div class="issue-note-card">
+          <div class="issue-note-title">当前环节所需文件要求</div>
+          <ol class="issue-note-list">
+            <li>正式报告文件、报告附件、合同扫描件应可下载核对。</li>
+            <li>文印室需上传清晰完整的报告扫描件。</li>
+            <li>登记纸质报告出具前，确认编号、数量与扫描件一致。</li>
+          </ol>
+          <p class="issue-note-emphasis">本页仅展示文印处理要求，不承载送审页的“待审文件要求”或合同确认说明。</p>
         </div>
-      </el-form-item>
-
-      <el-form-item label="报告扫描件">
-        <el-upload v-if="canPrintRoom" :auto-upload="false" :on-change="onScanSelected" :show-file-list="false" :disabled="isUploading">
-          <el-button type="primary" :disabled="isUploading">上传报告扫描件</el-button>
-        </el-upload>
-        <UploadProgressInline :progress="uploadProgress" />
-        <div v-if="reportScanFiles.length" class="download-list">
-          <div v-for="file in reportScanFiles" :key="file.id" class="download-item">
-            <span>{{ file.origin_file_name }}</span>
-            <el-button type="primary" link @click="download(file)">下载</el-button>
-            <el-button v-if="canReplaceReportScan" type="warning" link :disabled="isUploading" @click="triggerReplace(file.id)">重新上传</el-button>
-            <input
-              :ref="el => setReplaceInput(file.id, el)"
-              class="hidden-file-input"
-              type="file"
-              @change="event => onReplaceInput(file, event)"
-            />
-          </div>
-        </div>
-        <span v-if="!reportScanFiles.length && !canPrintRoom">-</span>
-      </el-form-item>
-
-      <el-form-item label="出具数量">
-        <el-input-number v-model="copyCount" :min="1" :disabled="!canPrintRoom" />
-      </el-form-item>
-      <el-form-item label="备注">
-        <el-input v-model="remark" type="textarea" :rows="3" :disabled="!canPrintRoom" />
-      </el-form-item>
-      <el-form-item>
-        <div class="issue-actions">
-          <el-button type="primary" :disabled="!canPrintRoom" @click="issueContract">保存正式合同编号</el-button>
-          <el-button type="success" :disabled="!canPrintRoom || reportScanFiles.length === 0 || isUploading" @click="issueReport">登记纸质报告出具</el-button>
-          <el-button v-if="canProjectMailingStart" type="primary" plain @click="goMailing">邮寄报告</el-button>
-          <el-button type="warning" :disabled="!canPrintRoom" @click="rollback">撤回至三审</el-button>
-          <el-button type="danger" plain :disabled="!canPrintRoom" @click="contractError">合同错误</el-button>
-          <el-button v-if="canReportErrorBack" type="danger" plain @click="reportErrorBack">报告有误返回文印室</el-button>
-        </div>
-      </el-form-item>
-    </el-form>
+      </aside>
+    </div>
   </template>
 </template>
 
@@ -360,6 +376,45 @@ watch(() => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.sign
   gap: 6px;
 }
 
+.issue-stage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+.issue-stage-main,
+.issue-stage-side {
+  min-width: 0;
+}
+
+.issue-note-card {
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.issue-note-title {
+  color: #0c3157;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.issue-note-list {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.issue-note-emphasis {
+  margin: 12px 0 0;
+  color: #d45b2c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .download-item {
   display: flex;
   align-items: center;
@@ -389,6 +444,10 @@ watch(() => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.sign
 }
 
 @media (max-width: 900px) {
+  .issue-stage-layout {
+    grid-template-columns: 1fr;
+  }
+
   .issue-file-grid {
     grid-template-columns: 1fr;
   }

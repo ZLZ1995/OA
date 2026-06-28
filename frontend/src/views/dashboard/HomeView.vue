@@ -1071,8 +1071,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 86px;
-  padding: 22px 24px;
+  min-height: 68px;
+  padding: 16px 20px;
   border: 1px solid var(--zq-border);
   border-radius: 8px;
   background:
@@ -1094,8 +1094,8 @@ onUnmounted(() => {
 }
 
 .workbench-hero h1 {
-  margin-top: 8px;
-  font-size: 24px;
+  margin-top: 6px;
+  font-size: 20px;
   line-height: 1.3;
 }
 
@@ -1107,16 +1107,18 @@ onUnmounted(() => {
 
 .workbench-grid {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.75fr);
   grid-template-areas:
-    "create todo"
-    "create linkage";
+    "todo create"
+    "linkage linkage";
   gap: 14px;
   align-items: start;
 }
 
 .create-card {
   grid-area: create;
+  position: sticky;
+  top: 0;
 }
 
 .todo-card {
@@ -1126,6 +1128,14 @@ onUnmounted(() => {
 .linkage-card {
   grid-area: linkage;
   min-height: 386px;
+}
+
+.create-card :deep(.el-card__body) {
+  padding-top: 12px;
+}
+
+.create-card :deep(.el-form-item) {
+  margin-bottom: 14px;
 }
 
 .card-header {
@@ -1553,8 +1563,8 @@ onUnmounted(() => {
   .workbench-grid {
     grid-template-columns: 1fr;
     grid-template-areas:
-      "create"
       "todo"
+      "create"
       "linkage";
   }
 

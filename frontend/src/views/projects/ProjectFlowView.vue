@@ -1,70 +1,80 @@
 <template>
-  <el-row class="project-flow-layout" :gutter="12">
-    <el-col :span="4">
-      <el-card class="flow-nav-card" shadow="never">
-        <template #header>项目流程导航</template>
-        <el-menu :default-active="activeNode" @select="onSelectNode">
-          <el-menu-item v-for="node in visibleFlowNodes" :key="node.key" :index="node.key">{{ node.label }}</el-menu-item>
-        </el-menu>
-      </el-card>
-    </el-col>
+  <div class="project-flow-page">
+    <div class="project-flow-head">
+      <div>
+        <h2>项目流程</h2>
+        <p>当前任务、流程导航和办理入口保持同屏可见。</p>
+      </div>
+      <el-button type="primary" plain @click="goHome">返回首页</el-button>
+    </div>
 
-    <el-col :span="17">
-      <el-card class="flow-main-card" shadow="never">
-        <template #header>
-          <div class="panel-header">
-            <span>当前环节办理区</span>
-            <el-button type="primary" link @click="goHome">返回首页</el-button>
-          </div>
-        </template>
+    <el-row class="project-flow-layout" :gutter="16">
+      <el-col :xl="5" :lg="6" :md="24">
+        <el-card class="flow-nav-card" shadow="never">
+          <template #header>项目流程导航</template>
+          <el-menu :default-active="activeNode" @select="onSelectNode">
+            <el-menu-item v-for="node in visibleFlowNodes" :key="node.key" :index="node.key">{{ node.label }}</el-menu-item>
+          </el-menu>
+        </el-card>
+      </el-col>
 
-        <el-alert
-          v-if="todoBannerTitle"
-          class="todo-banner"
-          type="info"
-          :closable="false"
-          show-icon
-          :title="todoBannerTitle"
-        />
+      <el-col :xl="14" :lg="12" :md="24">
+        <el-card class="flow-main-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <span>当前环节办理区</span>
+              <span class="panel-header-tip">优先展示当前任务所需内容</span>
+            </div>
+          </template>
 
-        <el-empty v-if="!flow" description="暂无项目数据" />
-
-        <template v-else-if="flow.duplicate_delete_required">
           <el-alert
-            type="error"
+            v-if="todoBannerTitle"
+            class="todo-banner"
+            type="info"
             :closable="false"
             show-icon
-            title="该项目已被管理员判定为重复项目，请删除。"
-            style="margin-bottom: 16px"
+            :title="todoBannerTitle"
           />
-          <el-button type="danger" :loading="duplicateDeleting" @click="deleteDuplicate">删除重复项目</el-button>
-        </template>
 
-        <component
-          v-else
-          :is="activePanel"
-          :project-id="projectId"
-          :flow-info="flow"
-          :work-order-id="workOrderId"
-          :can-edit="canProjectOperate"
-          :can-operate="canProjectOperate"
-          :user-roles="userRoles"
-          :user-role-in-project="flow.user_role_in_project"
-          @changed="onPanelChanged"
-          @navigate="onPanelNavigate"
-        />
-      </el-card>
-    </el-col>
+          <el-empty v-if="!flow" description="暂无项目数据" />
 
-    <el-col :span="3">
-      <el-card class="flow-step-card" shadow="never">
-        <template #header>办理流程图</template>
-        <el-steps direction="vertical" :active="activeFlowStep" finish-status="success">
-          <el-step v-for="step in stepTimeline" :key="step" :title="step" />
-        </el-steps>
-      </el-card>
-    </el-col>
-  </el-row>
+          <template v-else-if="flow.duplicate_delete_required">
+            <el-alert
+              type="error"
+              :closable="false"
+              show-icon
+              title="该项目已被管理员判定为重复项目，请删除。"
+              style="margin-bottom: 16px"
+            />
+            <el-button type="danger" :loading="duplicateDeleting" @click="deleteDuplicate">删除重复项目</el-button>
+          </template>
+
+          <component
+            v-else
+            :is="activePanel"
+            :project-id="projectId"
+            :flow-info="flow"
+            :work-order-id="workOrderId"
+            :can-edit="canProjectOperate"
+            :can-operate="canProjectOperate"
+            :user-roles="userRoles"
+            :user-role-in-project="flow.user_role_in_project"
+            @changed="onPanelChanged"
+            @navigate="onPanelNavigate"
+          />
+        </el-card>
+      </el-col>
+
+      <el-col :xl="5" :lg="6" :md="24">
+        <el-card class="flow-step-card" shadow="never">
+          <template #header>办理流程图</template>
+          <el-steps direction="vertical" :active="activeFlowStep" finish-status="success">
+            <el-step v-for="step in stepTimeline" :key="step" :title="step" />
+          </el-steps>
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -160,7 +170,10 @@ const visibleFlowNodes = computed(() => {
   const canSeeAll = ['管理员', '项目负责人', '项目组成员', '创建人'].includes(roleName)
 
   if (canSeeAll) return availableNodes.value
-  if (roleName === '合同审核人' || (roles.includes('CONTRACT_REVIEWER') && ['WAIT_CONTRACT_REVIEW_SUBMIT', 'CONTRACT_REVIEWING', 'CONTRACT_REJECTED'].includes(currentStatus))) {
+  if (
+    roleName === '合同审核人' ||
+    (roles.includes('CONTRACT_REVIEWER') && ['WAIT_CONTRACT_REVIEW_SUBMIT', 'CONTRACT_REVIEWING', 'CONTRACT_REJECTED'].includes(currentStatus))
+  ) {
     return availableNodes.value.filter(node => ['basic', 'contractReview'].includes(node.key))
   }
   if (roleName.includes('审老师') || roles.some(role => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER'].includes(role))) {
@@ -357,6 +370,34 @@ onMounted(load)
 </script>
 
 <style scoped>
+.project-flow-page {
+  display: grid;
+  gap: 16px;
+}
+
+.project-flow-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-flow-head h2,
+.project-flow-head p {
+  margin: 0;
+}
+
+.project-flow-head h2 {
+  font-size: 20px;
+  color: #153a63;
+}
+
+.project-flow-head p {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+}
+
 .project-flow-layout {
   align-items: flex-start;
 }
@@ -365,6 +406,12 @@ onMounted(load)
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-header-tip {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .flow-nav-card,
@@ -401,5 +448,13 @@ onMounted(load)
 .flow-step-card :deep(.el-step__title) {
   font-size: 14px;
   line-height: 1.35;
+}
+
+@media (max-width: 992px) {
+  .project-flow-head,
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>
