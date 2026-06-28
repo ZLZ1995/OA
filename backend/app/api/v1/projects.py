@@ -26,6 +26,7 @@ from app.models.work_order_file import WorkOrderFile
 from app.schemas.contract_review import ContractReviewRecordResponse
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectResponse, ProjectUpdate
 from app.schemas.project_flow import ProjectFlowProject, ProjectFlowResponse, ProjectUpdateLogItem
+from app.services.contract_print_room_flow import get_contract_print_room_status
 from app.services.project_conflicts import get_unresolved_conflicts, mark_project_duplicate_deleted, upsert_conflict_snapshot_and_detect
 from app.services.project_delete_service import can_project_owner_delete_direct, delete_project_related_data
 from app.services.project_field_normalizer import (
@@ -201,6 +202,7 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
     work_order = _get_latest_work_order(db, project.id)
     leader_name = db.query(User.real_name).filter(User.id == project.project_leader_id).scalar()
     latest_status = work_order.current_status if work_order else None
+    contract_print_room_status = get_contract_print_room_status(db, work_order)
     status_text = _build_status_display(project, latest_status)
     readonly_fields = _get_readonly_flow_fields(db, project, work_order)
     contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
@@ -247,6 +249,8 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
         "display_project_leader_name",
         "contract_review_status",
         "contract_review_status_display",
+        "contract_print_room_status",
+        "contract_print_room_status_display",
         "contract_no",
         "report_no",
     ]:
@@ -289,6 +293,8 @@ def _serialize_project(db: Session, project: Project) -> ProjectResponse:
             }
             else history_contract_status_display
         ),
+        contract_print_room_status=contract_print_room_status,
+        contract_print_room_status_display=get_contract_review_status_display(contract_print_room_status),
     )
 
 
@@ -696,6 +702,7 @@ def get_project_flow(
     readonly_fields = _get_readonly_flow_fields(db, project, work_order)
     contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
     history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
+    contract_print_room_status = get_contract_print_room_status(db, work_order)
     if work_order:
         latest_contract_file = (
             db.query(WorkOrderFile)
@@ -787,6 +794,8 @@ def get_project_flow(
             }
             else history_contract_status_display
         ),
+        contract_print_room_status=contract_print_room_status,
+        contract_print_room_status_display=get_contract_review_status_display(contract_print_room_status),
         first_reviewer_id=work_order.first_reviewer_id if work_order else None,
         second_reviewer_id=work_order.second_reviewer_id if work_order else None,
         third_reviewer_id=work_order.third_reviewer_id if work_order else None,

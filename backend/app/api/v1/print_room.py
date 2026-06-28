@@ -24,6 +24,12 @@ from app.schemas.print_room import (
     PrintRoomRollbackRequest,
     TransferPrintRoomRequest,
 )
+from app.services.contract_print_room_flow import (
+    STAMPED_CONTRACT_SCAN_FILE_CATEGORY,
+    STAMPED_CONTRACT_SCAN_STAGE,
+    get_contract_print_room_status,
+    has_current_stamped_contract_scan,
+)
 from app.services.project_role_conflict_service import get_project_party_user_ids, validate_support_role_not_project_party
 from app.services.workflow_log_service import create_workflow_log
 from app.services.workflow_notification_service import send_workflow_notification
@@ -34,8 +40,6 @@ router = APIRouter(prefix="/print-room", tags=["文印室"])
 
 FINAL_CONTRACT_SCAN_FILE_CATEGORY = "FINAL_CONTRACT_SCAN"
 FINAL_CONTRACT_SCAN_STAGE = "FINAL_CONTRACT_SCAN"
-STAMPED_CONTRACT_SCAN_FILE_CATEGORY = "STAMPED_CONTRACT_SCAN"
-STAMPED_CONTRACT_SCAN_STAGE = "PRINT_ROOM_CONTRACT_SCAN"
 
 
 def _user_name(db: Session, user_id: int | None) -> str | None:
@@ -74,12 +78,7 @@ def _has_current_final_contract_scan(db: Session, work_order_id: int) -> bool:
 
 
 def _has_current_stamped_contract_scan(db: Session, work_order_id: int) -> bool:
-    return db.query(WorkOrderFile.id).filter(
-        WorkOrderFile.work_order_id == work_order_id,
-        WorkOrderFile.file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY,
-        WorkOrderFile.business_stage == STAMPED_CONTRACT_SCAN_STAGE,
-        WorkOrderFile.is_current.is_(True),
-    ).first() is not None
+    return has_current_stamped_contract_scan(db, work_order_id)
 
 
 def _ensure_project_operator(db: Session, work_order: WorkOrder, user_id: int) -> None:
@@ -166,19 +165,22 @@ def get_contract_print_room_info(
     is_print_room_handler = bool(work_order.print_room_handler_id and work_order.print_room_handler_id == current_user.id)
     is_project_leader = work_order.project_leader_id == current_user.id
     current_status = work_order.current_status
+    print_room_status = get_contract_print_room_status(db, work_order)
     return ContractPrintRoomInfoResponse(
         work_order_id=work_order_id,
         current_status=current_status,
         current_status_display=get_contract_review_status_display(current_status),
+        print_room_status=print_room_status,
+        print_room_status_display=get_contract_review_status_display(print_room_status),
         project_leader=_participant(db, work_order.project_leader_id),
         contract_reviewer=_participant(db, work_order.contract_reviewer_id),
         print_room_handler=_participant(db, work_order.print_room_handler_id),
         original_contract_files=[_serialize_contract_file(db, row) for row in contract_files],
         stamped_contract_scan_files=[_serialize_contract_file(db, row) for row in stamped_files],
-        can_upload_scan=current_status == WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value and (is_print_room_handler or is_admin),
-        can_send_to_project_leader=current_status == WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value and _has_current_stamped_contract_scan(db, work_order_id) and (is_print_room_handler or is_admin),
-        can_return_to_print_room=current_status == WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value and (is_project_leader or is_admin),
-        can_confirm_complete=current_status == WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value and (is_project_leader or is_admin),
+        can_upload_scan=print_room_status == WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value and (is_print_room_handler or is_admin),
+        can_send_to_project_leader=print_room_status == WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value and _has_current_stamped_contract_scan(db, work_order_id) and (is_print_room_handler or is_admin),
+        can_return_to_print_room=print_room_status == WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value and (is_project_leader or is_admin),
+        can_confirm_complete=print_room_status == WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value and (is_project_leader or is_admin),
     )
 
 
@@ -193,7 +195,7 @@ def send_contract_to_project_leader(
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     _ensure_print_room_handler(work_order, current_user)
-    if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS:
+    if get_contract_print_room_status(db, work_order) != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
         raise HTTPException(status_code=400, detail="当前状态不可发送项目负责人")
     if not _has_current_stamped_contract_scan(db, work_order.id):
         raise HTTPException(status_code=400, detail="请先上传盖章扫描件后再发送")
@@ -202,8 +204,9 @@ def send_contract_to_project_leader(
     to_status = WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
-    work_order.current_status = to_status.value
-    work_order.current_handler_user_id = work_order.project_leader_id
+    if work_order.current_status == from_status.value:
+        work_order.current_status = to_status.value
+        work_order.current_handler_user_id = work_order.project_leader_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,
@@ -241,15 +244,16 @@ def return_contract_to_print_room(
         raise HTTPException(status_code=400, detail="请输入退回原因")
     if not _is_admin(current_user) and work_order.project_leader_id != current_user.id:
         raise HTTPException(status_code=403, detail="仅项目负责人可退回文印室")
-    if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM:
+    if get_contract_print_room_status(db, work_order) != WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value:
         raise HTTPException(status_code=400, detail="当前状态不可退回文印室")
 
     from_status = WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM
     to_status = WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
-    work_order.current_status = to_status.value
-    work_order.current_handler_user_id = work_order.print_room_handler_id
+    if work_order.current_status == from_status.value:
+        work_order.current_status = to_status.value
+        work_order.current_handler_user_id = work_order.print_room_handler_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,
@@ -285,15 +289,16 @@ def confirm_contract_complete(
         raise HTTPException(status_code=404, detail="工单不存在")
     if not _is_admin(current_user) and work_order.project_leader_id != current_user.id:
         raise HTTPException(status_code=403, detail="仅项目负责人可确认办结")
-    if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM:
+    if get_contract_print_room_status(db, work_order) != WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value:
         raise HTTPException(status_code=400, detail="当前状态不可确认办结")
 
     from_status = WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM
     to_status = WorkOrderStatus.CONTRACT_PROCESS_COMPLETED
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
-    work_order.current_status = to_status.value
-    work_order.current_handler_user_id = work_order.project_leader_id
+    if work_order.current_status == from_status.value:
+        work_order.current_status = to_status.value
+        work_order.current_handler_user_id = work_order.project_leader_id
     create_workflow_log(
         db,
         work_order_id=work_order.id,

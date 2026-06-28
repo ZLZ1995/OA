@@ -150,6 +150,7 @@ const visibleFlowNodes = computed(() => {
   const roleName = flow.value?.user_role_in_project || ''
   const roles = userRoles.value
   const currentStatus = flow.value?.current_work_order_status || ''
+  const contractPrintRoomStatus = flow.value?.contract_print_room_status || ''
   const undertakingUnit = flow.value?.project.undertaking_unit || ''
   const canHandleSignoff =
     roles.includes('ADMIN') ||
@@ -173,7 +174,7 @@ const visibleFlowNodes = computed(() => {
     return availableNodes.value.filter(node => reviewerNodeKeys.has(node.key))
   }
   if (roleName === '文印室' || roles.includes('PRINT_ROOM')) {
-    if (['WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM'].includes(currentStatus)) {
+    if (['WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM'].includes(contractPrintRoomStatus)) {
       return availableNodes.value.filter(node => ['basic', 'contractReview'].includes(node.key))
     }
     return availableNodes.value.filter(node => ['issue', 'mailing'].includes(node.key))

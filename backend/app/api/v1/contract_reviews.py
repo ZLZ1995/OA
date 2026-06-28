@@ -20,6 +20,7 @@ from app.schemas.contract_review import (
     ContractReviewSubmitRequest,
     ContractReviewTransferApprovedRequest,
 )
+from app.services.contract_print_room_flow import get_contract_print_room_status
 from app.services.project_role_conflict_service import get_project_party_user_ids, validate_not_project_party
 from app.services.workflow_log_service import create_workflow_log
 from app.services.workflow_notification_service import send_workflow_notification
@@ -334,12 +335,12 @@ def approve_and_transfer_contract_review(
     )
 
     from_status = WorkOrderStatus.CONTRACT_REVIEWING
-    to_status = WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS
-    if not can_transit(from_status, to_status):
+    to_status = WorkOrderStatus.CONTRACT_APPROVED
+    if not can_transit(from_status, WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS):
         raise HTTPException(status_code=400, detail="非法状态迁移")
 
     work_order.current_status = to_status.value
-    work_order.current_handler_user_id = payload.print_room_handler_id
+    work_order.current_handler_user_id = work_order.project_leader_id
     work_order.print_room_handler_id = payload.print_room_handler_id
 
     approve_record = ContractReviewRecord(
@@ -392,6 +393,8 @@ def transfer_approved_contract_to_print_room(
     _ensure_project_operator_or_contract_reviewer(db, work_order, current_user)
     if WorkOrderStatus(work_order.current_status) != WorkOrderStatus.CONTRACT_APPROVED:
         raise HTTPException(status_code=400, detail="当前状态不可转发文印室")
+    if get_contract_print_room_status(db, work_order):
+        raise HTTPException(status_code=400, detail="合同已转发文印室，请勿重复转发")
 
     _ensure_print_room_handler(db, payload.print_room_handler_id)
     validate_not_project_party(
@@ -401,12 +404,12 @@ def transfer_approved_contract_to_print_room(
     )
 
     from_status = WorkOrderStatus.CONTRACT_APPROVED
-    to_status = WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS
-    if not can_transit(from_status, to_status):
+    to_status = WorkOrderStatus.CONTRACT_APPROVED
+    if not can_transit(from_status, WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS):
         raise HTTPException(status_code=400, detail="非法状态迁移")
 
     work_order.current_status = to_status.value
-    work_order.current_handler_user_id = payload.print_room_handler_id
+    work_order.current_handler_user_id = work_order.project_leader_id
     work_order.print_room_handler_id = payload.print_room_handler_id
 
     transfer_record = ContractReviewRecord(

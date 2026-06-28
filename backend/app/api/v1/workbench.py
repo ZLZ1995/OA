@@ -15,6 +15,7 @@ from app.models.work_order import WorkOrder
 from app.models.workflow_log import WorkflowLog
 from app.schemas.workbench import WorkbenchProjectItem, WorkbenchResponse
 from app.services.chief_appraiser_service import CHIEF_APPRAISER_ROLE_CODES, work_order_matches_project_chief
+from app.services.contract_print_room_flow import get_contract_print_room_status
 from app.services.project_flow import get_project_leader_display_name, get_user_role_in_project, normalize_project_step
 
 router = APIRouter(prefix="/workbench", tags=["项目工作台"])
@@ -41,6 +42,8 @@ def _build_my_project_role(
 
 
 def _todo_action_text(
+    db: Session,
+    current_user: User,
     project: Project,
     work_order: WorkOrder,
     step: str,
@@ -68,6 +71,19 @@ def _todo_action_text(
         return "财务已完成开票，请确认或退回修改"
     if step == "合同初稿审核" and work_order.contract_reviewer_id == work_order.current_handler_user_id:
         return "请处理合同初稿审核"
+    contract_print_room_status = get_contract_print_room_status(db, work_order)
+    if (
+        step == "合同初稿审核"
+        and contract_print_room_status == "WAIT_PRINT_ROOM_PROCESS"
+        and work_order.print_room_handler_id == current_user.id
+    ):
+        return "请上传合同盖章扫描件并发送项目负责人"
+    if (
+        step == "合同初稿审核"
+        and contract_print_room_status == "WAIT_PROJECT_LEADER_CONTRACT_CONFIRM"
+        and work_order.project_leader_id == current_user.id
+    ):
+        return "请确认合同盖章扫描件或退回文印室"
     if (
         step == "报告邮寄"
         and work_order.mailing_handler_user_id == work_order.current_handler_user_id
@@ -289,16 +305,23 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             or project.business_user_id == current_user.id
             or work_order.initiator_user_id == current_user.id
         )
-        is_print_room_assignee = (
+        contract_print_room_status = get_contract_print_room_status(db, work_order)
+        is_contract_print_room_assignee = (
+            ("PRINT_ROOM" in role_codes or "ADMIN" in role_codes)
+            and contract_print_room_status == "WAIT_PRINT_ROOM_PROCESS"
+            and work_order.print_room_handler_id == current_user.id
+        )
+        is_report_print_room_assignee = (
+            ("PRINT_ROOM" in role_codes or "ADMIN" in role_codes)
+            and work_order.current_status == "PRINTROOM_PROCESSING"
+            and work_order.print_room_handler_id == current_user.id
+        )
+        is_mailing_print_room_assignee = (
             ("PRINT_ROOM" in role_codes or "ADMIN" in role_codes)
             and (
-                work_order.current_handler_user_id == current_user.id
-                or (
+                (
                     work_order.print_room_handler_id == current_user.id
-                    and (
-                        work_order.current_status not in {"REPORT_MAILING", "REPORT_MAILING_COMPLETED"}
-                        or work_order.mailing_status == "PRINT_ROOM_PENDING"
-                    )
+                    and work_order.mailing_status == "PRINT_ROOM_PENDING"
                 )
                 or (
                     work_order.mailing_handler_user_id == current_user.id
@@ -306,6 +329,16 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
                 )
             )
         )
+        is_print_room_assignee = is_contract_print_room_assignee or is_report_print_room_assignee or is_mailing_print_room_assignee
+        if (
+            "PRINT_ROOM" in role_codes
+            and work_order.print_room_handler_id == current_user.id
+            and not is_print_room_assignee
+            and work_order.current_handler_user_id != current_user.id
+            and not is_project_party
+            and "ADMIN" not in role_codes
+        ):
+            continue
         if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id and not rejected_invoice and not confirming_invoice:
             if work_order.current_status not in {"WAIT_CONTRACT_REVIEW_SUBMIT", "CONTRACT_REJECTED", "REPORT_MAILING", "REPORT_MAILING_COMPLETED", "WAIT_ARCHIVE_SUBMIT", "ARCHIVE_REJECTED"}:
                 continue
@@ -347,6 +380,16 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             step = "合同初稿审核"
         elif work_order.current_status == "SIGNOFF_REVIEWING" and work_order_matches_project_chief(current_user, project, work_order):
             step = "签发审核"
+        elif (
+            contract_print_room_status == "WAIT_PRINT_ROOM_PROCESS"
+            and work_order.print_room_handler_id == current_user.id
+        ):
+            step = "合同初稿审核"
+        elif (
+            contract_print_room_status == "WAIT_PROJECT_LEADER_CONTRACT_CONFIRM"
+            and work_order.project_leader_id == current_user.id
+        ):
+            step = "合同初稿审核"
         elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
             step = "财务开票"
         elif confirming_invoice and is_project_party:
@@ -392,6 +435,8 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
             .first()
         )
         todo_action = _todo_action_text(
+            db=db,
+            current_user=current_user,
             project=project,
             work_order=work_order,
             step=step,
