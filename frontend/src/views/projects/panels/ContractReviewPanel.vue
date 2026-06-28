@@ -204,6 +204,7 @@ const printRoomOptions = ref<UserItem[]>([])
 const currentSubmitRecord = computed(() => records.value.find(item => item.action_type === 'SUBMIT_CONTRACT'))
 const currentUserId = computed(() => auth.user?.id)
 const isAdmin = computed(() => Boolean(props.userRoles?.includes('ADMIN')))
+const contractPrintRoomStatus = computed(() => props.flowInfo?.contract_print_room_status || props.flowInfo?.current_work_order_status || '')
 
 const canReview = computed(() => Boolean(
   currentUserId.value &&
@@ -213,15 +214,14 @@ const canReview = computed(() => Boolean(
 ))
 
 const canPrintRoomProcess = computed(() => Boolean(
-  props.flowInfo?.current_work_order_status === 'WAIT_PRINT_ROOM_PROCESS' &&
+  contractPrintRoomStatus.value === 'WAIT_PRINT_ROOM_PROCESS' &&
   (props.flowInfo?.print_room_handler_id === currentUserId.value || isAdmin.value)
 ))
 
 const canProjectLeaderConfirm = computed(() => Boolean(
   currentUserId.value &&
-  props.flowInfo?.current_work_order_status === 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM' &&
+  contractPrintRoomStatus.value === 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM' &&
   (
-    props.flowInfo?.current_handler_user_id === currentUserId.value ||
     props.flowInfo?.project.project_leader_id === currentUserId.value ||
     props.flowInfo?.user_role_in_project === '项目负责人' ||
     isAdmin.value
@@ -231,6 +231,7 @@ const canProjectLeaderConfirm = computed(() => Boolean(
 const canTransferApprovedContract = computed(() => Boolean(
   currentUserId.value &&
   props.flowInfo?.current_work_order_status === 'CONTRACT_APPROVED' &&
+  !props.flowInfo?.contract_print_room_status &&
   (
     props.flowInfo?.contract_reviewer_id === currentUserId.value ||
     props.userRoles?.some(role => ['CONTRACT_REVIEWER'].includes(role)) ||
@@ -240,8 +241,8 @@ const canTransferApprovedContract = computed(() => Boolean(
   )
 ))
 
-const showPrintRoomSection = computed(() => ['WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(props.flowInfo?.current_work_order_status || ''))
-const showLeaderConfirmSection = computed(() => ['WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(props.flowInfo?.current_work_order_status || ''))
+const showPrintRoomSection = computed(() => ['WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(contractPrintRoomStatus.value))
+const showLeaderConfirmSection = computed(() => ['WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(contractPrintRoomStatus.value))
 
 function actionLabel(actionType: ContractReviewRecordItem['action_type']) {
   if (actionType === 'SUBMIT_CONTRACT') return '提交审核'

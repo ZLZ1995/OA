@@ -47,6 +47,8 @@ export interface ProjectFlowData {
   contract_reviewer_name?: string | null
   contract_review_status?: string | null
   contract_review_status_display?: string | null
+  contract_print_room_status?: string | null
+  contract_print_room_status_display?: string | null
   first_reviewer_id?: number | null
   second_reviewer_id?: number | null
   third_reviewer_id?: number | null

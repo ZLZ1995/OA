@@ -51,6 +51,8 @@ class ProjectFlowResponse(BaseModel):
     contract_reviewer_name: str | None = None
     contract_review_status: str | None = None
     contract_review_status_display: str | None = None
+    contract_print_room_status: str | None = None
+    contract_print_room_status_display: str | None = None
     first_reviewer_id: int | None = None
     second_reviewer_id: int | None = None
     third_reviewer_id: int | None = None

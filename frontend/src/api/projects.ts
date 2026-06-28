@@ -33,6 +33,8 @@ export interface ProjectItem {
   status_display: string
   contract_review_status?: string | null
   contract_review_status_display?: string | null
+  contract_print_room_status?: string | null
+  contract_print_room_status_display?: string | null
   termination_status?: string | null
   termination_reason?: string | null
   archived_at?: string | null

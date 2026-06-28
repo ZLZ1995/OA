@@ -21,6 +21,10 @@ router = APIRouter(prefix="/users", tags=["用户"])
 SUPER_ADMIN_USERNAME = settings.initial_admin_username
 
 
+def _compat_direct_call_dependency() -> None:
+    return None
+
+
 def _is_super_admin(user: User) -> bool:
     return user.username == SUPER_ADMIN_USERNAME
 
@@ -52,6 +56,7 @@ def _get_visible_active_user_or_404(
 def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: object | None = Depends(_compat_direct_call_dependency),
 ) -> UserListResponse:
     query = db.query(User).filter(User.is_active.is_(True))
     if not _is_super_admin(current_user):

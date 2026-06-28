@@ -17,6 +17,7 @@ from app.models.work_order_file import WorkOrderFile
 from app.schemas.file import WorkOrderFileListResponse, WorkOrderFileResponse
 from app.services.archive_sync_service import SIGNOFF_SYNC_SOURCE_TYPE, is_signoff_source_category, refresh_archive_synced_file_by_source
 from app.services.chief_appraiser_service import CHIEF_APPRAISER_ROLE_CODES
+from app.services.contract_print_room_flow import get_contract_print_room_status
 from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
 from app.storage.local_storage import save_upload_file
 from app.workflows.states import WorkOrderStatus
@@ -172,7 +173,7 @@ def _ensure_upload_permission(
 
 
     if file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY:
-        if work_order.current_status != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
+        if get_contract_print_room_status(db, work_order) != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
             raise HTTPException(status_code=400, detail="仅待文印室处理状态可上传盖章扫描件")
         if current_user.id != work_order.print_room_handler_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
             raise HTTPException(status_code=403, detail="仅当前文印室人员可上传盖章扫描件")
@@ -339,7 +340,7 @@ def delete_work_order_file(
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     if row.file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY:
-        if work_order.current_status != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
+        if get_contract_print_room_status(db, work_order) != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
             raise HTTPException(status_code=400, detail="当前状态不可替换盖章扫描件")
         if current_user.id != work_order.print_room_handler_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
             raise HTTPException(status_code=403, detail="仅当前文印室人员可替换盖章扫描件")

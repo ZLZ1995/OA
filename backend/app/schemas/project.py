@@ -87,6 +87,8 @@ class ProjectResponse(ProjectBase):
     status_display: str = "项目创建"
     contract_review_status: str | None = None
     contract_review_status_display: str | None = None
+    contract_print_room_status: str | None = None
+    contract_print_room_status_display: str | None = None
     termination_status: str | None = None
     termination_reason: str | None = None
     termination_requested_by: int | None = None

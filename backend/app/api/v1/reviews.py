@@ -38,6 +38,8 @@ router = APIRouter(prefix="/reviews", tags=["审核"])
 ROUND_SUBMIT_STATUS = {
     "FIRST": {
         WorkOrderStatus.CONTRACT_APPROVED,
+        WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS,
+        WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM,
         WorkOrderStatus.CONTRACT_PROCESS_COMPLETED,
         WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT,
         WorkOrderStatus.FIRST_REVIEW_REJECTED,
@@ -325,6 +327,7 @@ def _clone_files_to_round(
     from_round: str,
     to_round: str,
     uploaded_by: int,
+    include_review_opinion: bool = False,
 ) -> None:
     stage_to = f"REVIEW_{to_round}"
     clone_categories = (
@@ -333,6 +336,8 @@ def _clone_files_to_round(
         "EXTERNAL_AUDIT_REPLY",
         "EXTERNAL_REVIEW_OPINION",
     ) if from_round.startswith("EXTERNAL") else ("REPORT_ZIP",)
+    if include_review_opinion and not from_round.startswith("EXTERNAL"):
+        clone_categories = (*clone_categories, "REVIEW_OPINION")
     for file_category in clone_categories:
         source_files = _latest_round_files(db, work_order_id, from_round, file_category)
         if not source_files:
@@ -705,6 +710,8 @@ def _submit_review_impl(
     from_status = WorkOrderStatus(work_order.current_status)
     if payload.review_round == "FIRST" and from_status in {
         WorkOrderStatus.CONTRACT_APPROVED,
+        WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS,
+        WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM,
         WorkOrderStatus.CONTRACT_PROCESS_COMPLETED,
     }:
         work_order.current_status = WorkOrderStatus.WAIT_FIRST_REVIEW_SUBMIT.value
@@ -1159,12 +1166,14 @@ def decide_review(
         if payload.review_round in {"FIRST", "SECOND"}:
             next_round = ROUND_NEXT[payload.review_round]
             if _latest_report_file_owner_is_project_party(db, work_order, payload.review_round):
+                include_review_opinion = _latest_rejection_record(db, work_order.id, payload.review_round) is not None
                 _clone_files_to_round(
                     db,
                     work_order_id=work_order.id,
                     from_round=payload.review_round,
                     to_round=next_round,
                     uploaded_by=current_user.id,
+                    include_review_opinion=include_review_opinion,
                 )
                 record.comment = _append_passed_to_marker(record.comment, next_round)
             to_status = ROUND_REVIEWER_SELECT_STATUS[payload.review_round]

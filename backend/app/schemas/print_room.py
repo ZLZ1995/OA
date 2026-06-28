@@ -20,6 +20,8 @@ class PrintRoomInfoResponse(BaseModel):
     work_order_id: int
     current_status: str | None = None
     current_status_display: str | None = None
+    print_room_status: str | None = None
+    print_room_status_display: str | None = None
     contract_no: str | None = None
     paper_report_no: str | None = None
     copy_count: int | None = None

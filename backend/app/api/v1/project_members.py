@@ -25,6 +25,10 @@ MEMBER_ROLE_ALIASES = {"MEMBER", "PROJECT_MEMBER", "项目组成员"}
 ROLE_LABEL_MAP = {"LEADER": "项目负责人", "MEMBER": "项目组成员"}
 
 
+def _compat_direct_call_dependency() -> None:
+    return None
+
+
 def _to_response(item: ProjectMember, user: User) -> ProjectMemberResponse:
     return ProjectMemberResponse(
         id=item.id,
@@ -171,6 +175,7 @@ def complete_project_members(
     payload: ProjectMemberCompleteRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: object | None = Depends(_compat_direct_call_dependency),
 ) -> dict[str, str]:
     project = db.query(Project).filter(Project.id == payload.project_id).first()
     if not project:
