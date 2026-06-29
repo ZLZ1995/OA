@@ -699,6 +699,11 @@ def get_project_flow(
         action = "项目终止/废止流程处理中，当前业务已锁定" if is_termination_locked else build_todo_action(step, role) or "当前暂无待办操作"
     leader_name = db.query(User.real_name).filter(User.id == project.project_leader_id).scalar()
     contract_reviewer_name = db.query(User.real_name).filter(User.id == work_order.contract_reviewer_id).scalar() if work_order and work_order.contract_reviewer_id else None
+    current_handler_username = (
+        db.query(User.username).filter(User.id == work_order.current_handler_user_id).scalar()
+        if work_order and work_order.current_handler_user_id
+        else None
+    )
     readonly_fields = _get_readonly_flow_fields(db, project, work_order)
     contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
     history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
@@ -763,6 +768,7 @@ def get_project_flow(
         current_work_order_id=work_order.id if work_order else None,
         current_work_order_status=work_order.current_status if work_order else None,
         current_handler_user_id=work_order.current_handler_user_id if work_order else None,
+        current_handler_username=current_handler_username,
         contract_reviewer_id=work_order.contract_reviewer_id if work_order else None,
         contract_reviewer_name=contract_reviewer_name,
         contract_review_status=(

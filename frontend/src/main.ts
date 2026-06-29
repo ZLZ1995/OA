@@ -13,7 +13,7 @@ async function bootstrap() {
 
   if (isDesktopEmbedded()) {
     try {
-      const runtimeConfig = await window.desktopApp.getRuntimeConfig?.()
+      const runtimeConfig = await window.desktopApp?.getRuntimeConfig?.()
       if (runtimeConfig?.backendUrl) {
         localStorage.setItem('desktop_backend_url', runtimeConfig.backendUrl.replace(/\/+$/, ''))
       }

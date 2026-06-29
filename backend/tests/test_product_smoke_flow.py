@@ -140,6 +140,22 @@ def test_smoke_01_project_creation_creates_initial_work_order() -> None:
     assert work_order.current_handler_user_id == project.project_leader_id
 
 
+def test_project_flow_includes_current_handler_username() -> None:
+    from app.api.v1.projects import get_project_flow
+
+    db = _build_session()
+    users, project, _ = _create_project_bundle(db)
+
+    flow = get_project_flow(
+        project_id=project.id,
+        db=db,
+        current_user=users["creator"],
+    )
+
+    assert flow.current_handler_user_id == users["leader"].id
+    assert flow.current_handler_username == users["leader"].username
+
+
 def test_smoke_02_project_members_complete_moves_to_contract_upload() -> None:
     from app.api.v1.project_members import batch_create_project_member, complete_project_members
 

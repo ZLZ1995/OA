@@ -212,7 +212,15 @@ const activeNodeLabel = computed(() => {
 const todoBannerTitle = computed(() => {
   if (!flow.value) return ''
   const label = resolveCurrentTodoLabel() || todoLabelQuery.value.trim() || flow.value.project.current_step || activeNodeLabel.value
-  return label ? `当前待办环节：${label}` : ''
+  if (!label) return ''
+  return `当前待办环节：${label} ｜ 当前办理账号：${currentHandlerAccountLabel.value}`
+})
+
+const currentHandlerAccountLabel = computed(() => {
+  if (!flow.value) return '无'
+  const status = flow.value.current_work_order_status || ''
+  if (status === 'ARCHIVED') return '无'
+  return flow.value.current_handler_username || (flow.value.current_handler_user_id ? '待确认' : '待分配')
 })
 
 function resolveCurrentTodoLabel() {

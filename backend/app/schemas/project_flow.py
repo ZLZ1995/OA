@@ -47,6 +47,7 @@ class ProjectFlowResponse(BaseModel):
     current_work_order_id: int | None = None
     current_work_order_status: str | None = None
     current_handler_user_id: int | None = None
+    current_handler_username: str | None = None
     contract_reviewer_id: int | None = None
     contract_reviewer_name: str | None = None
     contract_review_status: str | None = None
