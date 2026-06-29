@@ -43,6 +43,7 @@ export interface ProjectFlowData {
   current_work_order_id?: number
   current_work_order_status?: string | null
   current_handler_user_id?: number | null
+  current_handler_username?: string | null
   contract_reviewer_id?: number | null
   contract_reviewer_name?: string | null
   contract_review_status?: string | null
