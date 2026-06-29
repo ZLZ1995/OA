@@ -303,6 +303,69 @@ def test_enter_signoff_review_uses_assigned_chief_appraiser_and_workbench_todo()
     assert other_workbench.todo_projects == []
 
 
+def test_enter_signoff_review_uses_only_same_unit_chief_role() -> None:
+    from app.api.v1.signoff import EnterSignoffReviewRequest, enter_signoff_review
+
+    db = _build_session()
+    leader, _, _, _, _, work_order = _seed_bundle(db, "非国有资产评估业务")
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    assert project is not None
+    project.undertaking_unit = "中立国际"
+    generic_role = _seed_role(db, "CHIEF_APPRAISER", "首席评估师")
+    zq_role = _seed_role(db, "CHIEF_APPRAISER_ZQ", "中勤首席评估师")
+    zlgj_role = _seed_role(db, "CHIEF_APPRAISER_ZLGJ", "中立国际首席评估师")
+    _seed_user(db, "generic_chief", "GenericChief", [generic_role])
+    _seed_user(db, "zq_chief", "ZqChief", [zq_role])
+    zlgj_chief = _seed_user(db, "zlgj_chief", "ZlgjChief", [zlgj_role])
+    work_order.current_status = "WAIT_OWNER_SIGNOFF_UPLOAD"
+    work_order.current_handler_user_id = leader.id
+    db.commit()
+
+    enter_signoff_review(
+        work_order.id,
+        payload=EnterSignoffReviewRequest(formal_report_count=2, signer_one="甲", signer_two="乙"),
+        db=db,
+        current_user=leader,
+        _={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == "SIGNOFF_REVIEWING"
+    assert work_order.current_handler_user_id == zlgj_chief.id
+    assert work_order.chief_appraiser_user_id == zlgj_chief.id
+
+
+def test_enter_signoff_review_ignores_cross_unit_assigned_chief() -> None:
+    from app.api.v1.signoff import EnterSignoffReviewRequest, enter_signoff_review
+
+    db = _build_session()
+    leader, _, _, _, _, work_order = _seed_bundle(db, "非国有资产评估业务")
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    assert project is not None
+    project.undertaking_unit = "中立国际"
+    zq_role = _seed_role(db, "CHIEF_APPRAISER_ZQ", "中勤首席评估师")
+    zlgj_role = _seed_role(db, "CHIEF_APPRAISER_ZLGJ", "中立国际首席评估师")
+    zq_chief = _seed_user(db, "zq_chief", "ZqChief", [zq_role])
+    zlgj_chief = _seed_user(db, "zlgj_chief", "ZlgjChief", [zlgj_role])
+    work_order.current_status = "WAIT_OWNER_SIGNOFF_UPLOAD"
+    work_order.current_handler_user_id = leader.id
+    work_order.chief_appraiser_user_id = zq_chief.id
+    db.commit()
+
+    enter_signoff_review(
+        work_order.id,
+        payload=EnterSignoffReviewRequest(formal_report_count=2, signer_one="甲", signer_two="乙"),
+        db=db,
+        current_user=leader,
+        _={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == "SIGNOFF_REVIEWING"
+    assert work_order.current_handler_user_id == zlgj_chief.id
+    assert work_order.chief_appraiser_user_id == zlgj_chief.id
+
+
 def test_enter_signoff_review_ignores_hidden_super_admin_chief_role() -> None:
     from app.api.v1.signoff import EnterSignoffReviewRequest, enter_signoff_review
     from app.api.v1.workbench import get_workbench
