@@ -144,8 +144,19 @@ import {
   type ReportMailingRecordItem
 } from '@/api/reportMailing'
 
-const props = defineProps<{ workOrderId?: number; canOperate: boolean; userRoles?: string[]; flowInfo?: ProjectFlowData }>()
-const emit = defineEmits<{ (e: 'changed'): void }>()
+const props = defineProps<{
+  projectId?: number
+  workOrderId?: number
+  canEdit?: boolean
+  canOperate: boolean
+  userRoles?: string[]
+  userRoleInProject?: string
+  flowInfo?: ProjectFlowData
+}>()
+const emit = defineEmits<{
+  (e: 'changed'): void
+  (e: 'navigate', key: string): void
+}>()
 
 const records = ref<ReportMailingRecordItem[]>([])
 const expressNo = ref('')
@@ -310,11 +321,15 @@ watch(() => [props.workOrderId, props.flowInfo?.mailing_status], load)
 .mailing-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 16px;
+  gap: 18px;
 }
 
 .mailing-form {
   max-width: 760px;
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
 
 .mailing-actions {
@@ -337,6 +352,8 @@ watch(() => [props.workOrderId, props.flowInfo?.mailing_status], load)
   border-radius: 10px;
   padding: 16px;
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  position: sticky;
+  top: 0;
 }
 
 .mailing-note-title {
@@ -369,6 +386,14 @@ watch(() => [props.workOrderId, props.flowInfo?.mailing_status], load)
 @media (max-width: 960px) {
   .mailing-layout {
     grid-template-columns: 1fr;
+  }
+
+  .mailing-form {
+    max-width: 100%;
+  }
+
+  .mailing-note-card {
+    position: static;
   }
 }
 </style>

@@ -161,13 +161,18 @@ import { isFinanceRoleInCurrentFlow } from './invoicePermissions'
 import type { UploadProgressState } from '@/types/upload'
 
 const props = defineProps<{
+  projectId?: number
   workOrderId?: number
+  canEdit?: boolean
   canOperate: boolean
   userRoles: string[]
   userRoleInProject?: string
   flowInfo?: ProjectFlowData
 }>()
-const emit = defineEmits<{ (e: 'changed'): void }>()
+const emit = defineEmits<{
+  (e: 'changed'): void
+  (e: 'navigate', key: string): void
+}>()
 
 const invoices = ref<InvoiceItem[]>([])
 const invoiceFiles = ref<WorkOrderFileItem[]>([])
@@ -458,7 +463,7 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
 .invoice-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 16px;
+  gap: 18px;
   align-items: start;
 }
 
@@ -488,11 +493,20 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
   margin-bottom: 12px;
 }
 
+.invoice-main :deep(.el-form) {
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
 .invoice-note-card {
   border: 1px solid #d8e5f2;
   border-radius: 10px;
   padding: 16px;
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  position: sticky;
+  top: 0;
 }
 
 .invoice-note-title {
@@ -525,6 +539,10 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
 @media (max-width: 960px) {
   .invoice-layout {
     grid-template-columns: 1fr;
+  }
+
+  .invoice-note-card {
+    position: static;
   }
 }
 </style>

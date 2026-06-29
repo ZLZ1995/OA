@@ -45,6 +45,10 @@ import { clearSession } from '@/api/authSession'
 import SwitchAccountDialog from '@/components/auth/SwitchAccountDialog.vue'
 import { type WorkspaceMode, useWorkspaceStore } from '@/store/workspace'
 
+defineProps<{
+  desktopShell?: boolean
+}>()
+
 const router = useRouter()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()

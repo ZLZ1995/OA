@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { isDesktopShell, notifyDesktopStateChanged } from '@/utils/desktop'
 
 export type WorkspaceMode = 'admin' | 'business'
 
@@ -6,7 +7,12 @@ const WORKSPACE_STORAGE_KEY = 'workspace_mode'
 
 function readWorkspaceFromSession(): WorkspaceMode | null {
   const value = sessionStorage.getItem(WORKSPACE_STORAGE_KEY)
-  return value === 'admin' || value === 'business' ? value : null
+  if (value === 'admin' || value === 'business') {
+    return value
+  }
+
+  const desktopValue = localStorage.getItem('desktop_workspace_mode')
+  return desktopValue === 'admin' || desktopValue === 'business' ? desktopValue : null
 }
 
 function hasAdminRole(roles: string[]) {
@@ -29,10 +35,24 @@ export const useWorkspaceStore = defineStore('workspace', {
     clearWorkspace() {
       this.currentWorkspace = null
       sessionStorage.removeItem(WORKSPACE_STORAGE_KEY)
+      localStorage.removeItem('desktop_workspace_mode')
+      void notifyDesktopStateChanged({
+        currentRoute: window.location.pathname + window.location.search,
+        workspaceKey: '',
+        userId: null,
+      })
     },
     setWorkspace(workspace: WorkspaceMode) {
       this.currentWorkspace = workspace
       sessionStorage.setItem(WORKSPACE_STORAGE_KEY, workspace)
+      if (localStorage.getItem('desktop_shell_mode') === 'true') {
+        localStorage.setItem('desktop_workspace_mode', workspace)
+      }
+      void notifyDesktopStateChanged({
+        currentRoute: window.location.pathname + window.location.search,
+        workspaceKey: workspace,
+        userId: null,
+      })
     },
     supportsWorkspaceChoice(roles: string[]) {
       return hasAdminRole(roles) && hasNonAdminRole(roles)
@@ -54,7 +74,17 @@ export const useWorkspaceStore = defineStore('workspace', {
       }
       if (this.supportsWorkspaceChoice(roles)) {
         const current = readWorkspaceFromSession()
-        this.currentWorkspace = current
+        if (current) {
+          this.currentWorkspace = current
+          return current
+        }
+
+        if (isDesktopShell()) {
+          this.setWorkspace('business')
+          return 'business'
+        }
+
+        this.currentWorkspace = null
         return current
       }
       this.clearWorkspace()

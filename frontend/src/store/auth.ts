@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { me } from '@/api/auth'
 import { useWorkspaceStore } from './workspace'
+import { notifyDesktopStateChanged } from '@/utils/desktop'
 
 interface UserProfile {
   id: number
@@ -46,9 +47,20 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem('token')
       localStorage.removeItem('access_token')
       workspace.clearWorkspace()
+      void notifyDesktopStateChanged({
+        currentRoute: window.location.pathname + window.location.search,
+        workspaceKey: '',
+        userId: null,
+      })
     },
     setUser(user: UserProfile) {
       this.user = user
+      const workspace = useWorkspaceStore()
+      void notifyDesktopStateChanged({
+        currentRoute: window.location.pathname + window.location.search,
+        workspaceKey: workspace.currentWorkspace ?? '',
+        userId: user.id,
+      })
     },
     async ensureUserLoaded() {
       if (!this.token) {

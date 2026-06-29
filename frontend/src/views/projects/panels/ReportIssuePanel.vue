@@ -136,7 +136,15 @@ import { startReportMailing } from '@/api/reportMailing'
 import { useAuthStore } from '@/store/auth'
 import type { UploadProgressState } from '@/types/upload'
 
-const props = defineProps<{ workOrderId?: number; canOperate: boolean; userRoles?: string[]; flowInfo?: ProjectFlowData }>()
+const props = defineProps<{
+  projectId?: number
+  workOrderId?: number
+  canEdit?: boolean
+  canOperate: boolean
+  userRoles?: string[]
+  userRoleInProject?: string
+  flowInfo?: ProjectFlowData
+}>()
 const emit = defineEmits<{
   (e: 'changed'): void
   (e: 'navigate', key: string): void
@@ -379,7 +387,7 @@ watch(() => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.sign
 .issue-stage-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 16px;
+  gap: 18px;
   align-items: start;
 }
 
@@ -393,6 +401,8 @@ watch(() => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.sign
   border-radius: 10px;
   padding: 16px;
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  position: sticky;
+  top: 0;
 }
 
 .issue-note-title {
@@ -436,16 +446,29 @@ watch(() => [props.workOrderId, props.flowInfo?.signer_one, props.flowInfo?.sign
   width: 100%;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
 .issue-file-card {
   min-width: 0;
+  border-radius: 10px;
+}
+
+.issue-file-card :deep(.el-card__header) {
+  padding-bottom: 10px;
+}
+
+.issue-file-card :deep(.el-card__body) {
+  padding-top: 0;
 }
 
 @media (max-width: 900px) {
   .issue-stage-layout {
     grid-template-columns: 1fr;
+  }
+
+  .issue-note-card {
+    position: static;
   }
 
   .issue-file-grid {

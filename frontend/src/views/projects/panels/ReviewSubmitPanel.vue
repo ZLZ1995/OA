@@ -410,8 +410,19 @@ import ReviewUploadRequirementBox from '@/components/common/ReviewUploadRequirem
 import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
 import type { UploadProgressState } from '@/types/upload'
 
-const props = defineProps<{ workOrderId?: number; canEdit: boolean; userRoles: string[]; flowInfo?: ProjectFlowData }>()
-const emit = defineEmits<{ (e: 'changed'): void }>()
+const props = defineProps<{
+  projectId?: number
+  workOrderId?: number
+  canEdit: boolean
+  canOperate?: boolean
+  userRoles: string[]
+  userRoleInProject?: string
+  flowInfo?: ProjectFlowData
+}>()
+const emit = defineEmits<{
+  (e: 'changed'): void
+  (e: 'navigate', key: string): void
+}>()
 
 type ReviewRound = 'FIRST' | 'SECOND' | 'THIRD' | 'EXTERNAL_FIRST' | 'EXTERNAL_SECOND' | 'EXTERNAL_THIRD'
 
@@ -1395,21 +1406,21 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   width: 100%;
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 18px;
   flex-wrap: wrap;
 }
 
 .review-upload-main {
   flex: 1;
-  min-width: 320px;
+  min-width: 360px;
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .review-upload-side {
-  width: 320px;
+  width: 300px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .review-upload-actions {
@@ -1422,7 +1433,7 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 .file-zone-card {
   border: 1px solid #d8e5f2;
   border-radius: 10px;
-  padding: 16px;
+  padding: 18px;
   background: linear-gradient(135deg, #f8fbff 0%, #ffffff 68%);
   box-shadow: 0 8px 22px rgba(21, 78, 128, 0.06);
 }
@@ -1444,13 +1455,13 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .file-zone-title {
   color: #0c3157;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .file-zone-subtitle {
@@ -1462,7 +1473,7 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 
 .file-row-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .file-row {
@@ -1542,6 +1553,10 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], relo
 .review-upload-side :deep(.review-requirement-box) {
   position: sticky;
   top: 0;
+}
+
+.review-upload-side > * {
+  width: 100%;
 }
 
 @media (max-width: 900px) {

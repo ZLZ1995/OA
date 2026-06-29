@@ -237,7 +237,7 @@ watch(() => [props.projectId, props.workOrderId, props.flowInfo?.archive_reviewe
 .archive-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 16px;
+  gap: 18px;
   align-items: start;
 }
 
@@ -265,11 +265,20 @@ watch(() => [props.projectId, props.workOrderId, props.flowInfo?.archive_reviewe
   display: none;
 }
 
+.archive-main :deep(.el-form) {
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
 .archive-note-card {
   border: 1px solid #d8e5f2;
   border-radius: 10px;
   padding: 16px;
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  position: sticky;
+  top: 0;
 }
 
 .archive-note-title {
@@ -302,6 +311,10 @@ watch(() => [props.projectId, props.workOrderId, props.flowInfo?.archive_reviewe
 @media (max-width: 960px) {
   .archive-layout {
     grid-template-columns: 1fr;
+  }
+
+  .archive-note-card {
+    position: static;
   }
 }
 </style>
