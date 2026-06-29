@@ -1,8 +1,10 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -11,9 +13,17 @@ from app.db.init_db import init_db
 logger = logging.getLogger(__name__)
 
 
+def ensure_desktop_update_directory() -> None:
+    """Ensure the desktop update publish root exists on the mounted data volume."""
+    update_root = Path(settings.desktop_update_root_dir)
+    update_root.mkdir(parents=True, exist_ok=True)
+    logger.info("Desktop update directory ready at: %s", update_root)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Initialize database objects and seed basic data on startup."""
+    ensure_desktop_update_directory()
     try:
         init_db()
         logger.info('Database initialized successfully.')
@@ -43,6 +53,12 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.api_v1_prefix)
+ensure_desktop_update_directory()
+app.mount(
+    "/desktop-updates",
+    StaticFiles(directory=settings.desktop_update_root_dir),
+    name="desktop-updates",
+)
 
 
 @app.get("/", tags=["health"])
