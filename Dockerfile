@@ -7,6 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATABASE_URL=sqlite:////data/app.db \
     DB_INIT_REQUIRED=true
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl wget tar gzip ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
