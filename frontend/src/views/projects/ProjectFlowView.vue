@@ -372,7 +372,7 @@ onMounted(load)
 <style scoped>
 .project-flow-page {
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 .project-flow-head {
@@ -420,6 +420,22 @@ onMounted(load)
   min-height: 280px;
 }
 
+.flow-nav-card {
+  position: sticky;
+  top: 0;
+}
+
+.flow-main-card {
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.flow-step-card {
+  position: sticky;
+  top: 0;
+  opacity: 0.94;
+}
+
 .todo-banner {
   margin-bottom: 16px;
 }
@@ -442,12 +458,26 @@ onMounted(load)
 }
 
 .flow-step-card :deep(.el-card__body) {
-  padding: 18px 14px;
+  padding: 16px 12px;
 }
 
 .flow-step-card :deep(.el-step__title) {
-  font-size: 14px;
-  line-height: 1.35;
+  font-size: 13px;
+  line-height: 1.3;
+  color: #64748b;
+}
+
+.flow-step-card :deep(.el-step__head.is-process) {
+  color: var(--zq-primary);
+}
+
+.flow-step-card :deep(.el-step__title.is-process) {
+  color: #153a63;
+  font-weight: 700;
+}
+
+.flow-step-card :deep(.el-step__head.is-finish) {
+  color: #22c55e;
 }
 
 @media (max-width: 992px) {
@@ -455,6 +485,11 @@ onMounted(load)
   .panel-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .flow-nav-card,
+  .flow-step-card {
+    position: static;
   }
 }
 </style>

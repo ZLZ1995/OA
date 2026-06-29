@@ -3,6 +3,7 @@ import { useAuthStore } from '@/store/auth'
 import { pinia } from '@/store/pinia'
 import { useWorkspaceStore } from '@/store/workspace'
 import AppLayout from '@/layout/AppLayout.vue'
+import { isDesktopEmbedded, notifyDesktopStateChanged } from '@/utils/desktop'
 
 function detectRouterBase() {
   const configured = import.meta.env.VITE_ROUTER_BASE as string | undefined
@@ -79,14 +80,18 @@ router.onError((error, to) => {
 router.beforeEach(async (to) => {
   const auth = useAuthStore(pinia)
   const workspace = useWorkspaceStore(pinia)
+  const desktopMode = isDesktopEmbedded()
 
   try {
     if (to.path === '/login') {
+      if (desktopMode) {
+        return auth.isLoggedIn ? '/workbench' : false
+      }
       return true
     }
 
     if (!auth.isLoggedIn) {
-      return `/login?redirect=${encodeURIComponent(to.fullPath)}`
+      return desktopMode ? false : `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
 
     const profile = await auth.ensureUserLoaded()
@@ -96,14 +101,19 @@ router.beforeEach(async (to) => {
     const roles = profile.roles || []
     const isAdmin = roles.includes('ADMIN')
     const canChooseWorkspace = workspace.supportsWorkspaceChoice(roles)
-    const resolvedWorkspace = workspace.initializeForRoles(roles)
+    let resolvedWorkspace = workspace.initializeForRoles(roles)
     const adminOnlyPaths = ['/accounts', '/project-exports', '/termination-approvals', '/project-delete-approvals', '/project-conflicts', '/issue-feedbacks']
     const isAdminPath = adminOnlyPaths.includes(to.path)
+
+    if (desktopMode && canChooseWorkspace && !resolvedWorkspace) {
+      resolvedWorkspace = isAdminPath ? 'admin' : 'business'
+      workspace.setWorkspace(resolvedWorkspace)
+    }
 
     if (isAdminPath && !isAdmin) return '/workbench'
 
     if (canChooseWorkspace && !resolvedWorkspace) {
-      return `/login?redirect=${encodeURIComponent(to.fullPath)}`
+      return desktopMode ? false : `/login?redirect=${encodeURIComponent(to.fullPath)}`
     }
 
     if (resolvedWorkspace === 'business' && isAdminPath) {
@@ -117,8 +127,19 @@ router.beforeEach(async (to) => {
     return true
   } catch {
     auth.clearAuth()
-    return '/login'
+    return desktopMode ? false : '/login'
   }
+})
+
+router.afterEach((to) => {
+  const auth = useAuthStore(pinia)
+  const workspace = useWorkspaceStore(pinia)
+
+  void notifyDesktopStateChanged({
+    currentRoute: to.fullPath,
+    workspaceKey: workspace.currentWorkspace ?? '',
+    userId: auth.user?.id ?? null,
+  })
 })
 
 export default router

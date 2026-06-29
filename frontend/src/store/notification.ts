@@ -52,9 +52,31 @@ function buildDefaultStats(): NotificationStats {
   }
 }
 
+function isDesktopEmbeddedRuntime() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  if (window.desktopApp?.isDesktopShell) {
+    return true
+  }
+
+  try {
+    return window.parent !== window
+  } catch {
+    return false
+  }
+}
+
 function buildWebSocketUrl() {
+  const runtimeBackendUrl = isDesktopEmbeddedRuntime()
+    ? localStorage.getItem('desktop_backend_url')?.trim()
+    : ''
   const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
-  const normalizedApiBaseUrl = configuredApiBaseUrl
+
+  const normalizedApiBaseUrl = runtimeBackendUrl
+    ? `${runtimeBackendUrl.replace(/\/+$/, '')}/api/v1`
+    : configuredApiBaseUrl
     ? configuredApiBaseUrl.replace(/\/+$/, '')
     : `${window.location.origin}/api/v1`
   return `${normalizedApiBaseUrl.replace(/^http/i, 'ws')}/ws/notifications`

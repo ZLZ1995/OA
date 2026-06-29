@@ -8,14 +8,26 @@
     style="margin-bottom: 12px"
   />
   <template v-else>
-    <el-descriptions :column="2" border style="margin-bottom: 16px">
-      <el-descriptions-item label="项目名称">{{ flowInfo?.project.project_name || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="客户名称">{{ flowInfo?.project.client_name || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="报告类型">{{ flowInfo?.project.report_type || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="项目来源">{{ flowInfo?.project.project_source_display || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="项目负责人">{{ flowInfo?.project.project_leader_display_name || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="合同流程状态">{{ flowInfo?.contract_review_status_display || '-' }}</el-descriptions-item>
-    </el-descriptions>
+    <div class="stage-summary-card">
+      <div class="stage-summary-grid">
+        <div class="stage-summary-item">
+          <span>项目名称</span>
+          <strong>{{ flowInfo?.project.project_name || '-' }}</strong>
+        </div>
+        <div class="stage-summary-item">
+          <span>客户名称</span>
+          <strong>{{ flowInfo?.project.client_name || '-' }}</strong>
+        </div>
+        <div class="stage-summary-item">
+          <span>项目负责人</span>
+          <strong>{{ flowInfo?.project.project_leader_display_name || '-' }}</strong>
+        </div>
+        <div class="stage-summary-item">
+          <span>合同流程状态</span>
+          <strong>{{ flowInfo?.contract_review_status_display || '-' }}</strong>
+        </div>
+      </div>
+    </div>
 
     <el-card shadow="never" style="margin-bottom: 16px">
       <template #header>原合同文件</template>
@@ -446,6 +458,39 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
   margin-left: 12px;
 }
 
+.stage-summary-card {
+  margin-bottom: 16px;
+  border: 1px solid #d8e5f2;
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.stage-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stage-summary-item {
+  min-width: 0;
+}
+
+.stage-summary-item span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.stage-summary-item strong {
+  display: block;
+  margin-top: 6px;
+  color: #153a63;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .contract-stage-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
@@ -489,6 +534,10 @@ watch(() => [props.workOrderId, props.flowInfo?.current_work_order_status], load
 }
 
 @media (max-width: 960px) {
+  .stage-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .contract-stage-layout {
     grid-template-columns: 1fr;
   }

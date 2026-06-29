@@ -538,12 +538,19 @@ const previewActiveFlowIndex = computed(() => {
   return index >= 0 ? index : 0
 })
 
-const previewFlowTimeline = computed(() =>
-  FLOW_PREVIEW_STEPS.map(item => ({
+const previewFlowTimeline = computed(() => {
+  const timeline = FLOW_PREVIEW_STEPS.map(item => ({
     ...item,
     index: previewFlowSteps.value.findIndex(step => step === item.label),
-  })),
-)
+  }))
+  const activeIndex = previewActiveFlowIndex.value
+  if (activeIndex < 0) return timeline.slice(0, 5)
+  const start = Math.max(0, activeIndex - 1)
+  const end = Math.min(timeline.length, activeIndex + 3)
+  const focused = timeline.slice(start, end)
+  if (focused.length >= 4) return focused
+  return timeline.slice(Math.max(0, activeIndex - 2), Math.min(timeline.length, activeIndex + 2))
+})
 
 const previewCurrentGroup = computed(() => {
   const current = previewFlowTimeline.value.find(item => item.index === previewActiveFlowIndex.value)
@@ -1254,7 +1261,7 @@ onUnmounted(() => {
 
 .linkage-content {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) 320px;
+  grid-template-columns: minmax(0, 1.85fr) 284px;
   gap: 16px;
   align-items: start;
 }
@@ -1322,11 +1329,11 @@ onUnmounted(() => {
 
 .linkage-side {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .side-panel {
-  padding: 14px;
+  padding: 12px;
 }
 
 .linkage-card :deep(.el-card__body) {
@@ -1392,14 +1399,14 @@ onUnmounted(() => {
 
 .flow-preview-panel {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .flow-preview-current {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 10px 12px;
   border-radius: 10px;
   background: linear-gradient(180deg, #f8fbff 0%, #f4f8fd 100%);
   border: 1px solid rgba(31, 78, 121, 0.08);
@@ -1413,9 +1420,9 @@ onUnmounted(() => {
 
 .flow-preview-current strong {
   display: block;
-  margin-top: 8px;
+  margin-top: 4px;
   color: #153a63;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .flow-timeline {
@@ -1426,10 +1433,10 @@ onUnmounted(() => {
 .flow-timeline-item {
   position: relative;
   display: grid;
-  grid-template-columns: 22px 34px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 18px 28px minmax(0, 1fr);
+  gap: 10px;
   align-items: stretch;
-  padding-bottom: 12px;
+  padding-bottom: 8px;
 }
 
 .flow-timeline-item:last-child {
@@ -1450,11 +1457,11 @@ onUnmounted(() => {
 
 .flow-timeline-card {
   width: 100%;
-  min-width: 180px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--zq-border-soft);
   border-radius: 10px;
   background: #fff;
@@ -1468,12 +1475,12 @@ onUnmounted(() => {
   display: inline-flex !important;
   align-self: flex-start;
   width: auto;
-  margin-bottom: 8px;
-  padding: 2px 8px;
+  margin-bottom: 6px;
+  padding: 2px 6px;
   border-radius: 999px;
   background: #eef4fb;
   color: #1f4e79;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1489,13 +1496,13 @@ onUnmounted(() => {
 
 .flow-timeline-card strong {
   color: #153a63;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .flow-timeline-card span:last-child {
-  margin-top: 6px;
+  margin-top: 4px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .flow-timeline-item.is-done .flow-timeline-card {
@@ -1523,15 +1530,15 @@ onUnmounted(() => {
 }
 
 .flow-preview-dot {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border-radius: 999px;
   background: #e2e8f0;
   color: #475569;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .flow-preview-step.is-done .flow-preview-dot {
@@ -1546,7 +1553,22 @@ onUnmounted(() => {
 
 .flow-preview-footer {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+}
+
+.flow-preview-footer :deep(.el-button) {
+  width: 100%;
+}
+
+.focus-panel {
+  background: #fbfcfe;
+}
+
+.focus-list {
+  gap: 8px;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 @media (max-width: 1200px) {
