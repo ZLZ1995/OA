@@ -27,8 +27,8 @@ def get_project_chief_role_code(project: Project | None) -> str | None:
 def get_project_chief_role_codes(project: Project | None) -> set[str]:
     role_code = get_project_chief_role_code(project)
     if role_code:
-        return {role_code, "CHIEF_APPRAISER"}
-    return {"CHIEF_APPRAISER"}
+        return {role_code}
+    return set()
 
 
 def user_has_role_code(user: User, role_codes: set[str]) -> bool:
