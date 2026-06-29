@@ -4,6 +4,7 @@ from app.api.v1.archives import router as archives_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.contract_reviews import router as contract_reviews_router
 from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.desktop_updates import router as desktop_updates_router
 from app.api.v1.files import router as files_router
 from app.api.v1.finance import router as finance_router
 from app.api.v1.health import router as health_router
@@ -55,4 +56,5 @@ api_router.include_router(reminders_router)
 api_router.include_router(notifications_router)
 api_router.include_router(workflow_logs_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(desktop_updates_router)
 api_router.include_router(workbench_router)
