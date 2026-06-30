@@ -1,0 +1,79 @@
+{
+  "name": "zhongqin-oa-desktop",
+  "version": "0.2.1",
+  "private": true,
+  "description": "Windows desktop shell for Zhongqin OA",
+  "author": "Zhongqin OA Team",
+  "main": "dist/main/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "clean": "rimraf dist out",
+    "clean:dist": "rimraf dist",
+    "clean:frontend-dist": "rimraf frontend-dist",
+    "clean:out": "rimraf out",
+    "generate:icons": "python .\\scripts\\generate-icons.py",
+    "build:frontend": "npm --prefix ..\\frontend run build",
+    "compile": "npm run generate:icons && npm run clean:dist && npm run clean:frontend-dist && npm run build:frontend && powershell -ExecutionPolicy Bypass -File .\\scripts\\sync-frontend-dist.ps1 && tsc -p tsconfig.json",
+    "build": "npm run compile",
+    "start": "npm run compile && electron .",
+    "dev": "npm run compile && electron . --desktop-debug",
+    "dev:test": "npm run compile && electron . --desktop-debug --desktop-auto-test-login --desktop-auto-test-notification --desktop-auto-handle-test-notification",
+    "pack:official": "npm run clean && npm run compile && electron-builder --dir",
+    "dist:official": "npm run clean && npm run compile && electron-builder",
+    "prepack:win": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-prepackaged-win.ps1",
+    "validate:prepack:win": "powershell -ExecutionPolicy Bypass -File .\\scripts\\validate-prepackaged-win.ps1",
+    "dist:win": "powershell -ExecutionPolicy Bypass -File .\\scripts\\package-win.ps1",
+    "publish:local": "powershell -ExecutionPolicy Bypass -File .\\scripts\\publish-generic-update.ps1",
+    "publish:official": "powershell -ExecutionPolicy Bypass -File .\\scripts\\publish-generic-update.ps1 -Channel stable",
+    "dist": "npm run dist:win"
+  },
+  "dependencies": {
+    "electron-log": "^5.2.4",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "electron": "^35.3.0",
+    "electron-builder": "^26.0.12",
+    "rimraf": "^6.0.1",
+    "typescript": "5.6.3"
+  },
+  "build": {
+    "appId": "com.zhongqin.oa.desktop",
+    "productName": "中勤评估业务OA系统",
+    "directories": {
+      "output": "out"
+    },
+    "icon": "build-resources/icons/app.icns",
+    "files": [
+      "dist/**/*",
+      "frontend-dist/**/*",
+      "build-resources/icons/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build-resources/icons/app.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "中勤评估业务OA系统",
+      "uninstallDisplayName": "中勤评估业务OA系统"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://zhongqinoa.zeabur.app/desktop-updates/win/stable/"
+      }
+    ],
+    "artifactName": "zhongqin-oa-setup-${version}.${ext}"
+  }
+}

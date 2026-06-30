@@ -18,7 +18,7 @@ from app.core.config import settings
 router = APIRouter(prefix="/desktop-updates", tags=["桌面更新"])
 
 SETUP_FILE_PATTERN = re.compile(
-    r"^中勤评估业务OA系统 Setup \d+\.\d+\.\d+\.exe(\.blockmap)?$"
+    r"^zhongqin-oa-setup-\d+\.\d+\.\d+\.exe(\.blockmap)?$"
 )
 UPLOAD_METADATA_FILENAME = "session.json"
 

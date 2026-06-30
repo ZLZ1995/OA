@@ -34,8 +34,8 @@
 
 1. `latest.yml`
 2. `release.json`
-3. `中勤评估业务OA系统 Setup x.y.z.exe`
-4. `中勤评估业务OA系统 Setup x.y.z.exe.blockmap`（可选）
+3. `zhongqin-oa-setup-x.y.z.exe`
+4. `zhongqin-oa-setup-x.y.z.exe.blockmap`（可选）
 
 ## 4. 服务器目录结构
 上传后服务器目录应为：
@@ -46,8 +46,8 @@
     stable/
       latest.yml
       release.json
-      中勤评估业务OA系统 Setup x.y.z.exe
-      中勤评估业务OA系统 Setup x.y.z.exe.blockmap
+      zhongqin-oa-setup-x.y.z.exe
+      zhongqin-oa-setup-x.y.z.exe.blockmap
 ```
 
 ## 5. 推荐上传方式
@@ -104,7 +104,7 @@ mkdir -p /data/desktop-updates/win/stable
 
 1. `https://zhongqinoa.zeabur.app/desktop-updates/win/stable/latest.yml`
 2. `https://zhongqinoa.zeabur.app/desktop-updates/win/stable/release.json`
-3. `https://zhongqinoa.zeabur.app/desktop-updates/win/stable/中勤评估业务OA系统%20Setup%20x.y.z.exe`
+3. `https://zhongqinoa.zeabur.app/desktop-updates/win/stable/zhongqin-oa-setup-x.y.z.exe`
 
 验证标准：
 
