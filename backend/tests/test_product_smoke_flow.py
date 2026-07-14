@@ -232,6 +232,60 @@ def test_smoke_03_contract_review_approval_moves_to_report_submit() -> None:
     assert work_order.current_handler_user_id == project.project_leader_id
 
 
+def test_contract_process_completed_can_reopen_contract_review() -> None:
+    from app.api.v1.contract_reviews import approve_and_transfer_contract_review, submit_contract_review
+    from app.api.v1.print_room import confirm_contract_complete, reopen_contract_review, send_contract_to_project_leader
+    from app.schemas.contract_review import ContractReviewApproveTransferRequest
+    from app.schemas.print_room import PrintRoomRollbackRequest
+    from app.services.contract_print_room_flow import get_contract_print_room_status
+
+    db = _build_session()
+    users, project, work_order = _create_project_bundle(db)
+    work_order.current_status = WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value
+    work_order.current_handler_user_id = users["leader"].id
+    _add_current_file(db, work_order, "CONTRACT_DRAFT", "CONTRACT_DRAFT", users["leader"], "contract.pdf")
+    db.commit()
+
+    submitted = submit_contract_review(
+        payload=ContractReviewSubmitRequest(work_order_id=work_order.id, reviewer_user_id=users["contract"].id, comment="submit"),
+        db=db,
+        current_user=users["leader"],
+    )
+    approve_and_transfer_contract_review(
+        record_id=submitted.id,
+        payload=ContractReviewApproveTransferRequest(comment="approve", print_room_handler_id=users["print_room"].id),
+        db=db,
+        current_user=users["contract"],
+        _={"CONTRACT_REVIEWER"},
+    )
+    _add_current_file(db, work_order, "STAMPED_CONTRACT_SCAN", "PRINT_ROOM_CONTRACT_SCAN", users["print_room"], "stamped.pdf")
+    send_contract_to_project_leader(
+        payload=PrintRoomRollbackRequest(work_order_id=work_order.id, remark="scan ready"),
+        db=db,
+        current_user=users["print_room"],
+        _={"PRINT_ROOM"},
+    )
+    confirm_contract_complete(
+        payload=PrintRoomRollbackRequest(work_order_id=work_order.id, remark="ok"),
+        db=db,
+        current_user=users["leader"],
+    )
+    db.refresh(work_order)
+    assert work_order.current_status == WorkOrderStatus.CONTRACT_APPROVED.value
+    assert get_contract_print_room_status(db, work_order) == WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value
+
+    reopen_contract_review(
+        payload=PrintRoomRollbackRequest(work_order_id=work_order.id, remark="redo"),
+        db=db,
+        current_user=users["leader"],
+    )
+
+    db.refresh(work_order)
+    assert work_order.current_status == WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT.value
+    assert work_order.current_handler_user_id == project.project_leader_id
+    assert get_contract_print_room_status(db, work_order) is None
+
+
 def test_smoke_04_review_and_signoff_move_to_print_room() -> None:
     from app.api.v1.reviews import _submit_review_impl as submit_review, decide_review
     from app.api.v1.signoff import EnterSignoffReviewRequest, SignoffApproveRequest, approve_signoff, enter_signoff_review

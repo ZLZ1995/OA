@@ -5,7 +5,7 @@ export interface ContractReviewRecordItem {
   id: number
   work_order_id: number
   project_id: number
-  action_type: 'SUBMIT_CONTRACT' | 'APPROVE_CONTRACT' | 'APPROVE_AND_TRANSFER_PRINT_ROOM' | 'TRANSFER_APPROVED_PRINT_ROOM' | 'REJECT_CONTRACT'
+  action_type: 'SUBMIT_CONTRACT' | 'APPROVE_CONTRACT' | 'APPROVE_AND_TRANSFER_PRINT_ROOM' | 'TRANSFER_APPROVED_PRINT_ROOM' | 'REJECT_CONTRACT' | 'REOPEN_CONTRACT_REVIEW'
   operator_user_id: number
   operator_user_name?: string | null
   reviewer_user_id: number
