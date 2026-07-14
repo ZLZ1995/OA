@@ -45,6 +45,7 @@ def get_contract_print_room_status(db: Session, work_order: WorkOrder | None) ->
                     "RETURN_TO_PRINT_ROOM",
                     "SEND_TO_PROJECT_LEADER_CONFIRM",
                     "CONFIRM_CONTRACT_COMPLETE",
+                    "REOPEN_CONTRACT_REVIEW",
                 ]
             ),
         )
@@ -58,6 +59,8 @@ def get_contract_print_room_status(db: Session, work_order: WorkOrder | None) ->
             return WorkOrderStatus.WAIT_PROJECT_LEADER_CONTRACT_CONFIRM.value
         if latest_log.action_type == "CONFIRM_CONTRACT_COMPLETE":
             return WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value
+        if latest_log.action_type == "REOPEN_CONTRACT_REVIEW":
+            return None
     return WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value
 
 

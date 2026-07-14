@@ -176,6 +176,9 @@
                 <el-button type="success" @click="onConfirmComplete">确认办结</el-button>
               </el-space>
             </el-form-item>
+            <el-form-item v-else-if="canReopenContractReview">
+              <el-button type="warning" plain @click="onReopenContractReview">报告重新审核</el-button>
+            </el-form-item>
           </el-form>
         </div>
         <aside class="contract-stage-side">
@@ -223,7 +226,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage, type UploadFile } from 'element-plus'
+import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import type { WorkOrderFileItem } from '@/api/files'
 import { downloadWorkOrderFile, listWorkOrderFiles, uploadWorkOrderFile } from '@/api/files'
@@ -234,7 +237,7 @@ import {
   transferApprovedContractToPrintRoom,
   type ContractReviewRecordItem
 } from '@/api/contractReviews'
-import { confirmContractComplete, returnContractToPrintRoom, sendContractToProjectLeader } from '@/api/printRoom'
+import { confirmContractComplete, reopenContractReview, returnContractToPrintRoom, sendContractToProjectLeader } from '@/api/printRoom'
 import { listUserCandidates, type UserItem } from '@/api/users'
 import { useAuthStore } from '@/store/auth'
 
@@ -291,6 +294,16 @@ const canProjectLeaderConfirm = computed(() => Boolean(
   )
 ))
 
+const canReopenContractReview = computed(() => Boolean(
+  currentUserId.value &&
+  contractPrintRoomStatus.value === 'CONTRACT_PROCESS_COMPLETED' &&
+  (
+    props.flowInfo?.project.project_leader_id === currentUserId.value ||
+    props.flowInfo?.user_role_in_project === '项目负责人' ||
+    isAdmin.value
+  )
+))
+
 const canTransferApprovedContract = computed(() => Boolean(
   currentUserId.value &&
   props.flowInfo?.current_work_order_status === 'CONTRACT_APPROVED' &&
@@ -312,6 +325,7 @@ function actionLabel(actionType: ContractReviewRecordItem['action_type']) {
   if (actionType === 'APPROVE_CONTRACT') return '审核通过'
   if (actionType === 'APPROVE_AND_TRANSFER_PRINT_ROOM') return '审核通过并转文印室'
   if (actionType === 'TRANSFER_APPROVED_PRINT_ROOM') return '转送文印室'
+  if (actionType === 'REOPEN_CONTRACT_REVIEW') return '报告重新审核'
   return '退回修改'
 }
 
@@ -438,6 +452,30 @@ async function onConfirmComplete() {
     remark: leaderRemark.value.trim() || undefined
   })
   ElMessage.success('合同流程已办结')
+  leaderRemark.value = ''
+  emit('changed')
+}
+
+async function onReopenContractReview() {
+  if (!props.workOrderId) return
+  try {
+    await ElMessageBox.confirm(
+      '确认后原合同作废，OA流程将重新进入合同送审环节。是否继续？',
+      '报告重新审核',
+      {
+        type: 'warning',
+        confirmButtonText: '确认重新审核',
+        cancelButtonText: '取消'
+      }
+    )
+  } catch {
+    return
+  }
+  await reopenContractReview({
+    work_order_id: props.workOrderId,
+    remark: leaderRemark.value.trim() || undefined
+  })
+  ElMessage.success('已重新进入合同送审环节')
   leaderRemark.value = ''
   emit('changed')
 }

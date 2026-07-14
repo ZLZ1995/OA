@@ -312,6 +312,54 @@ def confirm_contract_complete(
     return {"message": "合同流程已办结"}
 
 
+@router.post("/contracts/reopen-review")
+def reopen_contract_review(
+    payload: PrintRoomRollbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    if not _is_admin(current_user) and work_order.project_leader_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅项目负责人可发起合同重新审核")
+    if get_contract_print_room_status(db, work_order) != WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value:
+        raise HTTPException(status_code=400, detail="合同流程未确认办结，不可重新审核")
+
+    from_status = WorkOrderStatus(work_order.current_status)
+    to_status = WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT
+    if not can_transit(from_status, to_status):
+        raise HTTPException(status_code=400, detail="非法状态迁移")
+
+    remark = payload.remark or "原合同作废，重新进入合同送审"
+    work_order.current_status = to_status.value
+    work_order.current_handler_user_id = work_order.project_leader_id
+    create_workflow_log(
+        db,
+        work_order_id=work_order.id,
+        from_status=from_status.value,
+        to_status=to_status.value,
+        action_type="REOPEN_CONTRACT_REVIEW",
+        operator_user_id=current_user.id,
+        remark=remark,
+    )
+
+    project = db.query(Project).filter(Project.id == work_order.project_id).first()
+    if project and work_order.print_room_handler_id:
+        send_workflow_notification(
+            db,
+            project=project,
+            work_order=work_order,
+            sender_user=current_user,
+            receiver_user_id=work_order.print_room_handler_id,
+            action_name="REOPEN_CONTRACT_REVIEW",
+            comment=f"{remark}。原合同作废，OA流程已重新进入合同送审环节。",
+        )
+
+    db.commit()
+    return {"message": "已重新进入合同送审环节"}
+
+
 @router.post("/transfer-print-room")
 def transfer_to_print_room(
     payload: TransferPrintRoomRequest,

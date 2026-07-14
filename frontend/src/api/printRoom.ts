@@ -75,6 +75,11 @@ export async function confirmContractComplete(payload: { work_order_id: number; 
   return data as { message: string }
 }
 
+export async function reopenContractReview(payload: { work_order_id: number; remark?: string }) {
+  const { data } = await http.post('/print-room/contracts/reopen-review', payload)
+  return data as { message: string }
+}
+
 export async function transferPrintRoom(payload: { work_order_id: number; handler_user_id: number; remark?: string }) {
   const { data } = await http.post('/print-room/transfer-print-room', payload)
   return data as { message: string }
