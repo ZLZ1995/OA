@@ -34,10 +34,10 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173,"
         "http://localhost:4173,"
         "http://127.0.0.1:4173,"
-        "https://zhongqinoa01.zeabur.app,"
+        "https://zhongqinoa01.com,"
         "https://zhongqinoa.zeabur.app"
     )
-    cors_origin_regex: str = r"^(https://[a-z0-9-]+\.zeabur\.app|http://(localhost|127\.0\.0\.1):\d+)$"
+    cors_origin_regex: str = r"^(https://([a-z0-9-]+\.zeabur\.app|zhongqinoa01\.com)|http://(localhost|127\.0\.0\.1):\d+)$"
 
     def get_cors_origins(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(',') if item.strip()]
