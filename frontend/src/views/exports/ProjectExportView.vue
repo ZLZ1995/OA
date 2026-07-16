@@ -1,9 +1,8 @@
 <template>
   <el-card shadow="never" class="project-export-card">
-    <template #header>项目清单导出</template>
-
     <div class="project-export-sticky-panel">
-    <el-form :model="filters" label-width="120px" class="filter-form">
+      <div class="project-export-title">项目清单导出</div>
+      <el-form :model="filters" label-width="120px" class="filter-form">
       <el-row :gutter="12">
         <el-col :span="6"><el-form-item label="项目编号"><el-input v-model="filters.project_no" clearable /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="项目名称"><el-input v-model="filters.project_name" clearable /></el-form-item></el-col>
@@ -332,6 +331,17 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: -1;
   background: #fff;
+}
+
+.project-export-title {
+  margin: -20px -20px 20px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--el-card-border-color);
+  background: #fff;
+  color: var(--zq-text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 24px;
 }
 
 .filter-form {
