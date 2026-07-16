@@ -1,8 +1,8 @@
 <template>
-  <el-card shadow="never" class="project-export-card" :style="stickyVars">
+  <el-card shadow="never" class="project-export-card">
     <template #header>项目清单导出</template>
 
-    <div ref="filterBarRef" class="project-export-filter">
+    <div class="project-export-sticky-panel">
     <el-form :model="filters" label-width="120px" class="filter-form">
       <el-row :gutter="12">
         <el-col :span="6"><el-form-item label="项目编号"><el-input v-model="filters.project_no" clearable /></el-form-item></el-col>
@@ -60,7 +60,6 @@
         </el-col>
       </el-row>
     </el-form>
-    </div>
 
     <div class="project-export-table-header">
       <div class="project-export-table-header__fixed project-export-table-header__fixed--left">
@@ -98,6 +97,7 @@
           {{ column.label }}
         </div>
       </div>
+    </div>
     </div>
 
     <el-table ref="tableRef" :data="rows" :show-header="false" size="small" v-loading="loading" class="wide-table project-export-table">
@@ -153,8 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { exportProjectRowsExcel, listProjectExportRows, type ProjectExportFilters, type ProjectExportItem } from '@/api/projectExports'
 import { createProjectDeleteRequest } from '@/api/projectDeleteRequests'
@@ -177,13 +176,8 @@ const loading = ref(false)
 const auth = useAuthStore()
 const rows = ref<ProjectExportItem[]>([])
 const filters = reactive<ProjectExportFilters>({})
-const filterBarRef = ref<HTMLElement | null>(null)
 const tableRef = ref()
-const filterBarHeight = ref(0)
 const tableScrollLeft = ref(0)
-const stickyVars = computed(() => ({
-  '--project-export-filter-height': `${filterBarHeight.value}px`,
-}))
 const fixedLeftColumns = [
   { prop: 'project_no', label: '项目编号', width: 140 },
   { prop: 'project_name', label: '项目名称', width: 180 },
@@ -284,10 +278,6 @@ async function submitDeleteRequest() {
   }
 }
 
-function updateFilterBarHeight() {
-  filterBarHeight.value = Math.ceil(filterBarRef.value?.getBoundingClientRect().height || 0)
-}
-
 function handleTableScroll() {
   tableScrollLeft.value = tableScrollEl?.scrollLeft || 0
 }
@@ -304,11 +294,8 @@ function bindTableScroll() {
   handleTableScroll()
 }
 
-useResizeObserver(filterBarRef, updateFilterBarHeight)
-
 onMounted(async () => {
   await nextTick()
-  updateFilterBarHeight()
   bindTableScroll()
   await load()
 })
@@ -320,8 +307,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .project-export-card {
-  --project-export-filter-height: 0px;
-  --project-export-sticky-gap: 10px;
   overflow: visible;
 }
 
@@ -329,24 +314,24 @@ onBeforeUnmount(() => {
   overflow: visible;
 }
 
-.project-export-filter {
+.project-export-sticky-panel {
   position: sticky;
   top: 0;
   z-index: 30;
   margin: -20px -20px 12px;
-  padding: 20px 20px 8px;
+  padding: 20px 20px 0;
   border-bottom: 1px solid var(--zq-border-soft);
-  background: var(--zq-surface);
-  box-shadow: 0 8px 18px rgba(31, 78, 121, 0.06);
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(31, 78, 121, 0.08);
   isolation: isolate;
 }
 
-.project-export-filter::before {
+.project-export-sticky-panel::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: var(--zq-surface);
+  background: #fff;
 }
 
 .filter-form {
@@ -358,15 +343,15 @@ onBeforeUnmount(() => {
 }
 
 .project-export-table-header {
-  position: sticky;
-  top: calc(var(--project-export-filter-height) + var(--project-export-sticky-gap));
-  z-index: 24;
+  position: relative;
+  z-index: 1;
   height: 36px;
+  margin-top: 12px;
   overflow: hidden;
-  border-bottom: 1px solid var(--el-table-border-color);
+  border: 1px solid var(--el-table-border-color);
+  border-bottom: 0;
   border-radius: 6px 6px 0 0;
   background: #f6f9fc;
-  box-shadow: 0 1px 0 var(--el-table-border-color), 0 8px 16px rgba(31, 78, 121, 0.08);
   color: var(--el-table-header-text-color);
   font-size: 12px;
   font-weight: 700;
@@ -397,12 +382,12 @@ onBeforeUnmount(() => {
 
 .project-export-table-header__fixed--left {
   left: 0;
-  box-shadow: 4px 0 8px rgba(31, 78, 121, 0.05);
+  box-shadow: 4px 0 8px rgba(31, 78, 121, 0.06);
 }
 
 .project-export-table-header__fixed--right {
   right: 0;
-  box-shadow: -4px 0 8px rgba(31, 78, 121, 0.05);
+  box-shadow: -4px 0 8px rgba(31, 78, 121, 0.06);
 }
 
 .project-export-table-header__scroll {
