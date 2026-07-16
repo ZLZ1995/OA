@@ -1,7 +1,8 @@
 <template>
-  <el-card shadow="never">
+  <el-card shadow="never" class="project-export-card" :style="stickyVars">
     <template #header>项目清单导出</template>
 
+    <div ref="filterBarRef" class="project-export-filter">
     <el-form :model="filters" label-width="120px" class="filter-form">
       <el-row :gutter="12">
         <el-col :span="6"><el-form-item label="项目编号"><el-input v-model="filters.project_no" clearable /></el-form-item></el-col>
@@ -59,8 +60,47 @@
         </el-col>
       </el-row>
     </el-form>
+    </div>
 
-    <el-table :data="rows" size="small" v-loading="loading" class="wide-table">
+    <div class="project-export-table-header">
+      <div class="project-export-table-header__fixed project-export-table-header__fixed--left">
+        <div
+          v-for="column in fixedLeftColumns"
+          :key="column.prop"
+          class="project-export-table-header__cell"
+          :style="{ width: `${column.width}px` }"
+        >
+          {{ column.label }}
+        </div>
+      </div>
+      <div class="project-export-table-header__scroll" :style="{ marginLeft: `${fixedLeftWidth}px`, marginRight: `${fixedRightWidth}px` }">
+        <div
+          class="project-export-table-header__scroll-inner"
+          :style="{ width: `${scrollColumnsWidth}px`, transform: `translateX(-${tableScrollLeft}px)` }"
+        >
+          <div
+            v-for="column in scrollColumns"
+            :key="column.prop"
+            class="project-export-table-header__cell"
+            :style="{ width: `${column.width}px` }"
+          >
+            {{ column.label }}
+          </div>
+        </div>
+      </div>
+      <div class="project-export-table-header__fixed project-export-table-header__fixed--right">
+        <div
+          v-for="column in fixedRightColumns"
+          :key="column.prop"
+          class="project-export-table-header__cell"
+          :style="{ width: `${column.width}px` }"
+        >
+          {{ column.label }}
+        </div>
+      </div>
+    </div>
+
+    <el-table ref="tableRef" :data="rows" :show-header="false" size="small" v-loading="loading" class="wide-table project-export-table">
       <el-table-column prop="project_no" label="项目编号" min-width="140" fixed="left" />
       <el-table-column prop="project_name" label="项目名称" min-width="180" fixed="left" show-overflow-tooltip />
       <el-table-column prop="project_created_date" label="项目立项日期" min-width="120" />
@@ -113,7 +153,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { exportProjectRowsExcel, listProjectExportRows, type ProjectExportFilters, type ProjectExportItem } from '@/api/projectExports'
 import { createProjectDeleteRequest } from '@/api/projectDeleteRequests'
@@ -136,6 +177,42 @@ const loading = ref(false)
 const auth = useAuthStore()
 const rows = ref<ProjectExportItem[]>([])
 const filters = reactive<ProjectExportFilters>({})
+const filterBarRef = ref<HTMLElement | null>(null)
+const tableRef = ref()
+const filterBarHeight = ref(0)
+const tableScrollLeft = ref(0)
+const stickyVars = computed(() => ({
+  '--project-export-filter-height': `${filterBarHeight.value}px`,
+}))
+const fixedLeftColumns = [
+  { prop: 'project_no', label: '项目编号', width: 140 },
+  { prop: 'project_name', label: '项目名称', width: 180 },
+]
+const scrollColumns = [
+  { prop: 'project_created_date', label: '项目立项日期', width: 120 },
+  { prop: 'project_progress', label: '项目进度', width: 100 },
+  { prop: 'report_no', label: '报告编号', width: 140 },
+  { prop: 'project_leader_name', label: '项目负责人姓名', width: 130 },
+  { prop: 'undertaking_unit', label: '承接单位', width: 100 },
+  { prop: 'evaluation_business_nature', label: '评估业务性质', width: 160 },
+  { prop: 'report_type', label: '报告类型', width: 110 },
+  { prop: 'valuation_base_date', label: '评估基准日', width: 120 },
+  { prop: 'business_salesman', label: '项目承接业务员', width: 140 },
+  { prop: 'project_source_display', label: '项目来源', width: 100 },
+  { prop: 'external_project_leader_name', label: '文本项目负责人', width: 140 },
+  { prop: 'amount', label: '收费金额', width: 110 },
+  { prop: 'invoiced_amount', label: '累计开票金额', width: 130 },
+  { prop: 'signer_names', label: '签字评估师姓名', width: 160 },
+  { prop: 'first_reviewer_name', label: '一审人员姓名', width: 120 },
+  { prop: 'second_reviewer_name', label: '二审人员姓名', width: 120 },
+  { prop: 'third_reviewer_name', label: '三审人员姓名', width: 120 },
+  { prop: 'archive_date', label: '归档日期', width: 120 },
+]
+const fixedRightColumns = [{ prop: 'actions', label: '操作', width: 120 }]
+const fixedLeftWidth = fixedLeftColumns.reduce((total, column) => total + column.width, 0)
+const fixedRightWidth = fixedRightColumns.reduce((total, column) => total + column.width, 0)
+const scrollColumnsWidth = scrollColumns.reduce((total, column) => total + column.width, 0)
+let tableScrollEl: HTMLElement | null = null
 const deleteDialogVisible = ref(false)
 const deleteSubmitting = ref(false)
 const deleteAdminOptions = ref<UserItem[]>([])
@@ -150,6 +227,8 @@ async function load() {
   loading.value = true
   try {
     rows.value = (await listProjectExportRows(filters)).items
+    await nextTick()
+    bindTableScroll()
   } finally {
     loading.value = false
   }
@@ -205,15 +284,155 @@ async function submitDeleteRequest() {
   }
 }
 
-onMounted(load)
+function updateFilterBarHeight() {
+  filterBarHeight.value = Math.ceil(filterBarRef.value?.getBoundingClientRect().height || 0)
+}
+
+function handleTableScroll() {
+  tableScrollLeft.value = tableScrollEl?.scrollLeft || 0
+}
+
+function bindTableScroll() {
+  const nextScrollEl = tableRef.value?.$el?.querySelector('.el-scrollbar__wrap') as HTMLElement | null
+  if (tableScrollEl === nextScrollEl) {
+    handleTableScroll()
+    return
+  }
+  tableScrollEl?.removeEventListener('scroll', handleTableScroll)
+  tableScrollEl = nextScrollEl
+  tableScrollEl?.addEventListener('scroll', handleTableScroll, { passive: true })
+  handleTableScroll()
+}
+
+useResizeObserver(filterBarRef, updateFilterBarHeight)
+
+onMounted(async () => {
+  await nextTick()
+  updateFilterBarHeight()
+  bindTableScroll()
+  await load()
+})
+
+onBeforeUnmount(() => {
+  tableScrollEl?.removeEventListener('scroll', handleTableScroll)
+})
 </script>
 
 <style scoped>
+.project-export-card {
+  --project-export-filter-height: 0px;
+  --project-export-sticky-gap: 10px;
+  overflow: visible;
+}
+
+.project-export-card :deep(.el-card__body) {
+  overflow: visible;
+}
+
+.project-export-filter {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  margin: -20px -20px 12px;
+  padding: 20px 20px 8px;
+  border-bottom: 1px solid var(--zq-border-soft);
+  background: var(--zq-surface);
+  box-shadow: 0 8px 18px rgba(31, 78, 121, 0.06);
+  isolation: isolate;
+}
+
+.project-export-filter::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--zq-surface);
+}
+
 .filter-form {
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .wide-table {
   width: 100%;
+}
+
+.project-export-table-header {
+  position: sticky;
+  top: calc(var(--project-export-filter-height) + var(--project-export-sticky-gap));
+  z-index: 24;
+  height: 36px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--el-table-border-color);
+  border-radius: 6px 6px 0 0;
+  background: #f6f9fc;
+  box-shadow: 0 1px 0 var(--el-table-border-color), 0 8px 16px rgba(31, 78, 121, 0.08);
+  color: var(--el-table-header-text-color);
+  font-size: 12px;
+  font-weight: 700;
+  isolation: isolate;
+}
+
+.project-export-table-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #f6f9fc;
+}
+
+.project-export-table-header__fixed,
+.project-export-table-header__scroll-inner {
+  display: flex;
+  height: 100%;
+  background: #f6f9fc;
+}
+
+.project-export-table-header__fixed {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  background: #f6f9fc;
+}
+
+.project-export-table-header__fixed--left {
+  left: 0;
+  box-shadow: 4px 0 8px rgba(31, 78, 121, 0.05);
+}
+
+.project-export-table-header__fixed--right {
+  right: 0;
+  box-shadow: -4px 0 8px rgba(31, 78, 121, 0.05);
+}
+
+.project-export-table-header__scroll {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow: hidden;
+  background: #f6f9fc;
+}
+
+.project-export-table-header__scroll-inner {
+  position: relative;
+  z-index: 1;
+  will-change: transform;
+}
+
+.project-export-table-header__cell {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  height: 100%;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--el-table-border-color);
+  background: #f6f9fc;
+  white-space: nowrap;
+}
+
+.project-export-table :deep(.el-table__body-wrapper) {
+  border-radius: 0 0 6px 6px;
 }
 </style>
