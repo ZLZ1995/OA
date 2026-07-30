@@ -25,6 +25,16 @@
         <el-button type="primary" @click="goFlow">{{ t.goFlow }}</el-button>
         <el-button @click="router.back()">{{ t.back }}</el-button>
       </div>
+
+      <OaAgentChat
+        id="agent"
+        class="project-agent"
+        :project-id="project.id"
+        :title="t.agentTitle"
+        :subtitle="t.agentSubtitle"
+        :placeholder="t.agentPlaceholder"
+        :empty-text="t.agentEmpty"
+      />
     </template>
   </el-card>
 </template>
@@ -34,6 +44,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getProject, type ProjectItem } from '@/api/projects'
+import OaAgentChat from '@/components/oa-agent/OaAgentChat.vue'
 
 const t = {
   empty: '\u6682\u65e0\u9879\u76ee\u6570\u636e',
@@ -54,6 +65,10 @@ const t = {
   goFlow: '\u8fdb\u5165\u6d41\u7a0b\u529e\u7406',
   back: '\u8fd4\u56de',
   loadFailed: '\u9879\u76ee\u8be6\u60c5\u52a0\u8f7d\u5931\u8d25',
+  agentTitle: '\u672c\u9879\u76ee\u667a\u80fd\u5ba2\u670d',
+  agentSubtitle: '\u9ed8\u8ba4\u5e26\u5165\u5f53\u524d\u9879\u76ee\u4e0a\u4e0b\u6587',
+  agentPlaceholder: '\u8bf7\u8f93\u5165\u4f60\u60f3\u4e86\u89e3\u7684\u9879\u76ee\u8fdb\u5ea6\u6216\u4e0b\u4e00\u6b65\u64cd\u4f5c',
+  agentEmpty: '\u53ef\u4ee5\u76f4\u63a5\u95ee\uff1a\u6211\u4e0b\u4e00\u6b65\u8be5\u505a\u4ec0\u4e48',
 }
 
 const route = useRoute()
@@ -84,5 +99,9 @@ onMounted(loadProject)
   margin-top: 16px;
   display: flex;
   gap: 8px;
+}
+
+.project-agent {
+  margin-top: 18px;
 }
 </style>

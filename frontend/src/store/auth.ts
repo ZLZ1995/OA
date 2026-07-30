@@ -46,6 +46,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       localStorage.removeItem('token')
       localStorage.removeItem('access_token')
+      sessionStorage.removeItem('oa_agent_session_id')
       workspace.clearWorkspace()
       void notifyDesktopStateChanged({
         currentRoute: window.location.pathname + window.location.search,
