@@ -1,64 +1,75 @@
 <template>
   <el-card shadow="never" class="project-export-card">
     <div class="project-export-sticky-panel">
-      <div class="project-export-title">项目清单导出</div>
-      <el-form :model="filters" label-width="120px" class="filter-form">
-      <el-row :gutter="12">
-        <el-col :span="6"><el-form-item label="项目编号"><el-input v-model="filters.project_no" clearable /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="项目名称"><el-input v-model="filters.project_name" clearable /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="报告编号"><el-input v-model="filters.report_no" clearable /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="项目负责人"><el-input v-model="filters.project_leader_name" clearable /></el-form-item></el-col>
-        <el-col :span="6">
-          <el-form-item label="承接单位">
-            <el-select v-model="filters.undertaking_unit" clearable>
-              <el-option label="中勤" value="中勤" />
-              <el-option label="中立国际" value="中立国际" />
-              <el-option label="中众" value="中众" />
-              <el-option label="其他" value="其他" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="6">
-          <el-form-item label="评估业务性质">
-            <el-select v-model="filters.evaluation_business_nature" clearable>
-              <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="6">
-          <el-form-item label="报告类型">
-            <el-select v-model="filters.report_type" clearable>
-              <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="6"><el-form-item label="项目承接业务员"><el-input v-model="filters.business_salesman" clearable /></el-form-item></el-col>
-        <el-col :span="6">
-          <el-form-item label="项目来源">
-            <el-select v-model="filters.project_source" clearable>
-              <el-option label="评估一部" value="INTERNAL" />
-              <el-option label="评估二部" value="EXTERNAL" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="6"><el-form-item label="文本项目负责人"><el-input v-model="filters.external_project_leader_name" clearable /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="签字评估师"><el-input v-model="filters.signer_name" clearable /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="收费金额下限"><el-input-number v-model="filters.amount_min" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="收费金额上限"><el-input-number v-model="filters.amount_max" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="立项开始日期"><el-date-picker v-model="filters.project_date_from" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="立项结束日期"><el-date-picker v-model="filters.project_date_to" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="基准日开始"><el-date-picker v-model="filters.valuation_base_date_from" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="基准日结束"><el-date-picker v-model="filters.valuation_base_date_to" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="已删除项目"><el-switch v-model="filters.include_deleted" /></el-form-item></el-col>
-        <el-col :span="12">
-          <el-form-item>
-            <el-button type="primary" @click="load">筛选</el-button>
-            <el-button @click="reset">重置</el-button>
-            <el-button type="success" @click="onExport">导出 Excel</el-button>
-          </el-form-item>
-        </el-col>
-      </el-row>
-    </el-form>
+      <div class="project-export-title-row">
+        <div class="project-export-title">项目清单导出</div>
+        <el-button class="project-export-toggle" text type="primary" :aria-expanded="searchExpanded" @click="searchExpanded = !searchExpanded">
+          {{ searchExpanded ? '收起搜索栏' : '展开搜索栏' }}
+          <span class="project-export-toggle__chevron" :class="{ 'is-expanded': searchExpanded }" aria-hidden="true"></span>
+        </el-button>
+      </div>
+
+      <div class="project-export-filter-panel" :class="{ 'is-expanded': searchExpanded }" :aria-hidden="!searchExpanded" :inert="!searchExpanded">
+        <div class="project-export-filter-panel__inner">
+          <el-form :model="filters" label-width="120px" class="filter-form">
+            <el-row :gutter="12">
+              <el-col :span="6"><el-form-item label="项目编号"><el-input v-model="filters.project_no" clearable /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="项目名称"><el-input v-model="filters.project_name" clearable /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="报告编号"><el-input v-model="filters.report_no" clearable /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="项目负责人"><el-input v-model="filters.project_leader_name" clearable /></el-form-item></el-col>
+              <el-col :span="6">
+                <el-form-item label="承接单位">
+                  <el-select v-model="filters.undertaking_unit" clearable>
+                    <el-option label="中勤" value="中勤" />
+                    <el-option label="中立国际" value="中立国际" />
+                    <el-option label="中众" value="中众" />
+                    <el-option label="其他" value="其他" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="评估业务性质">
+                  <el-select v-model="filters.evaluation_business_nature" clearable>
+                    <el-option v-for="item in evaluationBusinessOptions" :key="item" :label="item" :value="item" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="报告类型">
+                  <el-select v-model="filters.report_type" clearable>
+                    <el-option v-for="item in reportTypeOptions" :key="item" :label="item" :value="item" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="6"><el-form-item label="项目承接业务员"><el-input v-model="filters.business_salesman" clearable /></el-form-item></el-col>
+              <el-col :span="6">
+                <el-form-item label="项目来源">
+                  <el-select v-model="filters.project_source" clearable>
+                    <el-option label="评估一部" value="INTERNAL" />
+                    <el-option label="评估二部" value="EXTERNAL" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="6"><el-form-item label="文本项目负责人"><el-input v-model="filters.external_project_leader_name" clearable /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="签字评估师"><el-input v-model="filters.signer_name" clearable /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="收费金额下限"><el-input-number v-model="filters.amount_min" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="收费金额上限"><el-input-number v-model="filters.amount_max" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="立项开始日期"><el-date-picker v-model="filters.project_date_from" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="立项结束日期"><el-date-picker v-model="filters.project_date_to" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="基准日开始"><el-date-picker v-model="filters.valuation_base_date_from" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="基准日结束"><el-date-picker v-model="filters.valuation_base_date_to" value-format="YYYY-MM-DD" type="date" style="width:100%" /></el-form-item></el-col>
+              <el-col :span="6"><el-form-item label="已删除项目"><el-switch v-model="filters.include_deleted" /></el-form-item></el-col>
+              <el-col :span="12">
+                <el-form-item>
+                  <el-button type="primary" @click="load">筛选</el-button>
+                  <el-button @click="reset">重置</el-button>
+                  <el-button type="success" @click="onExport">导出 Excel</el-button>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+        </div>
+      </div>
 
     <div class="project-export-table-header">
       <div class="project-export-table-header__fixed project-export-table-header__fixed--left">
@@ -177,6 +188,7 @@ const rows = ref<ProjectExportItem[]>([])
 const filters = reactive<ProjectExportFilters>({})
 const tableRef = ref()
 const tableScrollLeft = ref(0)
+const searchExpanded = ref(false)
 const fixedLeftColumns = [
   { prop: 'project_no', label: '项目编号', width: 140 },
   { prop: 'project_name', label: '项目名称', width: 180 },
@@ -318,7 +330,7 @@ onBeforeUnmount(() => {
   top: 0;
   z-index: 30;
   margin: -20px -20px 12px;
-  padding: 20px 20px 0;
+  padding: 0 20px;
   border-bottom: 1px solid var(--zq-border-soft);
   background: #fff;
   box-shadow: 0 10px 22px rgba(31, 78, 121, 0.08);
@@ -328,24 +340,80 @@ onBeforeUnmount(() => {
 .project-export-sticky-panel::before {
   content: "";
   position: absolute;
-  inset: 0;
-  z-index: -1;
+  inset: -48px 0 0;
+  z-index: 0;
   background: #fff;
+  pointer-events: none;
+}
+
+.project-export-title-row,
+.project-export-filter-panel,
+.project-export-table-header {
+  position: relative;
+  z-index: 1;
 }
 
 .project-export-title {
-  margin: -20px -20px 20px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--el-card-border-color);
-  background: #fff;
   color: var(--zq-text-primary);
   font-size: 16px;
   font-weight: 700;
   line-height: 24px;
 }
 
+.project-export-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -20px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--el-card-border-color);
+  background: #fff;
+}
+
+.project-export-toggle {
+  flex: 0 0 auto;
+}
+
+.project-export-toggle__chevron {
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.project-export-toggle__chevron.is-expanded {
+  transform: rotate(225deg);
+}
+
+.project-export-filter-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  background: #fff;
+  transition: grid-template-rows 160ms ease, opacity 120ms ease;
+  pointer-events: none;
+}
+
+.project-export-filter-panel.is-expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.project-export-filter-panel__inner {
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
 .filter-form {
   margin-bottom: 0;
+  padding-top: 12px;
 }
 
 .wide-table {
@@ -353,8 +421,6 @@ onBeforeUnmount(() => {
 }
 
 .project-export-table-header {
-  position: relative;
-  z-index: 1;
   height: 36px;
   margin-top: 12px;
   overflow: hidden;
