@@ -138,6 +138,17 @@
       </el-table-column>
     </el-table>
 
+    <div v-show="hasFloatingScrollbar" class="project-export-floating-scrollbar-spacer"></div>
+    <div
+      v-show="hasFloatingScrollbar"
+      ref="floatingScrollbarRef"
+      class="project-export-floating-scrollbar"
+      :style="{ left: `${floatingScrollbarLeft}px`, width: `${floatingScrollbarWidth}px` }"
+      @scroll="handleFloatingScroll"
+    >
+      <div class="project-export-floating-scrollbar__track" :style="{ width: `${floatingScrollbarTrackWidth}px` }"></div>
+    </div>
+
     <el-dialog v-model="deleteDialogVisible" title="申请删除项目" width="520px">
       <el-form label-width="120px">
         <el-form-item label="共同认证管理员">
@@ -189,6 +200,11 @@ const filters = reactive<ProjectExportFilters>({})
 const tableRef = ref()
 const tableScrollLeft = ref(0)
 const searchExpanded = ref(false)
+const floatingScrollbarRef = ref<HTMLElement | null>(null)
+const floatingScrollbarLeft = ref(0)
+const floatingScrollbarWidth = ref(0)
+const floatingScrollbarTrackWidth = ref(0)
+const hasFloatingScrollbar = ref(false)
 const fixedLeftColumns = [
   { prop: 'project_no', label: '项目编号', width: 140 },
   { prop: 'project_name', label: '项目名称', width: 180 },
@@ -218,6 +234,9 @@ const fixedLeftWidth = fixedLeftColumns.reduce((total, column) => total + column
 const fixedRightWidth = fixedRightColumns.reduce((total, column) => total + column.width, 0)
 const scrollColumnsWidth = scrollColumns.reduce((total, column) => total + column.width, 0)
 let tableScrollEl: HTMLElement | null = null
+let resizeObserver: ResizeObserver | null = null
+let syncingFloatingScroll = false
+let syncingTableScroll = false
 const deleteDialogVisible = ref(false)
 const deleteSubmitting = ref(false)
 const deleteAdminOptions = ref<UserItem[]>([])
@@ -291,28 +310,85 @@ async function submitDeleteRequest() {
 
 function handleTableScroll() {
   tableScrollLeft.value = tableScrollEl?.scrollLeft || 0
+  syncFloatingScrollbar()
 }
 
 function bindTableScroll() {
   const nextScrollEl = tableRef.value?.$el?.querySelector('.el-scrollbar__wrap') as HTMLElement | null
   if (tableScrollEl === nextScrollEl) {
     handleTableScroll()
+    updateFloatingScrollbar()
     return
   }
   tableScrollEl?.removeEventListener('scroll', handleTableScroll)
   tableScrollEl = nextScrollEl
   tableScrollEl?.addEventListener('scroll', handleTableScroll, { passive: true })
   handleTableScroll()
+  bindTableResizeObserver()
+  updateFloatingScrollbar()
+}
+
+function handleFloatingScroll() {
+  if (syncingFloatingScroll || !tableScrollEl || !floatingScrollbarRef.value) {
+    return
+  }
+  syncingTableScroll = true
+  tableScrollEl.scrollLeft = floatingScrollbarRef.value.scrollLeft
+  tableScrollLeft.value = tableScrollEl.scrollLeft
+  syncingTableScroll = false
+}
+
+function syncFloatingScrollbar() {
+  if (syncingTableScroll || !floatingScrollbarRef.value || !tableScrollEl) {
+    return
+  }
+  syncingFloatingScroll = true
+  floatingScrollbarRef.value.scrollLeft = tableScrollEl.scrollLeft
+  syncingFloatingScroll = false
+}
+
+function updateFloatingScrollbar() {
+  const tableEl = tableRef.value?.$el as HTMLElement | undefined
+  if (!tableEl || !tableScrollEl) {
+    hasFloatingScrollbar.value = false
+    return
+  }
+  const rect = tableEl.getBoundingClientRect()
+  const clientWidth = Math.round(tableScrollEl.clientWidth || rect.width)
+  const scrollWidth = Math.round(tableScrollEl.scrollWidth)
+  hasFloatingScrollbar.value = scrollWidth > clientWidth + 1
+  floatingScrollbarLeft.value = Math.max(0, Math.round(rect.left))
+  floatingScrollbarWidth.value = Math.round(rect.width)
+  floatingScrollbarTrackWidth.value = scrollWidth
+  syncFloatingScrollbar()
+}
+
+function bindTableResizeObserver() {
+  resizeObserver?.disconnect()
+  const tableEl = tableRef.value?.$el as HTMLElement | undefined
+  if (!tableEl || typeof ResizeObserver === 'undefined') {
+    return
+  }
+  resizeObserver = new ResizeObserver(updateFloatingScrollbar)
+  resizeObserver.observe(tableEl)
+  if (tableScrollEl) {
+    resizeObserver.observe(tableScrollEl)
+  }
 }
 
 onMounted(async () => {
   await nextTick()
   bindTableScroll()
   await load()
+  window.addEventListener('resize', updateFloatingScrollbar, { passive: true })
+  window.addEventListener('scroll', updateFloatingScrollbar, { passive: true })
 })
 
 onBeforeUnmount(() => {
   tableScrollEl?.removeEventListener('scroll', handleTableScroll)
+  resizeObserver?.disconnect()
+  window.removeEventListener('resize', updateFloatingScrollbar)
+  window.removeEventListener('scroll', updateFloatingScrollbar)
 })
 </script>
 
@@ -495,5 +571,30 @@ onBeforeUnmount(() => {
 
 .project-export-table :deep(.el-table__body-wrapper) {
   border-radius: 0 0 6px 6px;
+}
+
+.project-export-table :deep(.el-scrollbar__bar.is-horizontal) {
+  display: none;
+}
+
+.project-export-floating-scrollbar-spacer {
+  height: 42px;
+}
+
+.project-export-floating-scrollbar {
+  position: fixed;
+  bottom: 12px;
+  z-index: 40;
+  height: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(31, 78, 121, 0.16);
+}
+
+.project-export-floating-scrollbar__track {
+  height: 1px;
 }
 </style>
