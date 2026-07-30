@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     local_storage_dir: str = "/data/asset-valuation/uploads"
     desktop_update_root_dir: str = "/data/desktop-updates"
     public_api_base_url: str | None = None
+    deepseek_api_key: str | None = None
+    deepseek_api_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-chat"
+    deepseek_timeout_seconds: float = 30.0
 
     initial_admin_username: str = "zhongqin123"
     initial_admin_password: str = "zhongqin123"

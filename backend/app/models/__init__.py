@@ -4,6 +4,7 @@ from app.models.contract_review_record import ContractReviewRecord
 from app.models.department import Department
 from app.models.invoice import Invoice
 from app.models.issue_feedback import IssueFeedback
+from app.models.oa_agent_audit_log import OaAgentAuditLog
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
@@ -47,6 +48,7 @@ __all__ = [
     "PrintRoomRecord",
     "Invoice",
     "IssueFeedback",
+    "OaAgentAuditLog",
     "Archive",
     "UserNotification",
 ]

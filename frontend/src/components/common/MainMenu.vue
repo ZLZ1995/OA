@@ -66,7 +66,10 @@ import { useWorkspaceStore } from '@/store/workspace'
 
 type MenuItem = { key: string; title: string; path?: string; children?: Array<{ key: string; title: string; path: string }> }
 
-const BUSINESS_MENUS: MenuItem[] = [{ key: 'dashboard', title: '项目工作台', path: '/workbench' }]
+const BUSINESS_MENUS: MenuItem[] = [
+  { key: 'dashboard', title: '项目工作台', path: '/workbench' },
+  { key: 'oa-agent', title: 'OA 智能客服', path: '/oa-agent' },
+]
 const HELP_MENU: MenuItem = {
   key: 'help-center',
   title: '帮助中心',

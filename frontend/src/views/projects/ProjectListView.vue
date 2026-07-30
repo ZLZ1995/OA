@@ -34,9 +34,10 @@
         <el-table-column prop="display_project_leader_name" :label="t.projectLeader" min-width="130" />
         <el-table-column prop="contract_review_status_display" :label="t.contractReviewStatus" min-width="130" />
         <el-table-column prop="status_display" :label="t.currentStatus" min-width="120" />
-        <el-table-column :label="t.actions" width="260" fixed="right">
+        <el-table-column :label="t.actions" width="320" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="goDetail(row.id)">{{ t.enterProject }}</el-button>
+            <el-button type="success" link @click="goAgent(row.id)">{{ t.askAgent }}</el-button>
             <el-button type="warning" link @click="onArchive(row)">{{ t.archive }}</el-button>
             <el-button type="danger" link @click="onDelete(row)">{{ t.delete }}</el-button>
           </template>
@@ -168,6 +169,7 @@ const t = {
   currentStatus: '当前状态',
   actions: '操作',
   enterProject: '进入项目',
+  askAgent: '问客服',
   archive: '归档',
   delete: '删除',
   reset: '重置',
@@ -383,6 +385,10 @@ async function onArchive(row: ProjectItem) {
 
 function goDetail(projectId: number) {
   router.push(`/projects/${projectId}`)
+}
+
+function goAgent(projectId: number) {
+  router.push(`/projects/${projectId}#agent`)
 }
 
 onMounted(loadProjects)

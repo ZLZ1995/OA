@@ -11,6 +11,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.help import router as help_router
 from app.api.v1.issue_feedbacks import router as issue_feedbacks_router
 from app.api.v1.notifications import router as notifications_router
+from app.api.v1.oa_agent import router as oa_agent_router
 from app.api.v1.print_room import router as print_room_router
 from app.api.v1.report_mailing import router as report_mailing_router
 from app.api.v1.project_exports import router as project_exports_router
@@ -54,6 +55,7 @@ api_router.include_router(archives_router)
 api_router.include_router(issue_feedbacks_router)
 api_router.include_router(reminders_router)
 api_router.include_router(notifications_router)
+api_router.include_router(oa_agent_router)
 api_router.include_router(workflow_logs_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(desktop_updates_router)
