@@ -98,6 +98,10 @@ def extract_project_keywords(message: str) -> list[str]:
         if value not in keywords:
             keywords.append(value)
 
+    for value in _extract_chinese_alias_keywords(text):
+        if value not in keywords:
+            keywords.append(value)
+
     normalized = re.sub(r"[，。！？、；：,.!?;:\r\n\t]+", " ", text)
     stop_words = [
         "请问",
@@ -145,6 +149,41 @@ def extract_project_keywords(message: str) -> list[str]:
         if value not in keywords:
             keywords.append(value)
     return keywords
+
+
+def _extract_chinese_alias_keywords(text: str) -> list[str]:
+    aliases: list[str] = []
+    for match in re.finditer(r"([\u4e00-\u9fff]{2,24})(?:有限责任公司|股份有限公司|有限公司|公司|集团|项目)", text):
+        value = match.group(1).strip()
+        _append_alias(aliases, value)
+        for marker in ("公司", "集团"):
+            if marker in value:
+                _append_alias(aliases, value.split(marker, 1)[0])
+
+    for value in re.findall(r"[\u4e00-\u9fff]{2,12}", text):
+        if value.endswith(("项目", "公司", "集团")):
+            _append_alias(aliases, value[:-2])
+
+    return aliases
+
+
+def _append_alias(aliases: list[str], value: str) -> None:
+    cleaned = value.strip()
+    if len(cleaned) < 2:
+        return
+    if cleaned in {
+        "现在",
+        "当前",
+        "项目",
+        "客户",
+        "流程",
+        "重新",
+        "申请",
+        "评估",
+    }:
+        return
+    if cleaned not in aliases:
+        aliases.append(cleaned)
 
 
 def build_project_candidate(db: Session, project: Project) -> dict:

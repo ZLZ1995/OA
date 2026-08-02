@@ -169,6 +169,12 @@ def test_agent_extracts_embedded_numeric_project_keyword() -> None:
     assert keywords[0] == "111"
 
 
+def test_agent_extracts_chinese_project_alias_from_natural_question() -> None:
+    keywords = extract_project_keywords("古镇公司文旅投项目，现在评估行为和目的变更了，应该怎么操作？")
+
+    assert "古镇" in keywords
+
+
 def test_agent_message_search_uses_extracted_project_keyword() -> None:
     db = _build_session()
     leader = _seed_user(db, "leader")
@@ -176,6 +182,28 @@ def test_agent_message_search_uses_extracted_project_keyword() -> None:
     db.commit()
 
     rows = search_accessible_projects_from_message(db, leader, "请问 Alpha Project 现在到哪一步了", limit=10)
+
+    assert [item.id for item in rows] == [project.id]
+
+
+def test_agent_message_search_uses_chinese_project_alias() -> None:
+    db = _build_session()
+    leader = _seed_user(db, "leader")
+    project, _ = _seed_project(
+        db,
+        leader,
+        project_code="P-GUZHEN",
+        project_name="平凉崆峒古镇开发有限责任公司股权价值项目",
+        client_name="平凉崆峒古镇开发有限责任公司",
+    )
+    db.commit()
+
+    rows = search_accessible_projects_from_message(
+        db,
+        leader,
+        "古镇公司文旅投项目，现在评估行为和目的变更了，应该怎么操作？",
+        limit=10,
+    )
 
     assert [item.id for item in rows] == [project.id]
 
