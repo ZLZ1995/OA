@@ -677,9 +677,8 @@ def _submit_review_impl(
     target_reviewer_id = (
         fixed_external_reviewer_id
         if fixed_external_reviewer_id
-        else
-        pending_change.reviewer_user_id
-        if pending_change and pending_change.reviewer_user_id == payload.reviewer_user_id
+        else pending_change.reviewer_user_id
+        if pending_change
         else payload.reviewer_user_id
     )
     if not target_reviewer_id:
@@ -861,6 +860,7 @@ def _change_reviewer_after_reject_impl(
         acted_at=datetime.now(timezone.utc),
     )
     db.add(record)
+    setattr(work_order, ROUND_CURRENT_REVIEWER_ATTR[payload.review_round], payload.reviewer_user_id)
     create_workflow_log(
         db,
         work_order_id=work_order.id,

@@ -192,7 +192,7 @@ def test_rejected_review_can_be_resubmitted_to_same_round() -> None:
     assert work_order.current_handler_user_id == reviewer.id
 
 
-def test_rejected_review_assignee_change_takes_effect_on_resubmit() -> None:
+def test_rejected_review_assignee_change_takes_effect_immediately() -> None:
     from app.api.v1.reviews import _change_reviewer_after_reject_impl as change_reviewer_after_reject, _submit_review_impl as submit_review
 
     db = _build_session()
@@ -235,7 +235,7 @@ def test_rejected_review_assignee_change_takes_effect_on_resubmit() -> None:
 
     db.refresh(work_order)
     assert record.action == "CHANGE_REVIEWER"
-    assert work_order.first_reviewer_id == reviewer.id
+    assert work_order.first_reviewer_id == new_reviewer.id
     assert work_order.current_handler_user_id == leader.id
 
     result = submit_review(
@@ -256,7 +256,7 @@ def test_rejected_review_assignee_change_takes_effect_on_resubmit() -> None:
     assert work_order.current_handler_user_id == new_reviewer.id
 
 
-def test_pending_reviewer_change_does_not_override_plain_resubmit() -> None:
+def test_pending_reviewer_change_cannot_be_reverted_by_stale_resubmit_payload() -> None:
     from app.api.v1.reviews import _change_reviewer_after_reject_impl as change_reviewer_after_reject, _submit_review_impl as submit_review
 
     db = _build_session()
@@ -310,9 +310,57 @@ def test_pending_reviewer_change_does_not_override_plain_resubmit() -> None:
     )
 
     db.refresh(work_order)
-    assert result.reviewer_user_id == reviewer.id
-    assert work_order.first_reviewer_id == reviewer.id
-    assert work_order.current_handler_user_id == reviewer.id
+    assert result.reviewer_user_id == new_reviewer.id
+    assert work_order.first_reviewer_id == new_reviewer.id
+    assert work_order.current_handler_user_id == new_reviewer.id
+
+
+def test_rejected_third_reviewer_change_updates_project_reviewer_immediately() -> None:
+    from app.api.v1.reviews import _change_reviewer_after_reject_impl as change_reviewer_after_reject
+
+    db = _build_session()
+    leader, reviewer, _, work_order = _seed_basic(db)
+    new_reviewer = User(username="third_reviewer2", password_hash="x", real_name="ThirdReviewer2", is_active=True)
+    third_role = Role(code="THIRD_REVIEWER", name="三审", description="", is_system_fixed=True)
+    db.add_all([new_reviewer, third_role])
+    db.flush()
+    db.add_all(
+        [
+            UserRole(user_id=reviewer.id, role_id=third_role.id),
+            UserRole(user_id=new_reviewer.id, role_id=third_role.id),
+        ]
+    )
+    work_order.current_status = "THIRD_REVIEW_REJECTED"
+    work_order.current_handler_user_id = leader.id
+    work_order.third_reviewer_id = reviewer.id
+    db.add(
+        ReviewRecord(
+            work_order_id=work_order.id,
+            review_round="THIRD",
+            reviewer_user_id=reviewer.id,
+            action="REJECT_RETURN",
+            comment="退回",
+            acted_at=work_order.created_at,
+        )
+    )
+    db.commit()
+
+    record = change_reviewer_after_reject(
+        payload=ReviewAssigneeChangeRequest(
+            work_order_id=work_order.id,
+            review_round="THIRD",
+            reviewer_user_id=new_reviewer.id,
+            comment="更换三审老师",
+        ),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
+
+    db.refresh(work_order)
+    assert record.action == "CHANGE_REVIEWER"
+    assert work_order.third_reviewer_id == new_reviewer.id
+    assert work_order.current_handler_user_id == leader.id
 
 
 def test_rejected_review_assignee_change_only_once_per_rejection() -> None:
