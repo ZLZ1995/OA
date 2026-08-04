@@ -10,7 +10,8 @@
       :stroke-width="10"
     />
     <div v-if="progress.errorMessage" class="upload-progress-inline__error">
-      {{ progress.errorMessage }}
+      <span>{{ progress.errorMessage }}</span>
+      <el-button v-if="retryable" type="primary" link @click="emit('retry')">重新上传</el-button>
     </div>
   </div>
 </template>
@@ -21,6 +22,11 @@ import type { UploadProgressState } from '@/types/upload'
 
 const props = defineProps<{
   progress?: UploadProgressState | null
+  retryable?: boolean
+}>()
+
+const emit = defineEmits<{
+  retry: []
 }>()
 
 const statusText = computed(() => {
@@ -66,5 +72,9 @@ const statusText = computed(() => {
   margin-top: 6px;
   color: #d03050;
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 </style>
