@@ -133,7 +133,11 @@
                   <el-button type="primary" plain>{{ isReplyFlow ? '上传修改后报告包' : '上传待审报告包' }}</el-button>
                 </el-upload>
               </div>
-              <UploadProgressInline :progress="reportPackageUploadProgress" />
+              <UploadProgressInline
+                :progress="reportPackageUploadProgress"
+                :retryable="reportPackageUploadProgress?.status === 'error' && Boolean(lastReportPackageFile)"
+                @retry="retryReportPackageUpload"
+              />
               <div class="review-upload-actions">
                 <el-tag v-if="reusePreviousFile" type="info" effect="plain">将沿用上轮已提交文件</el-tag>
                 <el-tag v-else-if="canCarryForwardApprovedFile" type="warning" effect="plain">沿用上一轮审核通过文件</el-tag>
@@ -464,6 +468,7 @@ const routingSubmitting = ref(false)
 const externalAuditSubmitting = ref(false)
 const loading = ref(false)
 const reportPackageUploadProgress = ref<UploadProgressState | null>(null)
+const lastReportPackageFile = ref<File | null>(null)
 const replyUploadProgress = ref<UploadProgressState | null>(null)
 const externalAuditUploadProgress = ref<UploadProgressState | null>(null)
 const opinionUploadProgress = ref<UploadProgressState | null>(null)
@@ -966,14 +971,28 @@ async function uploadReviewFile(
 async function onReportSelected(file: UploadFile) {
   if (!props.workOrderId || !file.raw) return
   if (isReviewLocked.value) return ElMessage.warning(props.flowInfo?.review_submit_lock_reason || '报告送审暂不可办理')
-  await uploadReviewFile({
-    work_order_id: props.workOrderId,
-    file_category: 'REPORT_ZIP',
-    business_stage: reviewStage(reviewRound.value),
-    file: file.raw
-  }, reportPackageUploadProgress)
-  ElMessage.success('待审报告资料包已上传')
-  await loadFiles()
+  lastReportPackageFile.value = file.raw
+  await uploadReportPackage(file.raw)
+}
+
+async function retryReportPackageUpload() {
+  if (!lastReportPackageFile.value) return
+  await uploadReportPackage(lastReportPackageFile.value)
+}
+
+async function uploadReportPackage(file: File) {
+  if (!props.workOrderId) return
+  try {
+    await uploadReviewFile({
+      work_order_id: props.workOrderId,
+      file_category: 'REPORT_ZIP',
+      business_stage: reviewStage(reviewRound.value),
+      file
+    }, reportPackageUploadProgress)
+    ElMessage.success('待审报告资料包已上传')
+  } catch {
+    // uploadReviewFile has already updated the inline error state and shown a message.
+  }
 }
 
 async function onReplySelected(file: UploadFile) {

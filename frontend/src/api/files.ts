@@ -2,7 +2,7 @@ import http from './http'
 import { ElMessage } from 'element-plus'
 import type { UploadProgressState } from '@/types/upload'
 
-const FILE_UPLOAD_TIMEOUT_MS = 120000
+const FILE_UPLOAD_TIMEOUT_MS = 30 * 60 * 1000
 const FILE_DOWNLOAD_TIMEOUT_MS = 300000
 
 export interface WorkOrderFileItem {
@@ -88,13 +88,16 @@ export async function uploadWorkOrderFile(payload: {
     })
     return data as WorkOrderFileItem
   } catch (error: any) {
+    const errorMessage = error?.code === 'ECONNABORTED'
+      ? '文件上传超时，请检查网络后重试'
+      : (error?.response?.data?.detail || error?.message || '文件上传失败')
     emitUploadProgress(payload.onProgress, {
       status: 'error',
       fileName: payload.file.name,
       loaded: 0,
       total: payload.file.size,
       percentage: 0,
-      errorMessage: error?.response?.data?.detail || error?.message || '上传失败',
+      errorMessage,
     })
     throw error
   }
@@ -138,13 +141,16 @@ export async function replaceWorkOrderFile(fileId: number, file: File, onProgres
     })
     return data as WorkOrderFileItem
   } catch (error: any) {
+    const errorMessage = error?.code === 'ECONNABORTED'
+      ? '文件上传超时，请检查网络后重试'
+      : (error?.response?.data?.detail || error?.message || '文件上传失败')
     emitUploadProgress(onProgress, {
       status: 'error',
       fileName: file.name,
       loaded: 0,
       total: file.size,
       percentage: 0,
-      errorMessage: error?.response?.data?.detail || error?.message || '上传失败',
+      errorMessage,
     })
     throw error
   }
