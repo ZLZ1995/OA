@@ -25,7 +25,7 @@
       </div>
       <template v-if="canRequestOwnerExternalAuditConfirm">
         <el-alert
-          type="info"
+          type="success"
           :closable="false"
           title="三审已通过，请先向项目负责人发送确认信息。"
           show-icon
@@ -105,15 +105,9 @@
           type="info"
           :closable="false"
           show-icon
-          title="审核人变更已保存，提交并更换审核人后正式流转给新审核人。"
+          title="审核人已变更。项目重新送审时将流转给新审核人。"
           style="margin-bottom: 12px"
         />
-        <el-form-item label="报告文件处理">
-          <el-radio-group v-model="replyFileMode" :disabled="!canSubmitReview">
-            <el-radio-button value="REUPLOAD">重新上传文件</el-radio-button>
-            <el-radio-button value="REUSE">沿用上轮文件</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
       </template>
 
       <el-form-item v-if="showContractDraftDownload" label="合同初稿下载">
@@ -126,7 +120,7 @@
         <span v-else>-</span>
       </el-form-item>
 
-      <el-form-item label="文件传输区">
+      <el-form-item v-if="!showReviewerChangePanel" label="文件传输区">
         <div class="review-upload-block">
           <div class="review-upload-main">
             <section class="file-zone-card file-zone-card--primary">
@@ -236,8 +230,8 @@
             更换审核人
           </el-button>
           <template v-if="showReviewerChangePanel">
-            <el-button type="warning" :disabled="!canSubmitReviewerChange || isUploadingAnyReviewAsset" @click="onSubmitWithReviewerChange">
-              提交并更换审核人
+            <el-button type="warning" :disabled="!canSubmitReviewerChange" @click="onChangeReviewer">
+              确认更换审核人
             </el-button>
             <el-button plain @click="cancelReviewerChangePanel">取消更换</el-button>
           </template>
@@ -531,8 +525,8 @@ const requiresManualUploadBeforeSubmit = computed(() =>
 )
 const canSubmitReviewerChange = computed(() =>
   canSubmitReview.value &&
-  Boolean(changeReviewerUserId.value || pendingReviewerChange.value?.reviewer_user_id) &&
-  (reusePreviousFile.value || submitFiles.value.length > 0)
+  !pendingReviewerChange.value &&
+  Boolean(changeReviewerUserId.value)
 )
 const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'FIRST') return props.flowInfo?.first_reviewer_id
@@ -1124,31 +1118,20 @@ function cancelReviewerChangePanel() {
   replyFileMode.value = 'REUPLOAD'
 }
 
-async function onSubmitWithReviewerChange() {
+async function onChangeReviewer() {
   if (!props.workOrderId) return
-  const targetReviewerId = pendingReviewerChange.value?.reviewer_user_id || changeReviewerUserId.value
+  const targetReviewerId = changeReviewerUserId.value
   if (!targetReviewerId) return ElMessage.warning('请选择新的审核老师')
-  if (!reusePreviousFile.value && !currentReportPackageFiles.value.length) return ElMessage.warning('请重新上传待审报告资料包，或选择沿用上轮文件')
-  if (!pendingReviewerChange.value) {
-    await changeReviewAssignee({
-      work_order_id: props.workOrderId,
-      review_round: reviewRound.value,
-      reviewer_user_id: targetReviewerId,
-      comment: changeReviewerComment.value || undefined
-    })
-  }
-  await submitReview({
+  await changeReviewAssignee({
     work_order_id: props.workOrderId,
     review_round: reviewRound.value,
     reviewer_user_id: targetReviewerId,
     comment: changeReviewerComment.value || undefined
   })
-  ElMessage.success('已提交审核意见回复并更换审核人')
+  ElMessage.success('审核人已更换')
   changeReviewerComment.value = ''
-  comment.value = ''
-  replyFileMode.value = 'REUPLOAD'
   isReviewerChangePanelOpen.value = false
-  await Promise.all([loadRecords(), loadCandidates(), loadFiles()])
+  await Promise.all([loadRecords(), loadCandidates()])
   emit('changed')
 }
 
