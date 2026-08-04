@@ -549,32 +549,6 @@ def _fixed_external_reviewer_id(work_order: WorkOrder, review_round: str) -> int
     return None
 
 
-def _has_reviewer_change_after_rejection(db: Session, work_order_id: int, review_round: str) -> bool:
-    latest_rejection = (
-        db.query(ReviewRecord)
-        .filter(
-            ReviewRecord.work_order_id == work_order_id,
-            ReviewRecord.review_round == review_round,
-            ReviewRecord.action == "REJECT_RETURN",
-        )
-        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
-        .first()
-    )
-    if not latest_rejection:
-        return False
-    return (
-        db.query(ReviewRecord.id)
-        .filter(
-            ReviewRecord.work_order_id == work_order_id,
-            ReviewRecord.review_round == review_round,
-            ReviewRecord.action == "CHANGE_REVIEWER",
-            ReviewRecord.acted_at > latest_rejection.acted_at,
-        )
-        .first()
-        is not None
-    )
-
-
 @router.get("/candidates", response_model=ReviewCandidateListResponse)
 def list_review_candidates(
     work_order_id: int,
@@ -813,9 +787,6 @@ def _change_reviewer_after_reject_impl(
     rejected_status = ROUND_REJECTED_STATUS[payload.review_round]
     if WorkOrderStatus(work_order.current_status) != rejected_status:
         raise HTTPException(status_code=400, detail="仅当前轮次被退回后可变更审核人")
-    if _has_reviewer_change_after_rejection(db, work_order.id, payload.review_round):
-        raise HTTPException(status_code=400, detail="本次退回已变更过审核人")
-
     old_reviewer_id = getattr(work_order, ROUND_CURRENT_REVIEWER_ATTR[payload.review_round])
     if old_reviewer_id == payload.reviewer_user_id:
         raise HTTPException(status_code=400, detail="新审核人不能与原审核人相同")

@@ -93,19 +93,19 @@
       </el-form-item>
       <template v-if="showReviewerChangePanel">
         <el-form-item label="变更审核老师">
-          <el-select v-model="changeReviewerUserId" placeholder="选择新的审核老师" style="width: 320px" :disabled="hasChangedReviewer">
+          <el-select v-model="changeReviewerUserId" placeholder="选择新的审核老师" style="width: 320px">
             <el-option v-for="u in userOptions" :key="u.user_id" :label="`${u.real_name}(${u.username})`" :value="u.user_id" />
           </el-select>
         </el-form-item>
         <el-form-item label="变更备注">
-          <el-input v-model="changeReviewerComment" type="textarea" :rows="2" :disabled="hasChangedReviewer" placeholder="选填" />
+          <el-input v-model="changeReviewerComment" type="textarea" :rows="2" placeholder="选填" />
         </el-form-item>
         <el-alert
           v-if="pendingReviewerChange"
           type="info"
           :closable="false"
           show-icon
-          title="审核人已变更。项目重新送审时将流转给新审核人。"
+          title="当前选择已保存。重新选择并确认后可继续修改审核人。"
           style="margin-bottom: 12px"
         />
       </template>
@@ -512,7 +512,6 @@ const pendingReviewerChange = computed(() => records.value
   .filter(record => record.review_round === reviewRound.value && record.action === 'CHANGE_REVIEWER')
   .filter(record => new Date(record.acted_at).getTime() > latestSubmitAt.value)
   .sort((a, b) => new Date(b.acted_at).getTime() - new Date(a.acted_at).getTime())[0])
-const hasChangedReviewer = computed(() => Boolean(pendingReviewerChange.value))
 const isReviewLocked = computed(() => Boolean(props.flowInfo?.review_submit_locked))
 const canChangeReviewer = computed(() => canSubmitReview.value && isReplyFlow.value && !isReviewLocked.value)
 const reusePreviousFile = computed(() => isReplyFlow.value && replyFileMode.value === 'REUSE')
@@ -525,8 +524,8 @@ const requiresManualUploadBeforeSubmit = computed(() =>
 )
 const canSubmitReviewerChange = computed(() =>
   canSubmitReview.value &&
-  !pendingReviewerChange.value &&
-  Boolean(changeReviewerUserId.value)
+  Boolean(changeReviewerUserId.value) &&
+  changeReviewerUserId.value !== pendingReviewerChange.value?.reviewer_user_id
 )
 const currentRoundReviewerId = computed(() => {
   if (reviewRound.value === 'FIRST') return props.flowInfo?.first_reviewer_id
@@ -1106,7 +1105,7 @@ async function onSubmit() {
 function openReviewerChangePanel() {
   isReviewerChangePanelOpen.value = true
   changeReviewerUserId.value = pendingReviewerChange.value?.reviewer_user_id
-  changeReviewerComment.value = pendingReviewerChange.value?.comment || changeReviewerComment.value
+  changeReviewerComment.value = ''
 }
 
 function cancelReviewerChangePanel() {

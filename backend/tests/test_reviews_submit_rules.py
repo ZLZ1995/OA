@@ -363,7 +363,7 @@ def test_rejected_third_reviewer_change_updates_project_reviewer_immediately() -
     assert work_order.current_handler_user_id == leader.id
 
 
-def test_rejected_review_assignee_change_only_once_per_rejection() -> None:
+def test_rejected_review_assignee_change_can_be_corrected_before_resubmit() -> None:
     from app.api.v1.reviews import _change_reviewer_after_reject_impl as change_reviewer_after_reject
 
     db = _build_session()
@@ -399,16 +399,17 @@ def test_rejected_review_assignee_change_only_once_per_rejection() -> None:
         role_codes={"PROJECT_LEADER"},
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        change_reviewer_after_reject(
-            payload=ReviewAssigneeChangeRequest(work_order_id=work_order.id, review_round="FIRST", reviewer_user_id=another_reviewer.id),
-            db=db,
-            current_user=leader,
-            role_codes={"PROJECT_LEADER"},
-        )
+    result = change_reviewer_after_reject(
+        payload=ReviewAssigneeChangeRequest(work_order_id=work_order.id, review_round="FIRST", reviewer_user_id=another_reviewer.id),
+        db=db,
+        current_user=leader,
+        role_codes={"PROJECT_LEADER"},
+    )
 
-    assert exc_info.value.status_code == 400
-    assert "已变更过审核人" in str(exc_info.value.detail)
+    db.refresh(work_order)
+    assert result.reviewer_user_id == another_reviewer.id
+    assert work_order.first_reviewer_id == another_reviewer.id
+    assert work_order.current_handler_user_id == leader.id
 
 
 def test_first_review_approve_moves_to_second_submit() -> None:
