@@ -407,6 +407,7 @@ import { markHasExternalAudit, markNoExternalAudit, requestOwnerExternalAuditCon
 import ReviewUploadRequirementBox from '@/components/common/ReviewUploadRequirementBox.vue'
 import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
 import type { UploadProgressState } from '@/types/upload'
+import { prepareReviewCandidateSelection } from './reviewCandidateSelection'
 
 const props = defineProps<{
   projectId?: number
@@ -912,14 +913,19 @@ async function loadCandidates() {
     userOptions.value = []
     return
   }
-  userOptions.value = (await listReviewCandidates(props.workOrderId, reviewRound.value)).items.filter(user => {
-    if (user.user_id === currentRoundReviewerId.value) return false
-    if (projectPartyIds.value.has(user.user_id)) return false
-    if (reviewRound.value === 'FIRST' && [props.flowInfo?.second_reviewer_id, props.flowInfo?.third_reviewer_id].includes(user.user_id)) return false
-    if (reviewRound.value === 'SECOND' && [props.flowInfo?.first_reviewer_id, props.flowInfo?.third_reviewer_id].includes(user.user_id)) return false
-    if (reviewRound.value === 'THIRD' && [props.flowInfo?.first_reviewer_id, props.flowInfo?.second_reviewer_id].includes(user.user_id)) return false
-    return true
-  })
+  const roundConflictIds = reviewRound.value === 'FIRST'
+    ? [props.flowInfo?.second_reviewer_id, props.flowInfo?.third_reviewer_id]
+    : reviewRound.value === 'SECOND'
+      ? [props.flowInfo?.first_reviewer_id, props.flowInfo?.third_reviewer_id]
+      : [props.flowInfo?.first_reviewer_id, props.flowInfo?.second_reviewer_id]
+  const selection = prepareReviewCandidateSelection(
+    (await listReviewCandidates(props.workOrderId, reviewRound.value)).items,
+    currentRoundReviewerId.value,
+    [...projectPartyIds.value, ...roundConflictIds],
+    isReplyFlow.value,
+  )
+  userOptions.value = selection.options
+  if (selection.selectedReviewerId) reviewerUserId.value = selection.selectedReviewerId
   if (pendingReviewerChange.value) {
     changeReviewerUserId.value = pendingReviewerChange.value.reviewer_user_id
     isReviewerChangePanelOpen.value = true
