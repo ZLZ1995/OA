@@ -1094,32 +1094,36 @@ async function onTransferPrintRoom() {
 }
 
 async function onSubmit() {
-  const targetReviewerId = (isReplyFlow.value || isExternalReviewRound.value) ? currentRoundReviewerId.value : reviewerUserId.value
-  if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isExternalReviewRound.value ? '当前外部复核轮次缺少对应内部审核人' : isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
-  if (reviewerSelectSourceRound.value) {
-    await routeApprovedReview({
-      work_order_id: props.workOrderId,
-      review_round: reviewerSelectSourceRound.value,
-      route_mode: 'REVIEWER_SELECT_NEXT',
-      reviewer_user_id: targetReviewerId,
-      comment: comment.value || undefined
-    })
-    ElMessage.success(`已直接转交${roundLabel(reviewRound.value)}`)
+  try {
+    const targetReviewerId = (isReplyFlow.value || isExternalReviewRound.value) ? currentRoundReviewerId.value : reviewerUserId.value
+    if (!props.workOrderId || !targetReviewerId) return ElMessage.warning(isExternalReviewRound.value ? '当前外部复核轮次缺少对应内部审核人' : isReplyFlow.value ? '当前轮次缺少原审核老师' : '请选择审核老师')
+    if (reviewerSelectSourceRound.value) {
+      await routeApprovedReview({
+        work_order_id: props.workOrderId,
+        review_round: reviewerSelectSourceRound.value,
+        route_mode: 'REVIEWER_SELECT_NEXT',
+        reviewer_user_id: targetReviewerId,
+        comment: comment.value || undefined
+      })
+      ElMessage.success(`已直接转交${roundLabel(reviewRound.value)}`)
+      comment.value = ''
+      await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
+      emit('changed')
+      return
+    }
+    if (requiresManualUploadBeforeSubmit.value) return ElMessage.warning('请先上传待审报告资料包')
+    if (isReplyFlow.value && !currentSubmitReplyFiles.value.length && !comment.value.trim()) {
+      return ElMessage.warning('退回修改后重新送审时，审核意见回复文件或送审备注至少填写一项')
+    }
+    await submitReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, reviewer_user_id: targetReviewerId, comment: comment.value || undefined })
+    ElMessage.success(isReplyFlow.value ? '审核意见回复已提交' : '提交审核成功')
     comment.value = ''
-    await Promise.all([loadRecords(), loadFiles(), loadCandidates()])
+    replyFileMode.value = 'REUPLOAD'
+    await Promise.all([loadRecords(), loadFiles()])
     emit('changed')
-    return
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '提交审核失败，请检查当前流程状态后重试')
   }
-  if (requiresManualUploadBeforeSubmit.value) return ElMessage.warning('请先上传待审报告资料包')
-  if (isReplyFlow.value && !currentSubmitReplyFiles.value.length && !comment.value.trim()) {
-    return ElMessage.warning('退回修改后重新送审时，审核意见回复文件或送审备注至少填写一项')
-  }
-  await submitReview({ work_order_id: props.workOrderId, review_round: reviewRound.value, reviewer_user_id: targetReviewerId, comment: comment.value || undefined })
-  ElMessage.success(isReplyFlow.value ? '审核意见回复已提交' : '提交审核成功')
-  comment.value = ''
-  replyFileMode.value = 'REUPLOAD'
-  await Promise.all([loadRecords(), loadFiles()])
-  emit('changed')
 }
 
 function openReviewerChangePanel() {
