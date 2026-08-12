@@ -525,6 +525,7 @@ const showReviewerChangePanel = computed(() => canChangeReviewer.value && isRevi
 const requiresManualUploadBeforeSubmit = computed(() =>
   !reusePreviousFile.value &&
   !canCarryForwardApprovedFile.value &&
+  currentReportPackageFiles.value.length === 0 &&
   submitFiles.value.length === 0
 )
 const canSubmitReviewerChange = computed(() =>
