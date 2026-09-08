@@ -1,5 +1,7 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -13,7 +15,7 @@ from app.models.reminder_event import ReminderEvent
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.workflow_log import WorkflowLog
-from app.schemas.workbench import WorkbenchProjectItem, WorkbenchResponse
+from app.schemas.workbench import WorkbenchProjectItem, WorkbenchResponse, WorkbenchSearchResponse
 from app.services.chief_appraiser_service import CHIEF_APPRAISER_ROLE_CODES, work_order_matches_project_chief
 from app.services.contract_print_room_flow import get_contract_print_room_status
 from app.services.project_flow import get_project_leader_display_name, get_user_role_in_project, normalize_project_step
@@ -95,15 +97,25 @@ def _todo_action_text(
 
 @router.get("", response_model=WorkbenchResponse)
 def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> WorkbenchResponse:
+    return _get_workbench(db, current_user)
+
+
+def _get_workbench(db: Session, current_user: User, project_ids: list[int] | None = None) -> WorkbenchResponse:
+    """Serialize the workbench, or a page of IDs already authorized by search."""
     role_codes = {item.role.code for item in current_user.roles}
     base_query = db.query(Project).filter(Project.deleted_at.is_(None))
+    if project_ids is not None:
+        base_query = base_query.filter(Project.id.in_(project_ids))
     my_projects: list[WorkbenchProjectItem] = []
     member_project_ids = db.query(ProjectMember.project_id).filter(ProjectMember.user_id == current_user.id)
+    if project_ids is not None:
+        member_project_ids = member_project_ids.filter(ProjectMember.project_id.in_(project_ids))
     member_project_id_set = {item[0] for item in member_project_ids.all()}
     handled_project_ids = {
         item[0]
         for item in db.query(WorkOrder.project_id)
         .filter(
+            WorkOrder.project_id.in_(project_ids) if project_ids is not None else True,
             or_(
                 WorkOrder.current_handler_user_id == current_user.id,
                 WorkOrder.initiator_user_id == current_user.id,
@@ -128,7 +140,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         Project.id.in_(handled_project_ids),
     )
 
-    for project in base_query.filter(my_project_filter).order_by(Project.id.desc()).all():
+    for project in base_query.filter(my_project_filter if project_ids is None else True).order_by(Project.id.desc()).all():
         latest_work_order = db.query(WorkOrder).filter(WorkOrder.project_id == project.id).order_by(WorkOrder.id.desc()).first()
         delete_request = db.query(ProjectDeleteRequest).filter(ProjectDeleteRequest.project_id == project.id).first()
         is_member = project.id in member_project_id_set
@@ -195,7 +207,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
                 can_archive=project.archived_at is None and latest_work_order is not None and (latest_work_order.archive_submission_type == "APPROVED" or project.termination_status == "APPROVED"),
                 can_request_termination=project.archived_at is None and project.termination_status not in {"PENDING", "APPROVED", "DELETE_PENDING"},
                 can_approve_delete=False,
-                can_enter=True,
+                can_enter=(project_ids is None or get_user_role_in_project(project, latest_work_order, current_user, is_member) != "无权限"),
                 is_reminded=latest_reminder is not None,
                 remind_count_today=remind_count_today,
                 latest_remind_at=latest_reminder.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_reminder else None,
@@ -269,6 +281,7 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         .join(WorkOrder, WorkOrder.project_id == Project.id)
         .filter(
             Project.deleted_at.is_(None),
+            Project.id.in_(project_ids) if project_ids is not None else True,
             or_(Project.archived_at.is_(None), Project.id.in_(archived_delete_project_ids)),
             or_(Project.termination_status.is_(None), Project.termination_status != "APPROVED", Project.id.in_(archived_delete_project_ids)),
             or_(
@@ -479,3 +492,67 @@ def get_workbench(db: Session = Depends(get_db), current_user: User = Depends(ge
         )
 
     return WorkbenchResponse(my_projects=my_projects, todo_projects=todo_projects)
+
+
+@router.get("/projects/search", response_model=WorkbenchSearchResponse)
+def search_workbench_projects(
+    keyword: Annotated[str, Query(max_length=200)] = "",
+    project_no: Annotated[str, Query(max_length=200)] = "",
+    project_name: Annotated[str, Query(max_length=200)] = "",
+    client_name: Annotated[str, Query(max_length=200)] = "",
+    creator: Annotated[str, Query(max_length=200)] = "",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WorkbenchSearchResponse:
+    # Scope is independent of role-wide visibility, including for administrators.
+    uid = current_user.id
+    assigned = db.query(WorkOrder.project_id).filter(or_(*[
+        getattr(WorkOrder, field) == uid for field in (
+            "current_handler_user_id", "initiator_user_id", "project_leader_id",
+            "contract_reviewer_id", "first_reviewer_id", "second_reviewer_id",
+            "third_reviewer_id", "print_room_handler_id", "mailing_handler_user_id",
+            "archive_reviewer_id", "archive_submitter_id", "chief_appraiser_user_id",
+        )
+    ]))
+    historical = db.query(WorkOrder.project_id).join(
+        WorkflowLog, WorkflowLog.work_order_id == WorkOrder.id,
+    ).filter(WorkflowLog.operator_user_id == uid)
+    finance = db.query(WorkOrder.project_id).join(
+        Invoice, Invoice.work_order_id == WorkOrder.id,
+    ).filter(or_(Invoice.finance_handler_id == uid, Invoice.handled_by == uid))
+    members = db.query(ProjectMember.project_id).filter(ProjectMember.user_id == uid)
+    query = db.query(Project.id).outerjoin(User, User.id == Project.business_user_id).filter(
+        Project.deleted_at.is_(None),
+        or_(Project.business_user_id == uid, Project.project_leader_id == uid,
+            Project.id.in_(members), Project.id.in_(assigned),
+            Project.id.in_(historical), Project.id.in_(finance)),
+    )
+
+    def contains(column, value):
+        # Treat SQL wildcard characters as literal user input.
+        escaped = value.strip().replace("/", "//").replace("%", "/%").replace("_", "/_")
+        return column.ilike(f"%{escaped}%", escape="/")
+
+    columns = (Project.project_code, Project.project_name, Project.client_name, User.real_name)
+    if keyword.strip():
+        query = query.filter(or_(*(contains(column, keyword) for column in columns)))
+    for column, value in zip(columns, (project_no, project_name, client_name, creator)):
+        if value.strip():
+            query = query.filter(contains(column, value))
+    total = query.count()
+    ids = [row[0] for row in query.order_by(Project.id.desc()).offset((page - 1) * page_size).limit(page_size)]
+    data = _get_workbench(db, current_user, ids) if ids else WorkbenchResponse(my_projects=[], todo_projects=[])
+    todos = {item.id: item for item in data.todo_projects}
+    items = []
+    for item in data.my_projects:
+        can_enter = item.can_enter
+        if item.id in todos and item.status_display != "已归档":
+            item = todos[item.id]
+        else:
+            item.todo_action = "无待办"
+        item.can_enter = can_enter
+        item.can_edit = item.can_delete = item.can_archive = item.can_request_termination = False
+        items.append(item)
+    return WorkbenchSearchResponse(items=items, total=total, page=page, page_size=page_size)

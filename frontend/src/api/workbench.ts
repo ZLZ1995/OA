@@ -36,3 +36,16 @@ export async function getWorkbench() {
   const { data } = await http.get('/workbench')
   return data as { my_projects: WorkbenchProjectItem[]; todo_projects: WorkbenchProjectItem[] }
 }
+
+export interface WorkbenchSearchFilters {
+  keyword: string
+  project_no: string
+  project_name: string
+  client_name: string
+  creator: string
+}
+
+export async function searchWorkbenchProjects(params: WorkbenchSearchFilters & { page: number; page_size: number }) {
+  const { data } = await http.get('/workbench/projects/search', { params })
+  return data as { items: WorkbenchProjectItem[]; total: number; page: number; page_size: number }
+}

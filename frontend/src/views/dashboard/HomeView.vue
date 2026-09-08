@@ -74,11 +74,33 @@
       <el-card class="todo-card" shadow="never">
         <template #header>
           <div class="card-header">
-            <span>待办项目</span>
+            <span>{{ searchActive ? '项目搜索结果' : '待办项目' }}</span>
             <span class="card-header-tip">点击项目后，下方联动展示该项目消息和办理入口</span>
           </div>
         </template>
+        <form class="project-search" @submit.prevent="submitProjectSearch">
+          <div class="project-search-toolbar">
+            <el-input v-model="projectSearch.keyword" aria-label="项目关键词" maxlength="200" clearable placeholder="搜索项目编号 / 项目名称 / 客户名称 / 创建人" />
+            <el-button type="primary" native-type="submit" :loading="searchLoading">搜索</el-button>
+            <el-button @click="resetProjectSearch">重置</el-button>
+            <el-button link type="primary" :aria-expanded="advancedExpanded" aria-controls="advanced-project-search" @click="advancedExpanded = !advancedExpanded">
+              {{ advancedExpanded ? '收起高级搜索 ∧' : '高级搜索 ∨' }}
+            </el-button>
+          </div>
+          <p class="project-search-hint">搜索范围：本人创建、负责、参与或办理过的项目（含历史项目）
+            <el-tag v-if="!advancedExpanded && advancedApplied" size="small">高级筛选已生效</el-tag>
+          </p>
+          <div v-show="advancedExpanded" id="advanced-project-search" class="project-search-advanced">
+            <label v-for="field in advancedFields" :key="field.key">
+              <span>{{ field.label }}</span>
+              <el-input v-model="projectSearch[field.key]" :aria-label="field.label" :placeholder="'请输入' + field.label" maxlength="200" clearable />
+            </label>
+            <p class="project-search-hint">多项条件同时满足 · 包含历史项目</p>
+          </div>
+        </form>
         <el-table
+          v-loading="searchLoading"
+          :empty-text="searchActive ? '未找到符合条件的相关项目' : '暂无待办项目'"
           ref="todoTableRef"
           class="wide-table todo-table"
           :data="todoProjects"
@@ -105,13 +127,18 @@
             <template #default="{ row }">
               <el-button v-if="row.can_approve_delete" link type="danger" @click.stop="goDeleteApprovals">处理删除审核</el-button>
               <template v-else>
-                <el-button link type="primary" @click.stop="goProject(row.id, row)">进入项目</el-button>
+                <el-button link type="primary" :disabled="!row.can_enter" :title="row.can_enter ? '' : '当前无项目查看权限'" @click.stop="goProject(row.id, row)">进入项目</el-button>
                 <el-button link type="success" @click.stop="focusTodoProject(row)">查看联动</el-button>
               </template>
               <el-button v-if="row.can_approve_termination" link type="danger" @click.stop="approveTermination(row)">允许终止</el-button>
             </template>
           </el-table-column>
         </el-table>
+        <div v-if="searchActive && searchTotal > 0" class="project-search-pagination">
+          <span>共 {{ searchTotal }} 个项目</span>
+          <el-pagination :current-page="searchPage" :page-size="20" :total="searchTotal"
+            layout="prev, pager, next" @current-change="changeSearchPage" />
+        </div>
       </el-card>
 
       <el-card class="linkage-card" shadow="never">
@@ -277,7 +304,7 @@
               <el-empty v-else description="暂无待办项目，流程预览区保持固定结构" />
 
               <div class="flow-preview-footer">
-                <el-button type="primary" :disabled="!selectedTodo" @click="selectedTodo && goProject(selectedTodo.id, selectedTodo)">进入办理</el-button>
+                <el-button type="primary" :disabled="!selectedTodo?.can_enter" @click="selectedTodo && goProject(selectedTodo.id, selectedTodo)">{{ searchActive ? '进入项目' : '进入办理' }}</el-button>
                 <el-button :disabled="!selectedTodo" @click="openNotificationsPage">查看关联消息</el-button>
               </div>
             </div>
@@ -422,7 +449,7 @@ import {
   type ReportType,
 } from '@/api/projects'
 import { listUserCandidates, type UserItem } from '@/api/users'
-import { getWorkbench, type WorkbenchProjectItem } from '@/api/workbench'
+import { getWorkbench, searchWorkbenchProjects, type WorkbenchProjectItem, type WorkbenchSearchFilters } from '@/api/workbench'
 import { useAuthStore } from '@/store/auth'
 import { useNotificationStore } from '@/store/notification'
 
@@ -447,6 +474,66 @@ const notifications = useNotificationStore()
 const todoTableRef = ref<InstanceType<typeof ElTable>>()
 const myProjects = ref<WorkbenchProjectItem[]>([])
 const todoProjects = ref<WorkbenchProjectItem[]>([])
+const emptyProjectSearch = (): WorkbenchSearchFilters => ({ keyword: '', project_no: '', project_name: '', client_name: '', creator: '' })
+const projectSearch = reactive(emptyProjectSearch())
+const appliedProjectSearch = ref(emptyProjectSearch())
+const advancedFields = [
+  { key: 'project_no', label: '项目编号' }, { key: 'project_name', label: '项目名称' },
+  { key: 'client_name', label: '客户名称' }, { key: 'creator', label: '创建人' },
+] as const
+const advancedExpanded = ref(false)
+const searchActive = ref(false)
+const searchLoading = ref(false)
+const searchPage = ref(1)
+const searchTotal = ref(0)
+let projectRequestVersion = 0
+const advancedApplied = computed(() => searchActive.value && advancedFields.some(field => appliedProjectSearch.value[field.key].trim()))
+
+async function fetchProjectRows(refreshMyProjects = true) {
+  const version = ++projectRequestVersion
+  searchLoading.value = true
+  const searching = searchActive.value
+  const params = { ...appliedProjectSearch.value, page: searchPage.value, page_size: 20 }
+  try {
+    const [data, result] = await Promise.all([
+      refreshMyProjects || !searching ? getWorkbench() : Promise.resolve(null),
+      searching ? searchWorkbenchProjects(params) : Promise.resolve(null),
+    ])
+    if (version !== projectRequestVersion) return false
+    if (data) myProjects.value = data.my_projects
+    todoProjects.value = result ? result.items : data?.todo_projects || []
+    searchTotal.value = result?.total || 0
+    return true
+  } catch {
+    if (version !== projectRequestVersion) return false
+    todoProjects.value = []
+    searchTotal.value = 0
+    ElMessage.error(searching ? '项目搜索失败，请重试' : '工作台加载失败，请重试')
+    return true
+  } finally {
+    if (version === projectRequestVersion) searchLoading.value = false
+  }
+}
+
+async function submitProjectSearch() {
+  appliedProjectSearch.value = { ...projectSearch }
+  searchActive.value = true
+  searchPage.value = 1
+  await load(false)
+}
+
+async function resetProjectSearch() {
+  Object.assign(projectSearch, emptyProjectSearch())
+  appliedProjectSearch.value = emptyProjectSearch()
+  searchActive.value = false
+  searchPage.value = 1
+  await load()
+}
+
+async function changeSearchPage(page: number) {
+  searchPage.value = page
+  await load(false)
+}
 const selectedTodoId = ref<number>()
 const linkedNotifications = ref<NotificationItem[]>([])
 const selectedNotificationIds = ref<number[]>([])
@@ -587,10 +674,8 @@ const deleteDraft = reactive({
   reason: '',
 })
 
-async function load() {
-  const data = await getWorkbench()
-  myProjects.value = data.my_projects
-  todoProjects.value = data.todo_projects
+async function load(refreshMyProjects = true) {
+  if (!await fetchProjectRows(refreshMyProjects)) return
 
   const preferredId = selectedTodoId.value && todoProjects.value.some(item => item.id === selectedTodoId.value)
     ? selectedTodoId.value
@@ -602,14 +687,14 @@ async function load() {
     selectedTodoId.value = undefined
     linkedNotifications.value = []
     selectedNotificationIds.value = []
+    previewNotification.value = null
+    filters.project_id = undefined
   }
 }
 
 async function refreshWorkbenchData(preserveSelection = true) {
   const previousSelectedId = preserveSelection ? selectedTodoId.value : undefined
-  const data = await getWorkbench()
-  myProjects.value = data.my_projects
-  todoProjects.value = data.todo_projects
+  if (!await fetchProjectRows()) return
 
   const nextSelectedId = previousSelectedId && todoProjects.value.some(item => item.id === previousSelectedId)
     ? previousSelectedId
@@ -624,6 +709,10 @@ async function refreshWorkbenchData(preserveSelection = true) {
     }
   } else {
     selectedTodoId.value = undefined
+    linkedNotifications.value = []
+    selectedNotificationIds.value = []
+    previewNotification.value = null
+    filters.project_id = undefined
   }
 }
 
@@ -642,20 +731,22 @@ async function selectTodoProject(projectId: number) {
 
 async function loadLinkedNotifications() {
   if (!selectedTodo.value) return
-  filters.project_id = selectedTodo.value.id
+  const projectId = selectedTodo.value.id
+  filters.project_id = projectId
   const [listResult, statsResult] = await Promise.all([
     listMyNotifications({
       tab: activeTab.value,
       keyword: filters.keyword || undefined,
       message_type: filters.message_type || undefined,
       priority: filters.priority || undefined,
-      project_id: selectedTodo.value.id,
+      project_id: projectId,
       page: 1,
       page_size: 20,
     }),
     getNotificationStats(),
   ])
 
+  if (selectedTodo.value?.id !== projectId) return
   linkedNotifications.value = listResult.items
   previewNotification.value = listResult.items[0] || null
   const projectItems = listResult.items.filter(item => item.project_id === selectedTodo.value?.id)
@@ -1008,6 +1099,11 @@ function formatDateTime(value?: string | null) {
 }
 
 function goProject(id: number, row?: WorkbenchProjectItem) {
+  if (row && !row.can_enter) return
+  if (row?.todo_action === '无待办') {
+    router.push(`/projects/${id}/flow`)
+    return
+  }
   if (!row) {
     router.push(`/projects/${id}/flow`)
     return
@@ -1064,6 +1160,7 @@ watch(
 )
 
 onUnmounted(() => {
+  projectRequestVersion++
   stopNotificationRefreshWatch()
 })
 </script>
@@ -1124,13 +1221,23 @@ onUnmounted(() => {
 
 .create-card {
   grid-area: create;
-  position: sticky;
-  top: 0;
 }
 
 .todo-card {
   grid-area: todo;
+  min-width: 0;
 }
+
+.project-search { margin-bottom: 18px; }
+.project-search-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.project-search-toolbar > .el-input { flex: 1 1 260px; }
+.project-search-toolbar .el-button { margin-left: 0; }
+.project-search-hint { color: #71839b; font-size: 12px; line-height: 1.8; margin: 8px 0; }
+.project-search-advanced { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 14px; background: #f3f8fe; border: 1px solid #e1ecf8; border-radius: 8px; }
+.project-search-advanced label { display: grid; gap: 6px; font-size: 13px; color: #40536c; }
+.project-search-advanced .project-search-hint { grid-column: 1 / -1; margin: 0; }
+.project-search-pagination { display: flex; align-items: center; gap: 12px; margin-top: 16px; overflow-x: auto; font-size: 13px; color: #71839b; }
+.project-search-pagination > span { white-space: nowrap; }
 
 .linkage-card {
   grid-area: linkage;
