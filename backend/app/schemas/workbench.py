@@ -36,3 +36,10 @@ class WorkbenchProjectItem(BaseModel):
 class WorkbenchResponse(BaseModel):
     my_projects: list[WorkbenchProjectItem]
     todo_projects: list[WorkbenchProjectItem]
+
+
+class WorkbenchSearchResponse(BaseModel):
+    items: list[WorkbenchProjectItem]
+    total: int
+    page: int
+    page_size: int
