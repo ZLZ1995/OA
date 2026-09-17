@@ -122,7 +122,7 @@ def send_message(
             candidates=[build_project_candidate(db, item) for item in candidates],
         )
 
-    answer = "我可以协助查询项目进度和说明下一步操作。请提供项目名称、项目编号或客户名称。"
+    answer = generate_agent_answer(payload.message, {})
     append_agent_message(session, "assistant", answer)
     return OaAgentResponse(
         session_id=session.session_id,

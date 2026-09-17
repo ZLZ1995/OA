@@ -15,6 +15,9 @@ from app.models.work_order_file import WorkOrderFile
 from app.services.oa_agent_audit import record_agent_module_access
 from app.services.oa_agent_context import build_authorized_project_context
 from app.services.oa_agent_llm import ensure_operation_guide
+from app.api.v1 import oa_agent as agent_api
+from app.schemas.oa_agent import OaAgentMessageRequest
+from app.services.oa_agent_session import clear_agent_sessions
 from app.services.oa_agent_project_access import (
     extract_project_keywords,
     get_accessible_project,
@@ -80,6 +83,37 @@ def _seed_project(
     db.add(work_order)
     db.flush()
     return project, work_order
+
+
+def test_general_question_uses_knowledge_without_project(monkeypatch):
+    with _build_session() as db:
+        user = _seed_user(db, "general")
+        clear_agent_sessions(user.id)
+        calls = []
+        def answer(message, context):
+            calls.append((message, context))
+            return "说明书指引"
+        monkeypatch.setattr(agent_api, "generate_agent_answer", answer)
+        result = agent_api.send_message(OaAgentMessageRequest(message="文件已锁定不能替换"), db, user)
+        assert result.response_type == "answer"
+        assert calls == [("文件已锁定不能替换", {})]
+        assert result.project_id is None
+        clear_agent_sessions(user.id)
+
+
+def test_denied_project_never_reaches_model(monkeypatch):
+    with _build_session() as db:
+        owner = _seed_user(db, "owner")
+        outsider = _seed_user(db, "outsider")
+        project, _ = _seed_project(db, owner, project_code="PRIVATE-001")
+        clear_agent_sessions(outsider.id)
+        def forbidden(*args):
+            raise AssertionError("Unauthorized context reached model")
+        monkeypatch.setattr(agent_api, "generate_agent_answer", forbidden)
+        result = agent_api.send_message(OaAgentMessageRequest(message="按说明书查询项目", project_id=project.id), db, outsider)
+        assert result.response_type == "permission_denied"
+        assert "PRIVATE-001" not in result.answer
+        clear_agent_sessions(outsider.id)
 
 
 def test_agent_search_limits_regular_user_to_owned_projects() -> None:
