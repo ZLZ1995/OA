@@ -1,9 +1,9 @@
 <template>
   <OaAgentChat
     :title="t.title"
-    :subtitle="t.subtitle"
-    :placeholder="t.placeholder"
-    :empty-text="t.empty"
+    subtitle="结合 OA 使用支持说明书解答操作问题；项目进度仅查询当前账号可访问的数据"
+    placeholder="输入操作问题、报错提示，或项目名称、项目编号、客户名称"
+    empty-text="可以问：三审怎么送审？待审资料包为空怎么办？也可以提供项目编号查询进度。"
   />
 </template>
 
