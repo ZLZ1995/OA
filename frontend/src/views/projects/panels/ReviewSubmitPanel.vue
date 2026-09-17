@@ -408,6 +408,7 @@ import ReviewUploadRequirementBox from '@/components/common/ReviewUploadRequirem
 import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
 import type { UploadProgressState } from '@/types/upload'
 import { prepareReviewCandidateSelection } from './reviewCandidateSelection'
+import { findNewUploadReceipt, isAmbiguousUploadError } from './uploadReceiptReconciliation'
 
 const props = defineProps<{
   projectId?: number
@@ -970,20 +971,55 @@ async function uploadReviewFile(
   progressRef?: { value: UploadProgressState | null },
   successMessage?: string
 ) {
+  const knownFileIds = new Set(files.value.map(item => item.id))
+  let receipt: WorkOrderFileItem
   try {
-    await uploadWorkOrderFile({
+    receipt = await uploadWorkOrderFile({
       ...payload,
       onProgress: (progress) => {
         if (progressRef) progressRef.value = progress
         payload.onProgress?.(progress)
       }
     })
-    if (successMessage) ElMessage.success(successMessage)
-    await loadFiles()
   } catch (error: any) {
+    if (props.workOrderId && isAmbiguousUploadError(error)) {
+      try {
+        const refreshedFiles = (await listWorkOrderFiles(props.workOrderId)).items
+        const persistedReceipt = findNewUploadReceipt(refreshedFiles, knownFileIds, {
+          fileCategory: payload.file_category,
+          businessStage: payload.business_stage,
+          fileName: payload.file.name,
+          fileSize: payload.file.size,
+        })
+        if (persistedReceipt) {
+          files.value = refreshedFiles
+          const confirmedProgress: UploadProgressState = {
+            status: 'success',
+            fileName: payload.file.name,
+            loaded: payload.file.size,
+            total: payload.file.size,
+            percentage: 100,
+          }
+          if (progressRef) progressRef.value = confirmedProgress
+          payload.onProgress?.(confirmedProgress)
+          ElMessage.warning('上传响应中断，但已通过服务器回执确认文件上传成功')
+          if (successMessage) ElMessage.success(successMessage)
+          return persistedReceipt
+        }
+      } catch {
+        // Preserve the original upload error when the receipt check is unavailable.
+      }
+    }
     ElMessage.error(error?.code === 'ECONNABORTED' ? '文件上传超时，请稍后重试或检查网络' : (error?.response?.data?.detail || '文件上传失败'))
     throw error
   }
+  if (successMessage) ElMessage.success(successMessage)
+  try {
+    await loadFiles()
+  } catch {
+    ElMessage.warning('文件已上传，但列表刷新失败；重新进入当前环节即可查看')
+  }
+  return receipt
 }
 
 async function onReportSelected(file: UploadFile) {
