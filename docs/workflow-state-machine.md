@@ -1,5 +1,7 @@
 # 状态机固化（阶段1）
 
+> 历史阶段文档，状态和迁移不完整。“审核通过必须回到负责人”等表述已过时。当前使用支持请阅读 [Agent 使用支持说明书](agent-support-manual.md)，完整实现见 `backend/app/workflows/`。
+
 ## 状态枚举（WorkOrderStatus）
 - PROJECT_CREATED
 - WORK_ORDER_CREATED
