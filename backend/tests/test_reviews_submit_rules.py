@@ -1,5 +1,5 @@
 ﻿import pytest
-from datetime import date
+from datetime import date, datetime
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -87,6 +87,64 @@ def _add_review_file(
     db.add(row)
     db.commit()
     return row
+
+
+@pytest.mark.parametrize("source_round,target_round", [("FIRST", "SECOND"), ("SECOND", "THIRD")])
+@pytest.mark.parametrize("mode", ["recover", "route", "existing", "no_approval", "rejected", "source_missing", "later_rejected"])
+def test_leader_submit_recovers_missing_inherited_package(source_round, target_round, mode):
+    from app.api.v1.reviews import submit_review
+
+    db = _build_session()
+    leader, reviewer, _, order = _seed_basic(db)
+    role = Role(code=f"{target_round}_REVIEWER", name=target_round, is_system_fixed=True)
+    db.add(role)
+    db.flush()
+    db.add(UserRole(user_id=reviewer.id, role_id=role.id))
+    order.current_status = f"{source_round}_APPROVED_WAIT_LEADER_SUBMIT_{target_round}"
+    source = _add_review_file(db, order, round_name=source_round, uploaded_by=reviewer.id)
+    if mode != "no_approval":
+        db.add(ReviewRecord(work_order_id=order.id, review_round=source_round,
+                           reviewer_user_id=reviewer.id, action="APPROVE", acted_at=datetime.now()))
+    if mode == "existing":
+        source = _add_review_file(db, order, round_name=target_round, filename="existing.zip")
+    if mode == "source_missing":
+        source.is_current = False
+    if mode == "rejected":
+        order.current_status = f"{target_round}_REVIEW_REJECTED"
+    if mode == "later_rejected":
+        db.flush()
+        db.add(ReviewRecord(work_order_id=order.id, review_round=source_round,
+                           reviewer_user_id=reviewer.id, action="REJECT_RETURN", acted_at=datetime.now()))
+    db.commit()
+    if mode == "route":
+        from app.api.v1.reviews import route_approved_review
+        setattr(order, "first_reviewer_id" if source_round == "FIRST" else "second_reviewer_id", reviewer.id)
+        order.current_status = f"{source_round}_APPROVED_WAIT_{source_round}_SELECT_{target_round}"
+        order.current_handler_user_id = reviewer.id
+        db.commit()
+        route_payload = ReviewApprovalRoutingRequest(work_order_id=order.id, review_round=source_round,
+                                                    route_mode="RETURN_TO_PROJECT_LEADER")
+        route_approved_review(route_payload, db, reviewer, {f"{source_round}_REVIEWER"})
+        copied = db.query(WorkOrderFile).filter_by(work_order_id=order.id,
+                        business_stage=f"REVIEW_{target_round}", is_current=True).one()
+        assert copied.storage_key == source.storage_key
+        assert order.current_handler_user_id == leader.id
+        return
+    payload = ReviewSubmitRequest(work_order_id=order.id, review_round=target_round, reviewer_user_id=reviewer.id)
+    if mode in {"no_approval", "rejected", "source_missing", "later_rejected"}:
+        with pytest.raises(HTTPException) as error:
+            submit_review(payload, db, leader)
+        assert error.value.status_code == 400
+        assert "资料包" in error.value.detail
+        assert db.query(WorkOrderFile).filter_by(work_order_id=order.id, business_stage=f"REVIEW_{target_round}").count() == 0
+        return
+    submit_review(payload, db, leader)
+    copied = db.query(WorkOrderFile).filter_by(work_order_id=order.id,
+                    business_stage=f"REVIEW_{target_round}", is_current=True).one()
+    assert copied.storage_key == source.storage_key
+    assert copied.origin_file_name == source.origin_file_name
+    assert order.current_status == f"{target_round}_REVIEWING"
+    assert order.current_handler_user_id == reviewer.id
 
 
 def test_submit_review_rejects_reviewer_without_round_role() -> None:
