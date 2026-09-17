@@ -377,6 +377,34 @@ def _clone_files_to_round(
             next_version += 1
 
 
+def _carry_approved_package_if_missing(
+    db: Session, work_order: WorkOrder, source_round: str, uploaded_by: int,
+) -> ReviewRecord | None:
+    """Carry a passed package without replacing an existing target-round package."""
+    target_round = ROUND_NEXT[source_round]
+    if _has_current_round_file(db, work_order.id, target_round, "REPORT_ZIP"):
+        return None
+    decision = (
+        db.query(ReviewRecord)
+        .filter(ReviewRecord.work_order_id == work_order.id,
+                ReviewRecord.review_round == source_round,
+                ReviewRecord.action.in_(["APPROVE", "REJECT_RETURN"]))
+        .order_by(ReviewRecord.acted_at.desc(), ReviewRecord.id.desc())
+        .first()
+    )
+    if not decision or decision.action != "APPROVE":
+        return None
+    if not _has_current_round_file(db, work_order.id, source_round, "REPORT_ZIP"):
+        return None
+    _clone_files_to_round(
+        db, work_order_id=work_order.id, from_round=source_round, to_round=target_round,
+        uploaded_by=uploaded_by,
+        include_review_opinion=_latest_rejection_record(db, work_order.id, source_round) is not None,
+    )
+    db.flush()
+    return decision
+
+
 def _latest_report_file_owner_is_project_party(db: Session, work_order: WorkOrder, review_round: str) -> bool:
     if review_round.startswith("EXTERNAL_"):
         return True
@@ -696,6 +724,11 @@ def _submit_review_impl(
         raise HTTPException(status_code=400, detail=f"当前状态不可发起{payload.review_round}审")
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
+    inherited_record = None
+    source_round = next((source for source, target in ROUND_NEXT.items() if target == payload.review_round), None)
+    # Only recover packages while advancing after approval, never on a rejected resubmission.
+    if source_round and from_status != ROUND_REJECTED_STATUS[payload.review_round]:
+        inherited_record = _carry_approved_package_if_missing(db, work_order, source_round, current_user.id)
     if not _has_current_round_file(db, work_order.id, payload.review_round, "REPORT_ZIP"):
         raise HTTPException(status_code=400, detail="请先上传待审报告资料包")
 
@@ -726,12 +759,15 @@ def _submit_review_impl(
     work_order.current_status = to_status.value
     work_order.current_handler_user_id = target_reviewer_id
 
+    submit_comment = payload.comment
+    if inherited_record:
+        submit_comment = f"{payload.comment or '沿用上一轮审核通过文件'} {AUTO_FROM_RECORD_MARKER}{inherited_record.id}]"
     record = ReviewRecord(
         work_order_id=work_order.id,
         review_round=payload.review_round,
         reviewer_user_id=target_reviewer_id,
         action="SUBMIT",
-        comment=payload.comment,
+        comment=submit_comment,
         acted_at=datetime.now(timezone.utc),
     )
     db.add(record)
@@ -964,6 +1000,7 @@ def route_approved_review(
         target_status = _round_leader_wait_status(payload.review_round)
         if not can_transit(from_status_for_log, target_status):
             raise HTTPException(status_code=400, detail="非法状态流转")
+        _carry_approved_package_if_missing(db, work_order, payload.review_round, current_user.id)
         work_order.current_status = target_status.value
         work_order.current_handler_user_id = work_order.project_leader_id
         action_name = f"{payload.review_round}_APPROVE_RETURN_PROJECT_LEADER_SELECT_{next_round}"

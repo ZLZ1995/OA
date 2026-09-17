@@ -620,7 +620,18 @@ const showContractDraftDownload = computed(() => ['FIRST_REVIEWER', 'SECOND_REVI
 const showProjectSummary = computed(() => ['FIRST_REVIEWER', 'SECOND_REVIEWER', 'THIRD_REVIEWER', 'ADMIN'].some(role => props.userRoles.includes(role)))
 
 const reviewPackageFiles = computed(() => files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.business_stage === reviewStage(reviewRound.value)))
-const currentReportPackageFiles = computed(() => reviewPackageFiles.value.filter(file => file.is_current))
+const currentReportPackageFiles = computed(() => {
+  const current = reviewPackageFiles.value.filter(file => file.is_current)
+  if (current.length || isReplyFlow.value || !(canCarryForwardApprovedFile.value || isLockedCarryForwardStage.value)) return current
+  const sourceRound = previousReviewRound.value
+  if (!sourceRound) return current
+  const lastDecision = records.value
+    .filter(record => record.review_round === sourceRound && ['APPROVE', 'REJECT_RETURN'].includes(record.action))
+    .sort((a, b) => new Date(b.acted_at).getTime() - new Date(a.acted_at).getTime() || b.id - a.id)[0]
+  if (lastDecision?.action !== 'APPROVE') return current
+  // Preview the approved source package; the server creates target-round references on submit.
+  return files.value.filter(file => file.file_category === 'REPORT_ZIP' && file.business_stage === reviewStage(sourceRound) && file.is_current)
+})
 const replyFiles = computed(() => files.value.filter(file => file.file_category === 'REVIEW_REPLY' && file.business_stage === reviewStage(reviewRound.value)))
 const currentReplyFiles = computed(() => replyFiles.value.filter(file => file.is_current))
 const submitFiles = computed(() => currentReportPackageFiles.value)
