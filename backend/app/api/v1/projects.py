@@ -28,6 +28,8 @@ from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectRespo
 from app.schemas.project_flow import ProjectFlowProject, ProjectFlowResponse, ProjectUpdateLogItem
 from app.services.contract_print_room_flow import get_contract_print_room_status
 from app.services.project_conflicts import get_unresolved_conflicts, mark_project_duplicate_deleted, upsert_conflict_snapshot_and_detect
+from app.services.project_handover import pending_review_assignment
+from app.models.project_handover import ProjectHandover
 from app.services.project_delete_service import can_project_owner_delete_direct, delete_project_related_data
 from app.services.project_field_normalizer import (
     normalize_evaluation_business_nature,
@@ -708,35 +710,27 @@ def get_project_flow(
     contract_review_records = _serialize_contract_review_records(db, work_order.id if work_order else None)
     history_contract_status, history_contract_status_display = _resolve_contract_review_status_from_history(contract_review_records)
     contract_print_room_status = get_contract_print_room_status(db, work_order)
-    if work_order:
-        latest_contract_file = (
-            db.query(WorkOrderFile)
-            .filter(
-                WorkOrderFile.work_order_id == work_order.id,
-                WorkOrderFile.file_category == "CONTRACT_DRAFT",
-                WorkOrderFile.business_stage == "CONTRACT_DRAFT",
-                WorkOrderFile.is_current.is_(True),
-            )
-            .order_by(WorkOrderFile.uploaded_at.desc())
-            .first()
-        )
-        if latest_contract_file:
-            upsert_conflict_snapshot_and_detect(db, project, work_order, latest_contract_file.uploaded_at)
-            db.flush()
     unresolved_conflicts = get_unresolved_conflicts(db, project.id)
     review_lock_reason = None
     if project.duplicate_delete_required:
         review_lock_reason = "该项目已被管理员判定为重复项目，请删除"
     elif unresolved_conflicts:
-        review_lock_reason = "该项目存在未处理的重复项目提醒，请等待管理员确认"
+        review_lock_reason = f"该项目尚有 {len(unresolved_conflicts)} 条未处理的重复项目提醒（记录：" + ", ".join(str(r.id) for r in unresolved_conflicts) + "），请管理员确认"
     elif project.project_amount is None or project.project_amount < 0 or project.valuation_base_date is None:
         review_lock_reason = "请先在项目基本信息中填写项目金额和评估基准日"
+    if work_order and pending_review_assignment(db, work_order.id):
+        review_lock_reason = "项目存在待重新分配的审核或专职职责，请管理员进入“项目接管与交接”处理"
 
     display_project_leader_name = _display_project_leader_name(project, leader_name)
 
+    original_transfer = db.query(ProjectHandover).filter_by(project_id=project.id, duty="CREATOR").order_by(ProjectHandover.id).first()
+    original_creator_id = original_transfer.source_user_id if original_transfer else project.business_user_id
     return ProjectFlowResponse(
         project=ProjectFlowProject(
             id=project.id,
+            business_user_id=project.business_user_id,
+            original_creator_name=db.query(User.real_name).filter(User.id == original_creator_id).scalar(),
+            current_creator_name=db.query(User.real_name).filter(User.id == project.business_user_id).scalar(),
             project_no=project.project_code,
             project_name=project.project_name,
             client_name=project.client_name,

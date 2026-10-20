@@ -268,7 +268,7 @@ async function onResetPassword() {
 async function onDeleteUser(row: UserItem) {
   try {
     await ElMessageBox.confirm(
-      `确认删除账号「${row.username}」？删除后该账号将无法登录，且会从账号列表中移除。`,
+      `确认停用并移除账号「${row.username}」？其未完成项目职责将转入您的“项目接管与交接”清单，审核职责需重新分配。`,
       '删除账号',
       {
         confirmButtonText: '确认删除',
@@ -279,7 +279,7 @@ async function onDeleteUser(row: UserItem) {
     await deleteUser(row.id)
     rows.value = rows.value.filter((item) => item.id !== row.id)
     delete roleDraftMap.value[row.id]
-    ElMessage.success('账号已删除')
+    ElMessage.success('账号已停用，遗留职责已转入项目接管与交接清单')
   } catch (error: any) {
     if (error === 'cancel' || error === 'close') return
     ElMessage.error(error?.response?.data?.detail || '账号删除失败')

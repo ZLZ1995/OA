@@ -483,7 +483,7 @@ const currentUserId = computed(() => auth.user?.id)
 const isCurrentHandler = computed(() => Boolean(currentUserId.value && props.flowInfo?.current_handler_user_id === currentUserId.value))
 const isReviewSubmitter = computed(() => {
   const roleName = props.flowInfo?.user_role_in_project
-  return roleName === '项目负责人' || roleName === '项目组成员' || roleName === '创建人' || isCurrentHandler.value
+  return roleName === '项目负责人' || roleName === '项目组成员' || roleName === '创建人' || (roleName === '管理员' && props.flowInfo?.project.business_user_id === currentUserId.value) || isCurrentHandler.value
 })
 const isReplyFlow = computed(() => ['FIRST_REVIEW_REJECTED', 'SECOND_REVIEW_REJECTED', 'THIRD_REVIEW_REJECTED'].includes(statusCode.value))
 const isLockedCarryForwardStage = computed(() => ['WAIT_SECOND_REVIEW_SUBMIT', 'WAIT_THIRD_REVIEW_SUBMIT', 'WAIT_EXTERNAL_SECOND_REVIEW_SUBMIT', 'WAIT_EXTERNAL_THIRD_REVIEW_SUBMIT'].includes(statusCode.value))

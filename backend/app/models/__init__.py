@@ -7,6 +7,7 @@ from app.models.issue_feedback import IssueFeedback
 from app.models.oa_agent_audit_log import OaAgentAuditLog
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
+from app.models.project_handover import ProjectHandover, ProjectConflictEvaluation
 from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.project_conflict import ProjectConflictRecord, ProjectConflictSnapshot
 from app.models.project_member import ProjectMember

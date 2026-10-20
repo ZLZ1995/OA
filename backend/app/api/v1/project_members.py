@@ -212,8 +212,10 @@ def complete_project_members(
         db.add(work_order)
         db.flush()
 
+    previous_leader_id = work_order.project_leader_id
     work_order.project_leader_id = leader.user_id
-    work_order.current_handler_user_id = leader.user_id
+    if work_order.current_handler_user_id == previous_leader_id:
+        work_order.current_handler_user_id = leader.user_id
     if work_order.current_status == WorkOrderStatus.WORK_ORDER_CREATED.value:
         work_order.current_status = WorkOrderStatus.WAIT_CONTRACT_UPLOAD.value
 

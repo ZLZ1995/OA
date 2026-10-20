@@ -40,6 +40,9 @@ def init_db() -> None:
         ensure_work_order_file_columns(db)
         seed_fixed_roles(db)
         seed_initial_admin(db)
+        from app.services.project_conflicts import bootstrap_legacy_conflicts
+        bootstrap_legacy_conflicts(db)
+        db.commit()
 
 
 def ensure_project_columns(db: Session) -> None:

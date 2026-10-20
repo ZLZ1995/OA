@@ -119,6 +119,8 @@
         <el-descriptions-item label="项目金额">{{ formatAmount(flowInfo.project.project_amount) }}</el-descriptions-item>
         <el-descriptions-item label="项目来源">{{ flowInfo.project.project_source_display }}</el-descriptions-item>
         <el-descriptions-item label="项目负责人">{{ displayProjectLeaderName }}</el-descriptions-item>
+        <el-descriptions-item label="原始创建人">{{ flowInfo.project.original_creator_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="当前创建人权限">{{ flowInfo.project.current_creator_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="一审人员姓名">{{ flowInfo.project.first_reviewer_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="二审人员姓名">{{ flowInfo.project.second_reviewer_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="三审人员姓名">{{ flowInfo.project.third_reviewer_name || '-' }}</el-descriptions-item>

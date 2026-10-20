@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.project import Project
 from app.models.project_conflict import ProjectConflictRecord, ProjectConflictSnapshot
 from app.models.user import User
+from app.services.project_conflicts import bootstrap_legacy_conflicts, is_current_conflict
 from app.schemas.project_conflict import (
     ProjectConflictDecisionRequest,
     ProjectConflictListResponse,
@@ -66,7 +67,8 @@ def _query_conflicts(db: Session, status: str | None = None) -> list[ProjectConf
     query = db.query(ProjectConflictRecord)
     if status:
         query = query.filter(ProjectConflictRecord.status == status)
-    return query.order_by(ProjectConflictRecord.created_at.desc(), ProjectConflictRecord.id.desc()).all()
+    rows = query.order_by(ProjectConflictRecord.created_at.desc(), ProjectConflictRecord.id.desc()).all()
+    return [row for row in rows if row.status != "PENDING" or is_current_conflict(db, row)]
 
 
 @router.get("", response_model=ProjectConflictListResponse)
@@ -86,9 +88,16 @@ def mark_not_conflict(
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> ProjectConflictRecordItem:
-    record = db.query(ProjectConflictRecord).filter(ProjectConflictRecord.id == conflict_id).first()
+    bootstrap_legacy_conflicts(db)
+    record = db.query(ProjectConflictRecord).filter(ProjectConflictRecord.id == conflict_id).with_for_update().first()
     if not record:
         raise HTTPException(status_code=404, detail="冲突记录不存在")
+    if record.status == "RESOLVED" and record.decision == "NOT_CONFLICT":
+        return _record_item(db, record)
+    if record.status != "PENDING":
+        raise HTTPException(status_code=409, detail="冲突记录已处理，请刷新后查看")
+    if not is_current_conflict(db, record):
+        raise HTTPException(status_code=409, detail="项目比对信息已变化，请刷新后处理当前冲突记录")
     record.status = "RESOLVED"
     record.decision = "NOT_CONFLICT"
     record.decided_by = current_user.id
@@ -108,9 +117,14 @@ def confirm_conflict(
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("ADMIN")),
 ) -> ProjectConflictRecordItem:
-    record = db.query(ProjectConflictRecord).filter(ProjectConflictRecord.id == conflict_id).first()
+    bootstrap_legacy_conflicts(db)
+    record = db.query(ProjectConflictRecord).filter(ProjectConflictRecord.id == conflict_id).with_for_update().first()
     if not record:
         raise HTTPException(status_code=404, detail="冲突记录不存在")
+    if record.status != "PENDING":
+        raise HTTPException(status_code=409, detail="冲突记录已处理，请刷新后查看")
+    if not is_current_conflict(db, record):
+        raise HTTPException(status_code=409, detail="项目比对信息已变化，请刷新后处理当前冲突记录")
     if not payload.kept_project_id or payload.kept_project_id not in {record.project_a_id, record.project_b_id}:
         raise HTTPException(status_code=400, detail="请选择本次冲突中要保留的项目")
     if not payload.comment:

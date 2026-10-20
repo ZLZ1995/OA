@@ -532,7 +532,8 @@ def _ensure_reviewer_has_round_role(db: Session, reviewer_user_id: int, review_r
 
 
 def _is_project_party(db: Session, work_order: WorkOrder, current_user: User) -> bool:
-    if current_user.id in {work_order.project_leader_id, work_order.initiator_user_id}:
+    project = db.get(Project, work_order.project_id)
+    if current_user.id in {work_order.project_leader_id, project.business_user_id if project else None}:
         return True
     from app.models.project_member import ProjectMember
 

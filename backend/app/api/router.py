@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.api.handover_guard import require_ready_assignments
 
 from app.api.v1.archives import router as archives_router
 from app.api.v1.auth import router as auth_router
@@ -18,6 +19,7 @@ from app.api.v1.project_exports import router as project_exports_router
 from app.api.v1.project_members import router as project_members_router
 from app.api.v1.project_delete_requests import router as project_delete_requests_router
 from app.api.v1.project_conflicts import router as project_conflicts_router
+from app.api.v1.project_handovers import router as project_handovers_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.report_versions import router as report_versions_router
 from app.api.v1.reminders import router as reminders_router
@@ -39,19 +41,20 @@ api_router.include_router(ws_notifications_router)
 api_router.include_router(roles_router)
 api_router.include_router(projects_router)
 api_router.include_router(project_exports_router)
-api_router.include_router(project_members_router)
+api_router.include_router(project_members_router, dependencies=[Depends(require_ready_assignments)])
 api_router.include_router(project_delete_requests_router)
 api_router.include_router(project_conflicts_router)
-api_router.include_router(work_orders_router)
+api_router.include_router(project_handovers_router)
+api_router.include_router(work_orders_router, dependencies=[Depends(require_ready_assignments)])
 api_router.include_router(report_versions_router)
 api_router.include_router(files_router)
-api_router.include_router(contract_reviews_router)
-api_router.include_router(reviews_router)
-api_router.include_router(signoff_router)
-api_router.include_router(print_room_router)
-api_router.include_router(report_mailing_router)
-api_router.include_router(finance_router)
-api_router.include_router(archives_router)
+api_router.include_router(contract_reviews_router, dependencies=[Depends(require_ready_assignments)])
+api_router.include_router(reviews_router, dependencies=[Depends(require_ready_assignments)])
+api_router.include_router(signoff_router, dependencies=[Depends(require_ready_assignments)])
+api_router.include_router(print_room_router, dependencies=[Depends(require_ready_assignments)])
+api_router.include_router(report_mailing_router, dependencies=[Depends(require_ready_assignments)])
+api_router.include_router(finance_router, dependencies=[Depends(require_ready_assignments)])
+api_router.include_router(archives_router, dependencies=[Depends(require_ready_assignments)])
 api_router.include_router(issue_feedbacks_router)
 api_router.include_router(reminders_router)
 api_router.include_router(notifications_router)
