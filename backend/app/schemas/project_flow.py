@@ -5,6 +5,9 @@ from app.schemas.contract_review import ContractReviewRecordResponse
 
 class ProjectFlowProject(BaseModel):
     id: int
+    business_user_id: int | None = None
+    original_creator_name: str | None = None
+    current_creator_name: str | None = None
     project_no: str
     project_name: str
     client_name: str

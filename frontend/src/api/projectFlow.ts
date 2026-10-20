@@ -12,6 +12,9 @@ export interface ProjectUpdateLogItem {
 export interface ProjectFlowData {
   project: {
     id: number
+    business_user_id?: number | null
+    original_creator_name?: string | null
+    current_creator_name?: string | null
     project_no: string
     project_name: string
     client_name: string

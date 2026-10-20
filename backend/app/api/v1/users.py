@@ -7,6 +7,7 @@ from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.models.role import Role
 from app.models.user import User
+from app.services.project_handover import take_over
 from app.models.user_role import UserRole
 from app.schemas.user import (
     UserCreate,
@@ -127,6 +128,10 @@ def update_user(
 ) -> UserResponse:
     row = _get_visible_active_user_or_404(db, user_id, current_user)
     data = payload.model_dump(exclude_unset=True)
+    if data.get("is_active") is False:
+        if row.id == current_user.id or row.username == SUPER_ADMIN_USERNAME:
+            raise HTTPException(status_code=400, detail="不能停用当前账号或超级管理员")
+        take_over(db, row, current_user)
     for key, value in data.items():
         setattr(row, key, value)
 
@@ -184,6 +189,7 @@ def delete_user(
     if row.username == SUPER_ADMIN_USERNAME:
         raise HTTPException(status_code=400, detail="不能删除超级管理员账号")
 
+    take_over(db, row, current_user)
     db.query(UserRole).filter(UserRole.user_id == row.id).delete()
     row.is_active = False
     db.commit()

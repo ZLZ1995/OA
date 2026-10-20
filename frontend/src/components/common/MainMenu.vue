@@ -86,6 +86,7 @@ const ADMIN_MENUS: MenuItem[] = [
   { key: 'termination-approvals', title: '终止/废止审核', path: '/termination-approvals' },
   { key: 'project-delete-approvals', title: '项目删除审核', path: '/project-delete-approvals' },
   { key: 'project-conflicts', title: '项目冲突提醒', path: '/project-conflicts' },
+  { key: 'project-handovers', title: '项目接管与交接', path: '/project-handovers' },
   { key: 'issue-feedbacks', title: '问题反馈', path: '/issue-feedbacks' },
   { key: 'project-exports', title: '项目清单导出', path: '/project-exports' },
 ]

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+import hashlib
+import json
 from pathlib import Path
 
 from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.models.project import Project
 from app.models.project_conflict import ProjectConflictRecord, ProjectConflictSnapshot
+from app.models.project_handover import ProjectConflictEvaluation
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
@@ -46,7 +50,7 @@ def has_four_shared_chars(left: str, right: str) -> bool:
 
 
 def get_unresolved_conflicts(db: Session, project_id: int) -> list[ProjectConflictRecord]:
-    return (
+    rows = (
         db.query(ProjectConflictRecord)
         .filter(
             ProjectConflictRecord.status.in_(["PENDING", "CONFIRMED"]),
@@ -55,6 +59,69 @@ def get_unresolved_conflicts(db: Session, project_id: int) -> list[ProjectConfli
         .order_by(ProjectConflictRecord.id.desc())
         .all()
     )
+    result = []
+    for row in rows:
+        a, b = db.get(Project, row.project_a_id), db.get(Project, row.project_b_id)
+        if not a or not b or a.deleted_at or b.deleted_at:
+            continue
+        if row.status == "CONFIRMED" and row.kept_project_id == project_id:
+            continue
+        evaluation = db.query(ProjectConflictEvaluation).filter_by(conflict_id=row.id).first()
+        if row.status == "PENDING" and evaluation:
+            sa, sb = db.get(ProjectConflictSnapshot, row.snapshot_a_id), db.get(ProjectConflictSnapshot, row.snapshot_b_id)
+            if sa and sb and _evidence(sa, sb)[0] != evaluation.fingerprint:
+                continue
+        result.append(row)
+    return result
+
+
+def _evidence(a, b):
+    data = [{"project_id": s.project_id, "client": s.normalized_client_name,
+             "amount": str(s.project_amount), "base_date": str(s.valuation_base_date)}
+            for s in sorted((a, b), key=lambda s: s.project_id)]
+    evidence = json.dumps(data, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(evidence.encode()).hexdigest(), evidence
+
+
+def is_current_conflict(db: Session, record: ProjectConflictRecord) -> bool:
+    evaluation = db.query(ProjectConflictEvaluation).filter_by(conflict_id=record.id).first()
+    if not evaluation:
+        return True
+    a = db.get(ProjectConflictSnapshot, record.snapshot_a_id)
+    b = db.get(ProjectConflictSnapshot, record.snapshot_b_id)
+    return bool(a and b and _evidence(a, b)[0] == evaluation.fingerprint)
+
+
+def bootstrap_legacy_conflicts(db: Session) -> None:
+    """Capture legacy decisions before mutable snapshots change; retain old records."""
+    pairs = db.query(ProjectConflictRecord.project_a_id, ProjectConflictRecord.project_b_id).distinct().all()
+    for left, right in pairs:
+        if db.query(ProjectConflictEvaluation.id).filter_by(project_a_id=left, project_b_id=right).first():
+            continue
+        rows = db.query(ProjectConflictRecord).filter_by(project_a_id=left, project_b_id=right).order_by(ProjectConflictRecord.id.desc()).all()
+        decisions = [r for r in rows if r.decided_at]
+        record = max(decisions, key=lambda r: (r.decided_at, r.id)) if decisions else rows[0]
+        a, b = db.get(ProjectConflictSnapshot, record.snapshot_a_id), db.get(ProjectConflictSnapshot, record.snapshot_b_id)
+        if not a or not b:
+            continue
+        fingerprint, evidence = _evidence(a, b)
+        try:
+            with db.begin_nested():
+                db.add(ProjectConflictEvaluation(project_a_id=left, project_b_id=right,
+                        fingerprint=fingerprint, evidence=evidence, conflict_id=record.id))
+                db.flush()
+        except IntegrityError:
+            if db.query(ProjectConflictEvaluation.id).filter_by(project_a_id=left,
+                    project_b_id=right, fingerprint=fingerprint).first():
+                continue
+            raise
+        for duplicate in rows:
+            if duplicate.id != record.id and duplicate.status == "PENDING":
+                duplicate.status = "RESOLVED"
+                duplicate.resolved_at = datetime.now()
+                duplicate.resolve_comment = f"旧重复提醒归并，适用判定记录 #{record.id}"
+                duplicate.decision = "SUPERSEDED"
+    db.flush()
 
 
 def assert_project_can_submit_review(db: Session, project: Project) -> None:
@@ -88,6 +155,7 @@ def _snapshot_payload(db: Session, project: Project, work_order: WorkOrder, uplo
 def upsert_conflict_snapshot_and_detect(db: Session, project: Project, work_order: WorkOrder, uploaded_at: datetime) -> None:
     if project.project_amount is None or project.project_amount < 0 or project.valuation_base_date is None:
         return
+    bootstrap_legacy_conflicts(db)
     payload = _snapshot_payload(db, project, work_order, uploaded_at)
     snapshot = db.query(ProjectConflictSnapshot).filter(ProjectConflictSnapshot.project_id == project.id).first()
     if snapshot:
@@ -111,32 +179,33 @@ def upsert_conflict_snapshot_and_detect(db: Session, project: Project, work_orde
         .all()
     )
     for other in existing_snapshots:
-        if other.creator_user_id == snapshot.creator_user_id:
-            continue
         if not has_four_shared_chars(snapshot.normalized_client_name, other.normalized_client_name):
             continue
         left_id, right_id = sorted([snapshot.project_id, other.project_id])
-        exists = (
-            db.query(ProjectConflictRecord)
-            .filter(
-                ProjectConflictRecord.project_a_id == left_id,
-                ProjectConflictRecord.project_b_id == right_id,
-                ProjectConflictRecord.status.in_(["PENDING", "CONFIRMED"]),
-            )
-            .first()
-        )
+        fingerprint, evidence = _evidence(snapshot, other)
+        exists = db.query(ProjectConflictEvaluation.id).filter_by(
+            project_a_id=left_id, project_b_id=right_id, fingerprint=fingerprint).first()
         if exists:
             continue
-        db.add(
-            ProjectConflictRecord(
-                project_a_id=left_id,
-                project_b_id=right_id,
-                snapshot_a_id=snapshot.id if snapshot.project_id == left_id else other.id,
-                snapshot_b_id=snapshot.id if snapshot.project_id == right_id else other.id,
-                status="PENDING",
-            )
-        )
-        db.flush()
+        try:
+            with db.begin_nested():
+                record = ProjectConflictRecord(
+                    project_a_id=left_id,
+                    project_b_id=right_id,
+                    snapshot_a_id=snapshot.id if snapshot.project_id == left_id else other.id,
+                    snapshot_b_id=snapshot.id if snapshot.project_id == right_id else other.id,
+                    status="PENDING",
+                )
+                db.add(record)
+                db.flush()
+                db.add(ProjectConflictEvaluation(project_a_id=left_id, project_b_id=right_id,
+                    fingerprint=fingerprint, evidence=evidence, conflict_id=record.id))
+                db.flush()
+        except IntegrityError:
+            # A concurrent upload already registered this exact pair and evidence.
+            if not db.query(ProjectConflictEvaluation.id).filter_by(project_a_id=left_id,
+                    project_b_id=right_id, fingerprint=fingerprint).first():
+                raise
 
 
 def mark_project_duplicate_deleted(db: Session, project: Project) -> None:
