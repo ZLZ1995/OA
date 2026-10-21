@@ -1,0 +1,100 @@
+name: Manual OA container images
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish images to private GHCR packages (no deployment)
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    # Publishing is restricted to the reviewed default branch.
+    if: github.repository == 'ZLZ1995/OA' && (!inputs.publish || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUBLISH: ${{ inputs.publish }}
+    steps:
+      - name: Checkout selected revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Test and prepare isolated build contexts
+        run: |
+          python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+          python3 scripts/ci/prepare_image_contexts.py "$RUNNER_TEMP/oa-contexts"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "IMAGE_PREFIX=ghcr.io/$owner/oa" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=sha-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+
+      - name: Build both images before publishing either
+        run: |
+          set -euo pipefail
+          for service in backend frontend; do
+            docker build --pull --platform linux/amd64 \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              --tag "$IMAGE_PREFIX-$service:$IMAGE_TAG" \
+              "$RUNNER_TEMP/oa-contexts/$service"
+          done
+
+      - name: Reject existing non-private packages
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for service in backend frontend; do
+            status=$(curl --silent --show-error --output "$RUNNER_TEMP/package.json" --write-out '%{http_code}' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              "https://api.github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/oa-$service")
+            case "$status" in
+              200) python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["visibility"] == "private", "Package must be private"' "$RUNNER_TEMP/package.json" ;;
+              404) echo "No visible existing package; new GHCR packages default to private." ;;
+              *) echo "Cannot verify package visibility (HTTP $status)"; exit 1 ;;
+            esac
+          done
+
+      - name: Publish to GHCR
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for service in backend frontend; do
+            docker push "$IMAGE_PREFIX-$service:$IMAGE_TAG"
+          done
+
+      - name: Record image identifiers (no deployment)
+        run: |
+          {
+            echo '## OA image build'
+            echo "Revision: $GITHUB_SHA"
+            echo "Published: $PUBLISH"
+            echo 'Frontend API base: /api/v1 (same-origin reverse proxy required before deployment)'
+            for service in backend frontend; do
+              echo "- $IMAGE_PREFIX-$service:$IMAGE_TAG"
+              docker image inspect "$IMAGE_PREFIX-$service:$IMAGE_TAG" --format 'Local image ID: {{.Id}}; registry digests: {{json .RepoDigests}}'
+            done
+            echo 'No server connection, database migration, DNS change, or application startup was performed.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove runner registry login
+        if: always() && inputs.publish
+        run: docker logout ghcr.io
