@@ -1,6 +1,8 @@
 <template>
   <div class="archive-layout">
     <div class="archive-main">
+      <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" />
+      <el-alert v-if="actionSuccess" :title="actionSuccess" type="success" :closable="false" />
       <el-form label-width="120px">
         <el-form-item label="项目编号"><el-input :model-value="flowInfo?.project.project_no" disabled /></el-form-item>
         <el-form-item label="项目名称"><el-input :model-value="flowInfo?.project.project_name" disabled /></el-form-item>
@@ -47,7 +49,7 @@
             </div>
           </el-form-item>
           <el-form-item v-if="flowInfo?.archive_submission_type === 'APPROVED'">
-            <el-button type="success" @click="onFinalize">归档</el-button>
+            <el-button type="success" :loading="actionBusy" :disabled="actionDone" @click="onFinalize">归档</el-button>
           </el-form-item>
           <el-form-item v-else>
             <el-button type="primary" :disabled="!reviewerId" @click="submitOnline">发送电子底稿</el-button>
@@ -57,7 +59,7 @@
 
         <template v-else>
           <el-form-item label="提交方式">
-            <el-tag>{{ flowInfo?.archive_submission_type === 'ONLINE' ? '线上提交电子底稿' : '线下提交纸质底稿' }}</el-tag>
+            <el-tag>{{ submissionLabel }}</el-tag>
           </el-form-item>
           <el-form-item label="上一步处理人">
             <el-input :model-value="archiveSubmitterName" disabled />
@@ -81,12 +83,13 @@
             <span v-else>-</span>
           </el-form-item>
           <el-form-item label="审核意见">
-            <el-input v-model="remark" type="textarea" :rows="3" />
+            <el-input v-model="remark" type="textarea" :rows="3" :disabled="!canReview || actionBusy || actionDone" />
           </el-form-item>
           <el-form-item>
-            <el-button type="success" @click="onApprove">审核通过已归档</el-button>
-            <el-button type="danger" plain @click="onReject">审核未通过请返回修改</el-button>
+            <el-button type="success" :loading="actionBusy" :disabled="!canReview || actionDone" @click="onApprove">审核通过，交回确认归档</el-button>
+            <el-button type="danger" plain :disabled="!canReview || actionBusy || actionDone" @click="onReject">审核未通过请返回修改</el-button>
           </el-form-item>
+          <el-alert v-if="!canReview" :title="archiveStatusText" :closable="false" />
         </template>
       </el-form>
     </div>
@@ -95,7 +98,7 @@
       <div class="archive-note-card">
         <div class="archive-note-title">归档判断</div>
         <div class="archive-note-status">
-          {{ canArchiveManager ? '档案管理员审核中' : (flowInfo?.archive_submission_type === 'APPROVED' ? '可直接归档' : '待提交底稿') }}
+          {{ archiveStatusText }}
         </div>
         <div class="archive-note-subtitle">首屏先看底稿提交方式、审核责任人和当前是否满足归档条件。</div>
         <ol class="archive-note-list">
@@ -116,6 +119,9 @@ import { downloadWorkOrderFile, listWorkOrderFiles, replaceWorkOrderFile, upload
 import { listProjectMembers, type ProjectMemberItem } from '@/api/projectMembers'
 import type { ProjectFlowData } from '@/api/projectFlow'
 import { listUserCandidates, type UserItem } from '@/api/users'
+import { useAuthStore } from '@/store/auth'
+import { canReviewArchive } from '@/utils/archiveReview'
+import { workpaperError } from '@/utils/workpaperFeedback'
 
 const props = defineProps<{ projectId?: number; workOrderId?: number; canOperate: boolean; userRoles: string[]; flowInfo?: ProjectFlowData }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
@@ -126,6 +132,21 @@ const archiveSyncFiles = ref<WorkOrderFileItem[]>([])
 const electronicDraftFiles = ref<WorkOrderFileItem[]>([])
 const reviewerId = ref<number>()
 const remark = ref('')
+const auth = useAuthStore()
+const actionBusy = ref(false)
+const actionDone = ref(false)
+const actionError = ref('')
+const actionSuccess = ref('')
+const canReview = computed(() => canReviewArchive(props.flowInfo?.current_work_order_status,
+  props.flowInfo?.archive_submission_type, props.flowInfo?.archive_reviewer_id, auth.user?.id, props.userRoles))
+const submissionLabel = computed(() => ({ ONLINE: '线上提交电子底稿', OFFLINE: '线下提交纸质底稿', APPROVED: '审核已通过', REJECTED: '已退回补充' }[props.flowInfo?.archive_submission_type || ''] || '尚未提交归档底稿'))
+const archiveStatusText = computed(() => {
+  if (props.flowInfo?.current_work_order_status === 'ARCHIVED') return '项目已归档'
+  if (props.flowInfo?.archive_submission_type === 'APPROVED') return '底稿审核已通过，待项目人员确认归档'
+  if (canReview.value) return '待您审核归档底稿'
+  if (props.flowInfo?.current_work_order_status === 'ARCHIVE_REVIEWING') return '待指定档案管理员审核'
+  return '当前无可审核的归档底稿；操作类底稿请进入“操作类底稿审核”办理'
+})
 const replaceInputs = new Map<number, HTMLInputElement>()
 
 const canArchiveManager = computed(() => props.userRoles.some(role => ['ARCHIVE_MANAGER', 'ADMIN'].includes(role)))
@@ -182,25 +203,41 @@ async function submitOffline() {
 }
 
 async function onApprove() {
-  if (!props.workOrderId) return
-  await approveArchive({ work_order_id: props.workOrderId, remark: remark.value || undefined })
-  ElMessage.success('底稿审核通过，已回到项目人员待办')
-  emit('changed')
+  if (!canReview.value) return ElMessage.warning(archiveStatusText.value)
+  await runArchiveAction(approveArchive)
 }
 
 async function onFinalize() {
-  if (!props.workOrderId) return
-  await finalizeArchive({ work_order_id: props.workOrderId, remark: remark.value || undefined })
-  ElMessage.success('项目已归档')
-  emit('changed')
+  await runArchiveAction(finalizeArchive)
 }
 
 async function onReject() {
-  if (!props.workOrderId) return
-  await rejectArchive({ work_order_id: props.workOrderId, remark: remark.value || undefined })
-  ElMessage.success('已返回修改')
-  emit('changed')
+  if (!canReview.value) return ElMessage.warning(archiveStatusText.value)
+  await runArchiveAction(rejectArchive)
 }
+
+async function runArchiveAction(action: typeof approveArchive) {
+  if (actionBusy.value || actionDone.value) return
+  actionError.value = ''; actionSuccess.value = ''
+  if (!props.workOrderId) {
+    actionError.value = '工单尚未加载，请刷新后重试'
+    ElMessage.error(actionError.value)
+    return
+  }
+  actionBusy.value = true
+  try {
+    const result = await action({ work_order_id: props.workOrderId, remark: remark.value || undefined })
+    actionSuccess.value = result.message
+    actionDone.value = true
+    ElMessage.success(result.message)
+    emit('changed')
+  } catch (error) {
+    actionError.value = workpaperError(error)
+    ElMessage.error(actionError.value)
+  } finally { actionBusy.value = false }
+}
+
+watch(() => [props.workOrderId, props.flowInfo?.archive_submission_type], () => { actionDone.value = false })
 
 function setReplaceInput(fileId: number, el: Element | ComponentPublicInstance | null) {
   if (el instanceof HTMLInputElement) replaceInputs.set(fileId, el)
