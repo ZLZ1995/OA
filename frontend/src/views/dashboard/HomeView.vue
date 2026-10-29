@@ -98,7 +98,6 @@
             <p class="project-search-hint">多项条件同时满足 · 包含历史项目</p>
           </div>
         </form>
-        <OperationWorkpaperTasks />
         <el-table
           v-loading="searchLoading"
           :empty-text="searchActive ? '未找到符合条件的相关项目' : '暂无待办项目'"
@@ -124,12 +123,13 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200">
+          <el-table-column label="操作" min-width="250" class-name="todo-actions">
             <template #default="{ row }">
               <el-button v-if="row.can_approve_delete" link type="danger" @click.stop="goDeleteApprovals">处理删除审核</el-button>
               <template v-else>
                 <el-button link type="primary" :disabled="!row.can_enter" :title="row.can_enter ? '' : '当前无项目查看权限'" @click.stop="goProject(row.id, row)">进入项目</el-button>
                 <el-button link type="success" @click.stop="focusTodoProject(row)">查看联动</el-button>
+                <el-button v-if="row.workpaper_panel" link type="primary" @click.stop="router.push({ path: `/projects/${row.id}/flow`, query: { todoPanel: row.workpaper_panel } })">{{ row.workpaper_action }}</el-button>
               </template>
               <el-button v-if="row.can_approve_termination" link type="danger" @click.stop="approveTermination(row)">允许终止</el-button>
             </template>
@@ -453,7 +453,8 @@ import { listUserCandidates, type UserItem } from '@/api/users'
 import { getWorkbench, searchWorkbenchProjects, type WorkbenchProjectItem, type WorkbenchSearchFilters } from '@/api/workbench'
 import { useAuthStore } from '@/store/auth'
 import { useNotificationStore } from '@/store/notification'
-import OperationWorkpaperTasks from '@/components/OperationWorkpaperTasks.vue'
+import http from '@/api/http'
+import { mergeWorkpaperTodos } from '@/utils/workpaperTodos'
 
 type NotificationTab = 'all' | 'unread' | 'read' | 'initiated' | 'cc'
 type FlowPreviewNode = { key: string; label: string; keywords: string[]; group: string }
@@ -497,13 +498,14 @@ async function fetchProjectRows(refreshMyProjects = true) {
   const searching = searchActive.value
   const params = { ...appliedProjectSearch.value, page: searchPage.value, page_size: 20 }
   try {
-    const [data, result] = await Promise.all([
+    const [data, result, workpapers] = await Promise.all([
       refreshMyProjects || !searching ? getWorkbench() : Promise.resolve(null),
       searching ? searchWorkbenchProjects(params) : Promise.resolve(null),
+      http.get('/operation-workpapers/tasks'),
     ])
     if (version !== projectRequestVersion) return false
     if (data) myProjects.value = data.my_projects
-    todoProjects.value = result ? result.items : data?.todo_projects || []
+    todoProjects.value = mergeWorkpaperTodos(result ? result.items : data?.todo_projects || [], workpapers.data, searching)
     searchTotal.value = result?.total || 0
     return true
   } catch {
@@ -1077,7 +1079,7 @@ function resolveTodoPanel(row: WorkbenchProjectItem) {
   if (combined.includes('发票') || combined.includes('开票')) matched.add('invoice')
   if (combined.includes('归档') || combined.includes('档案')) matched.add('archive')
 
-  return TODO_PANEL_PRIORITY.find(item => matched.has(item))
+  return TODO_PANEL_PRIORITY.find(item => matched.has(item)) || row.workpaper_panel
 }
 
 function resolveTodoLabel(row: WorkbenchProjectItem) {
@@ -1146,7 +1148,6 @@ onMounted(() => {
 const stopNotificationRefreshWatch = watch(
   () => notifications.listRefreshToken,
   async () => {
-    if (!selectedTodo.value) return
     await refreshWorkbenchData()
     await loadLinkedNotifications()
   },
@@ -1298,6 +1299,14 @@ onUnmounted(() => {
 .todo-table :deep(.el-table__body tr.current-row > td.el-table__cell) {
   background: #edf5ff;
 }
+
+.todo-table :deep(.todo-actions .cell) {
+  white-space: normal;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.todo-table :deep(.todo-actions .el-button) { margin-left: 0; }
 
 .linkage-card :deep(.el-empty) {
   padding: 48px 0 56px;

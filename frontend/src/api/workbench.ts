@@ -1,6 +1,8 @@
 import http from './http'
 
 export interface WorkbenchProjectItem {
+  workpaper_panel?: string
+  workpaper_action?: string
   id: number
   project_no: string
   project_name: string

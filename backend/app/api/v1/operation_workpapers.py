@@ -76,7 +76,7 @@ def tasks(db: Session = Depends(get_db), user: User = Depends(get_current_user))
             mode = "operationWorkpaperReview"
         if mode:
             result.append(dict(project_id=project.id, project_code=project.project_code, project_name=project.project_name,
-                status=review.status, panel=mode))
+                client_name=project.client_name, status=review.status, panel=mode))
     return result
 
 
