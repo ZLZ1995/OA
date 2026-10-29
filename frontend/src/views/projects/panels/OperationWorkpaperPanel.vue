@@ -59,6 +59,7 @@ import http from '@/api/http'
 import { downloadWorkOrderFile } from '@/api/files'
 import { useAuthStore } from '@/store/auth'
 import { workpaperDraftKey } from '@/utils/workpaperRequest'
+import { validWorkpaperUrl, workpaperError } from '@/utils/workpaperFeedback'
 const props = defineProps<{ workOrderId?: number; reviewMode?: boolean }>()
 const emit = defineEmits(['changed'])
 const auth = useAuthStore()
@@ -85,7 +86,7 @@ const base = () => `/operation-workpapers/work-orders/${props.workOrderId}`
 function selectFiles(event: Event) {
   selectedFiles.value = Array.from((event.target as HTMLInputElement).files || [])
 }
-function message(e: any) { return typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : '操作失败，请检查资料并刷新重试' }
+const message = workpaperError
 function formatTime(value: string) { return new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) }
 async function load(enterPage = false) {
   if (!props.workOrderId) return
@@ -120,6 +121,10 @@ async function submit() {
   if (!reviewerId.value) return ElMessage.warning('请选择底稿审核人员')
   if (materialType.value === 'ZIP' && ((!selectedFiles.value.length && !retainedFiles.value.length) || selectedFiles.value.some(f => !f.name.toLowerCase().endsWith('.zip')))) return ElMessage.warning('请选择一个或多个ZIP文件')
   if (materialType.value === 'CLOUD_LINK' && (!cloudUrl.value.trim() || !cloudCode.value.trim())) return ElMessage.warning('网盘链接和提取码均为必填项')
+  if (materialType.value === 'CLOUD_LINK' && !validWorkpaperUrl(cloudUrl.value)) {
+    error.value = '请输入完整的网盘链接，以 http:// 或 https:// 开头，例如 https://pan.baidu.com/s/…'
+    return ElMessage.warning(error.value)
+  }
   await run(async () => {
     const ids: number[] = materialType.value === 'ZIP' ? retainedFiles.value.map(file => file.id) : []
     if (materialType.value === 'ZIP') for (const file of selectedFiles.value) {

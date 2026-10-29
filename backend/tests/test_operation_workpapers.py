@@ -51,6 +51,34 @@ def send(db, order, leader, reviewer, revision=0):
     return submit(order.id, payload, db, leader)["submission_id"]
 
 
+def test_cloud_submission_http_validation_and_valid_link(bundle):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.v1.operation_workpapers import router, tasks
+    from app.api.deps import get_current_user
+    from app.db.session import get_db
+
+    db, order, leader, reviewer, _, _ = bundle
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: leader
+    client = TestClient(app)
+    payload = dict(reviewer_id=reviewer.id, request_id=str(uuid.uuid4()), revision=0,
+        material_type="CLOUD_LINK", cloud_url="111", cloud_code="111")
+    response = client.post(f"/operation-workpapers/work-orders/{order.id}/submit", json=payload)
+    assert response.status_code == 422
+    assert "HTTP" in response.json()["detail"][0]["msg"]
+    assert get_state(order.id, db, leader)["status"] == "DRAFT"
+    assert tasks(db, leader)[0]["client_name"] == "test"
+    payload["cloud_url"] = "https://pan.baidu.com/s/test"
+    response = client.post(f"/operation-workpapers/work-orders/{order.id}/submit", json=payload)
+    assert response.status_code == 200, response.text
+    assert get_state(order.id, db, leader)["status"] == "SUBMITTED"
+    assert tasks(db, leader) == []
+    assert tasks(db, reviewer)[0]["panel"] == "operationWorkpaperReview"
+
+
 def test_owner_view_does_not_start_review_and_reviewer_entry_blocks_withdraw(bundle):
     db, order, leader, reviewer, _, _ = bundle
     sid = send(db, order, leader, reviewer)
