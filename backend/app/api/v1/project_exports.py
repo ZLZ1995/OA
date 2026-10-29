@@ -82,6 +82,7 @@ EXPORT_PROGRESS_LABELS = {
     "EXTERNAL_THIRD_REVIEWING": "外部三审复核中",
     "EXTERNAL_THIRD_REJECTED": "外部三审复核退回待回复",
     "WAIT_OWNER_SIGNOFF_UPLOAD": "待上传签发审核文件",
+    "WAIT_PARALLEL_WORKPAPER": "待操作类底稿审核通过",
     "SIGNOFF_REVIEWING": "签发审核中",
     "THIRD_APPROVED_WAIT_PRINTROOM": "待补充正式报告与合同扫描件",
     "PRINTROOM_PROCESSING": "文印室报告出具中",

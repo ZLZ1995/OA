@@ -13,6 +13,7 @@ from app.services.chief_appraiser_service import get_project_chief_role_codes
 from app.services.notification_service import create_notification
 
 DUTIES = {
+    "operation_workpaper_reviewer_id": "操作类底稿审核人",
     "CREATOR": "创建人", "LEADER": "项目负责人",
     "contract_reviewer_id": "合同审核人", "first_reviewer_id": "一审老师",
     "second_reviewer_id": "二审老师", "third_reviewer_id": "三审老师",
@@ -21,6 +22,7 @@ DUTIES = {
     "current_handler_user_id": "当前办理人",
 }
 ROLE_CODES = {
+    "operation_workpaper_reviewer_id": {"ARCHIVE_MANAGER"},
     "contract_reviewer_id": {"CONTRACT_REVIEWER"}, "first_reviewer_id": {"FIRST_REVIEWER"},
     "second_reviewer_id": {"SECOND_REVIEWER"}, "third_reviewer_id": {"THIRD_REVIEWER"},
     "archive_reviewer_id": {"ARCHIVE_MANAGER"}, "print_room_handler_id": {"PRINT_ROOM"},
@@ -170,10 +172,10 @@ def validate_target(db, task, project, order, target):
     if required and not codes.intersection(required):
         raise HTTPException(400, "接任账号不具备该职责所需角色")
     if order:
-        reviewer_ids = {getattr(order, d) for d in REVIEW_DUTIES if d != task.duty}
+        reviewer_ids = {getattr(order, d) for d in REVIEW_DUTIES if d != task.duty and d != "operation_workpaper_reviewer_id"}
         if task.duty in {"CREATOR", "LEADER"} and target.id in reviewer_ids:
             raise HTTPException(400, "接任人已担任本项目审核或专职办理职责，请先重新分配该职责")
-        if task.duty in REVIEW_DUTIES:
+        if task.duty in REVIEW_DUTIES and task.duty != "operation_workpaper_reviewer_id":
             parties = {project.business_user_id, project.project_leader_id, order.project_leader_id, order.initiator_user_id}
             parties.update(uid for uid, in db.query(ProjectMember.user_id).filter_by(project_id=project.id).all())
             if target.id in parties:
@@ -203,6 +205,13 @@ def assign(db, task_id, target_id, admin, reason):
         if task.duty != "current_handler_user_id" and getattr(order, task.duty) != task.source_user_id:
             raise HTTPException(409, "该职责已经变更，请核对交接任务")
         setattr(order, task.duty, target_id)
+        if task.duty == "operation_workpaper_reviewer_id":
+            from app.models.operation_workpaper import OperationWorkpaperReview, OperationWorkpaperSubmission
+            review = db.query(OperationWorkpaperReview).filter_by(work_order_id=order.id).first()
+            if review and review.current_submission_id and review.status in {"SUBMITTED", "IN_REVIEW"}:
+                submission = db.get(OperationWorkpaperSubmission, review.current_submission_id)
+                submission.reviewer_id = target_id
+                review.revision += 1
         if task.duty == "current_handler_user_id" and order.current_status == "INVOICE_PROCESSING":
             db.query(Invoice).filter(Invoice.work_order_id == order.id, Invoice.finance_handler_id == task.source_user_id,
                 Invoice.status == "PENDING").update({Invoice.finance_handler_id: target_id}, synchronize_session="fetch")
@@ -223,7 +232,7 @@ def assign(db, task_id, target_id, admin, reason):
 
 def pending_review_assignment(db, work_order_id):
     return db.query(ProjectHandover).filter(ProjectHandover.work_order_id == work_order_id,
-        ProjectHandover.status == "PENDING", ProjectHandover.duty.in_(REVIEW_DUTIES)).first()
+        ProjectHandover.status == "PENDING", ProjectHandover.duty.in_(REVIEW_DUTIES - {"operation_workpaper_reviewer_id"})).first()
 
 
 def assert_review_assignments_ready(db, work_order_id):

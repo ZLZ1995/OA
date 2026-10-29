@@ -46,6 +46,7 @@ class ProjectUpdateLogItem(BaseModel):
 
 
 class ProjectFlowResponse(BaseModel):
+    parallel_workpaper_enabled: bool = False
     project: ProjectFlowProject
     current_work_order_id: int | None = None
     current_work_order_status: str | None = None

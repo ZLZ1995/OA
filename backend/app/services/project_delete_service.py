@@ -43,9 +43,25 @@ def ensure_admin_approver_not_self(current_user_id: int, approver_user_id: int) 
 def delete_project_related_data(db: Session, project: Project) -> None:
     work_orders = db.query(WorkOrder).filter(WorkOrder.project_id == project.id).all()
     work_order_ids = [item.id for item in work_orders]
+    # Keep notification text as history, but detach deleted entities and stale links.
+    from sqlalchemy import or_
+    from app.models.user_notification import UserNotification
+    db.query(UserNotification).filter(or_(UserNotification.project_id == project.id,
+        UserNotification.work_order_id.in_(work_order_ids))).update({
+        UserNotification.project_id: None, UserNotification.work_order_id: None,
+        UserNotification.link_type: None, UserNotification.link_target_id: None,
+        UserNotification.group_key: None, UserNotification.popup_flag: False,
+    }, synchronize_session=False)
 
     storage_keys = []
     if work_order_ids:
+        from app.models.operation_workpaper import OperationWorkpaperReview, OperationWorkpaperSubmission, OperationWorkpaperSubmissionFile
+        review_ids = [r.id for r in db.query(OperationWorkpaperReview).filter(OperationWorkpaperReview.work_order_id.in_(work_order_ids))]
+        if review_ids:
+            submission_ids = [s.id for s in db.query(OperationWorkpaperSubmission).filter(OperationWorkpaperSubmission.review_id.in_(review_ids))]
+            db.query(OperationWorkpaperSubmissionFile).filter(OperationWorkpaperSubmissionFile.submission_id.in_(submission_ids)).delete(synchronize_session=False)
+            db.query(OperationWorkpaperSubmission).filter(OperationWorkpaperSubmission.review_id.in_(review_ids)).delete(synchronize_session=False)
+            db.query(OperationWorkpaperReview).filter(OperationWorkpaperReview.id.in_(review_ids)).delete(synchronize_session=False)
         storage_keys = [
             item.storage_key
             for item in db.query(WorkOrderFile).filter(WorkOrderFile.work_order_id.in_(work_order_ids)).all()
@@ -78,13 +94,6 @@ def delete_project_related_data(db: Session, project: Project) -> None:
     db.delete(project)
     db.flush()
 
-    for key in storage_keys:
-        try:
-            path = Path(key)
-            if not path.is_absolute():
-                from app.core.config import settings
-                path = Path(settings.local_storage_dir) / key
-            if path.exists():
-                path.unlink()
-        except Exception:
-            pass
+    from app.core.config import settings
+    from app.services.committed_file_cleanup import after_commit_delete
+    after_commit_delete(db, [Path(key) if Path(key).is_absolute() else Path(settings.local_storage_dir) / key for key in storage_keys])

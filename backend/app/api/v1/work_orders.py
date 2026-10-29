@@ -53,6 +53,7 @@ STATUS_LABEL_MAP = {
     WorkOrderStatus.EXTERNAL_THIRD_REVIEWING.value: "外部三级复核",
     WorkOrderStatus.EXTERNAL_THIRD_REJECTED.value: "外部三级复核退回",
     WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value: "待上传报告附件与合同扫描件",
+    WorkOrderStatus.WAIT_PARALLEL_WORKPAPER.value: "待操作类底稿审核通过",
     WorkOrderStatus.SIGNOFF_REVIEWING.value: "签发审核",
     WorkOrderStatus.THIRD_APPROVED_WAIT_PRINTROOM.value: "报告出具准备",
     WorkOrderStatus.PRINTROOM_PROCESSING.value: "报告出具",

@@ -1124,6 +1124,8 @@ def decide_review(
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER", "ADMIN")),
 ) -> ReviewRecordResponse:
+    from app.services.operation_workpaper import lock_order, signoff_destination
+    lock_order(db, payload.work_order_id)
     work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
@@ -1169,6 +1171,16 @@ def decide_review(
     db.add(record)
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
     if payload.action == "APPROVE":
+        if payload.review_round == "SECOND":
+            from app.services.operation_workpaper import open_after_second
+            workpaper_review = open_after_second(db, work_order)
+            if workpaper_review and workpaper_review.status == "DRAFT" and project:
+                send_workflow_notification(
+                    db, project=project, work_order=work_order, sender_user=current_user,
+                    receiver_user_id=work_order.project_leader_id,
+                    action_name="OPERATION_WORKPAPER_OPEN",
+                    comment="二审已通过，请提交操作类底稿并选择档案管理员审核；三审可独立进行。",
+                )
         default_status = ROUND_REVIEWER_SELECT_STATUS.get(payload.review_round, ROUND_APPROVED_STATUS[payload.review_round])
         if not can_transit(from_status, default_status):
             raise HTTPException(status_code=400, detail="非法状态迁移")
@@ -1216,6 +1228,8 @@ def decide_review(
                 record.comment = _append_passed_to_marker(record.comment, transferred_round)
     else:
         workflow_action = f"{payload.review_round}_REJECT_RETURN"
+    if to_status == WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD:
+        to_status = signoff_destination(db, work_order)
     work_order.current_status = to_status.value
     work_order.current_handler_user_id = next_handler
 
@@ -1235,6 +1249,8 @@ def decide_review(
             if payload.action == "APPROVE"
             else f"{payload.review_round}_REJECT_RETURN"
         )
+        if to_status == WorkOrderStatus.WAIT_PARALLEL_WORKPAPER:
+            workflow_action = "WAIT_PARALLEL_WORKPAPER"
         send_workflow_notification(
             db,
             project=project,
@@ -1272,6 +1288,9 @@ def withdraw_latest_review_step(
     current_user: User = Depends(get_current_user),
     role_codes: set[str] = Depends(require_roles("PROJECT_LEADER", "FIRST_REVIEWER", "SECOND_REVIEWER", "THIRD_REVIEWER", "ADMIN")),
 ) -> dict[str, str]:
+    from app.services.operation_workpaper import lock_order, uses_parallel
+    lock_order(db, work_order_id)
+    db.expire_all()
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
@@ -1305,7 +1324,8 @@ def withdraw_latest_review_step(
         rollback_handler = latest.reviewer_user_id
         file_categories = {"EXTERNAL_REVIEW_OPINION"} if review_round.startswith("EXTERNAL_") else {"REVIEW_OPINION"}
     elif latest.action == "APPROVE":
-        if current_status != approved_status:
+        parallel_wait = (review_round == "EXTERNAL_THIRD" and current_status == WorkOrderStatus.WAIT_PARALLEL_WORKPAPER and uses_parallel(db, work_order))
+        if current_status != approved_status and not parallel_wait:
             raise HTTPException(status_code=400, detail="只能撤回当前最新通过操作")
         rollback_status = reviewing_status
         rollback_handler = latest.reviewer_user_id

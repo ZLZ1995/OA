@@ -26,6 +26,7 @@ class WorkOrder(Base, TimestampMixin):
     print_room_handler_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     mailing_handler_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     archive_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    operation_workpaper_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     archive_submitter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     archive_submission_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     mailing_status: Mapped[str | None] = mapped_column(String(32), nullable=True)

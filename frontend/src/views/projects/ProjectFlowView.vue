@@ -58,6 +58,7 @@
             :can-edit="canProjectOperate"
             :can-operate="canProjectOperate"
             :user-roles="userRoles"
+            :review-mode="activeNode === 'operationWorkpaperReview'"
             :user-role-in-project="flow.user_role_in_project"
             @changed="onPanelChanged"
             @navigate="onPanelNavigate"
@@ -95,6 +96,7 @@ import ReportMailingPanel from './panels/ReportMailingPanel.vue'
 import InvoicePanel from './panels/InvoicePanel.vue'
 import ArchivePanel from './panels/ArchivePanel.vue'
 import ContractReviewPanel from './panels/ContractReviewPanel.vue'
+import OperationWorkpaperPanel from './panels/OperationWorkpaperPanel.vue'
 
 const baseFlowNodes = [
   { key: 'basic', label: '项目基本信息' },
@@ -102,6 +104,8 @@ const baseFlowNodes = [
   { key: 'contract', label: '合同初审上传' },
   { key: 'contractReview', label: '合同初审审核' },
   { key: 'review', label: '报告送审' },
+  { key: 'operationWorkpaper', label: '操作类底稿提交' },
+  { key: 'operationWorkpaperReview', label: '操作类底稿审核' },
   { key: 'externalAuditConfirm', label: '外部审核确认' },
   { key: 'externalReview', label: '外部审核复核' },
   { key: 'signoff', label: '签发审核' },
@@ -117,6 +121,8 @@ const panelMap: Record<string, any> = {
   contract: ContractUploadPanel,
   contractReview: ContractReviewPanel,
   review: ReviewSubmitPanel,
+  operationWorkpaper: OperationWorkpaperPanel,
+  operationWorkpaperReview: OperationWorkpaperPanel,
   externalAuditConfirm: ReviewSubmitPanel,
   externalReview: ReviewSubmitPanel,
   signoff: SignoffPanel,
@@ -142,10 +148,11 @@ const todoPanelQuery = computed(() => (typeof route.query.todoPanel === 'string'
 const todoLabelQuery = computed(() => (typeof route.query.todoLabel === 'string' ? route.query.todoLabel : ''))
 
 const availableNodes = computed(() => {
+  const nodes = baseFlowNodes.filter(node => flow.value?.parallel_workpaper_enabled || !node.key.startsWith('operationWorkpaper'))
   if (flow.value?.project.project_source === 'EXTERNAL') {
-    return baseFlowNodes.filter(node => node.key !== 'members')
+    return nodes.filter(node => node.key !== 'members')
   }
-  return baseFlowNodes
+  return nodes
 })
 
 const stepTimeline = computed(() => flow.value?.flow_steps || [])
@@ -153,10 +160,13 @@ const activeFlowStep = computed(() => {
   const current = flow.value?.project.current_step
   if (!current || !stepTimeline.value.length) return 0
   const idx = stepTimeline.value.indexOf(current)
+  if (flow.value?.parallel_workpaper_enabled && ['三审', '待操作类底稿审核通过'].includes(current)) {
+    return stepTimeline.value.indexOf('三审 ∥ 操作类底稿审核')
+  }
   return idx >= 0 ? idx : 0
 })
 
-const visibleFlowNodes = computed(() => {
+const roleFlowNodes = computed(() => {
   const roleName = flow.value?.user_role_in_project || ''
   const roles = userRoles.value
   const currentStatus = flow.value?.current_work_order_status || ''
@@ -204,6 +214,15 @@ const visibleFlowNodes = computed(() => {
   return availableNodes.value.filter(node => node.key === activeNode.value)
 })
 
+const visibleFlowNodes = computed(() => {
+  const nodes = [...roleFlowNodes.value]
+  if (flow.value?.parallel_workpaper_enabled && userRoles.value.includes('ARCHIVE_MANAGER') && !nodes.some(n => n.key === 'operationWorkpaperReview')) {
+    const review = availableNodes.value.find(n => n.key === 'operationWorkpaperReview')
+    if (review) nodes.push(review)
+  }
+  return nodes
+})
+
 const activeNodeLabel = computed(() => {
   const node = availableNodes.value.find(item => item.key === activeNode.value)
   return node?.label || ''
@@ -248,6 +267,7 @@ function resolveCurrentTodoLabel() {
 
 function preferredNodeForCurrentStatus() {
   const status = flow.value?.current_work_order_status || ''
+  if (status === 'WAIT_PARALLEL_WORKPAPER') return 'operationWorkpaper'
   if (['THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND', 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM'].includes(status)) {
     return 'externalAuditConfirm'
   }
@@ -339,7 +359,6 @@ async function load() {
     syncActiveNodeFromWorkflowStatus()
     ensureVisibleActiveNode()
     syncActiveNodeFromTodoQuery()
-    syncActiveNodeFromWorkflowStatus()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '无权查看该项目')
   }

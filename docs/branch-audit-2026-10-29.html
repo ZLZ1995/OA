@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OA并行底稿审核分支检测报告</title>
+<style>body{font:16px/1.8 system-ui,"Microsoft YaHei",sans-serif;color:#203044;background:#f3f5f8;margin:0}main{max-width:1060px;margin:32px auto;padding:40px;background:white;border-radius:12px}h1{font-size:28px}h2{margin-top:36px;font-size:22px}h3{font-size:19px}table{width:100%;border-collapse:collapse;margin:18px 0}td,th{border:1px solid #dae1ea;padding:10px;text-align:left;vertical-align:top}th{background:#eff3f8}.notice{padding:18px;border-left:5px solid #bf3a2b;background:#fff3ef}.ok{background:#edf7f1;padding:16px}.meta{color:#56677c}code{overflow-wrap:anywhere;font-size:13px;background:#f2f4f7}article{border-top:1px solid #dae1ea;padding-top:20px;margin-top:25px}a{color:#245ba4}@media print{body{background:white}main{margin:0;padding:0;max-width:none}article{break-inside:avoid}}</style></head>
+<body><main>
+<h1>OA系统并行底稿审核分支检测报告</h1>
+<p class="meta">检测日期：2026年10月29日（北京时间）<br>分支：<code>codex/parallel-operation-workpapers</code> · 基础提交：<code>e2ed31d</code><br>范围：本工作树的已修改文件及未跟踪的新文件；功能尚未提交或部署。</p>
+<div class="ok"><strong>后续修复状态（2026-10-29）：F1—F5已修复并通过本地回归验收。</strong><br>后端232项测试通过，前端10项测试通过，类型检查与生产构建通过。新增14项后端回归覆盖删除、ID复用、事务回滚及真实并发。尚未推送GitHub或部署生产。具体执行方案与维护规则见同目录<code>operation-workpaper-rollout.md</code>。下文保留修复前检测事实及复现过程，不代表问题仍然存在。</div>
+<div class="notice"><strong>修复前检测结论：不建议直接合并上线。</strong><br>当时发现5项问题：2项P1、3项P2，均在隔离SQLite测试库中复现。检测阶段没有修改业务代码，也没有连接或更改生产业务数据。</div>
+<h2>一、问题汇总</h2>
+<table><thead><tr><th>编号</th><th>级别</th><th>问题</th><th>实际影响</th></tr></thead><tbody>
+<tr><td><a href="#f1">F1</a></td><td>P1</td><td>项目删除后遗留底稿审核记录</td><td>工单ID复用时，新项目继承旧项目“已通过”结果及资料。</td></tr>
+<tr><td><a href="#f2">F2</a></td><td>P1</td><td>新旧流程仅按可复用的项目ID识别</td><td>删除最高ID的旧项目后，再建项目可能仍被判为旧流程。</td></tr>
+<tr><td><a href="#f3">F3</a></td><td>P2</td><td>外部三审撤回未兼容并行等待状态</td><td>外部三审已通过、底稿未通过时，原有撤回操作被拒绝。</td></tr>
+<tr><td><a href="#f4">F4</a></td><td>P2</td><td>网络异常后重提复用了旧幂等标识</td><td>撤回后重新提交可能提示成功，但实际仍为“已撤回”。</td></tr>
+<tr><td><a href="#f5">F5</a></td><td>P2</td><td>未提交的ZIP缺少持久化清理机制</td><td>上传中断或页面刷新后，改用网盘仍遗留ZIP占用存储。</td></tr>
+</tbody></table>
+<h2>二、问题详情及修复验收要求</h2>
+<article id="f1"><h3>F1 · P1 · 删除项目必须处理新增审核数据</h3>
+<p><strong>位置：</strong><code>backend/app/services/project_delete_service.py:43–64</code>；<code>backend/app/services/operation_workpaper.py:86–94</code>；<code>backend/app/models/operation_workpaper.py:11–46</code>。</p>
+<p><strong>原因：</strong>原项目删除服务硬删除工单、文件等数据，却未处理本次新增的审核主表、提交轮次表、文件关联表。SQLite连接未启用外键强制检查，遗留记录能继续存在；工单主键也未配置防复用机制。二审打开底稿审核时，仅凭工单ID查找已有审核记录。</p>
+<p><strong>复现：</strong>创建新流程项目→底稿提交并通过→删除项目→创建新项目与工单。在隔离库中，新工单复用了原ID，<code>open_after_second()</code>返回原项目的<code>APPROVED</code>审核记录，当前提交ID也指向原轮次。</p>
+<p><strong>影响：</strong>新项目可能跳过自身底稿审核；旧网盘资料、审核人和历史记录混入新项目。开启外键检查的数据库则可能直接删除失败，不能把开启外键视为完整修复。</p>
+<p><strong>建议：</strong>统一确定项目删除后的审核数据保留方式。若保留审计，应使用不会重新关联的永久标识或独立历史快照；若依法业务允许删除，按关联顺序清理三张表并保证事务一致性。增加工单标识防复用；上线前检查并隔离已有孤儿记录，禁止直接套用。</p>
+<p><strong>验收：</strong>底稿DRAFT、SUBMITTED、IN_REVIEW、APPROVED各状态下执行现有项目删除流程；再建项目二审通过后应获得全新DRAFT，不显示旧资料。分别在SQLite外键检查开/关两种环境测试，并验证删除失败时可回滚。</p></article>
+<article id="f2"><h3>F2 · P1 · 固定旧项目清单不能依赖可复用主键</h3>
+<p><strong>位置：</strong><code>backend/app/api/v1/projects.py:406–410</code>；<code>backend/app/core/workflow_baseline.py:23–26</code>；<code>backend/app/services/operation_workpaper.py:37–41</code>。</p>
+<p><strong>原因：</strong>新建项目也调用<code>baseline.version_for(row.id)</code>分类；旧项目清单仅保存整数ID。当前SQLite模型使用普通整数主键，删除最高ID或清空表后允许复用ID。初始化还会按同一规则重新核对版本。</p>
+<p><strong>复现：</strong>清单包含项目1→硬删除项目1→新建项目再次获得ID1→清单判定为<code>LEGACY</code>。隔离测试确认这一结果。</p>
+<p><strong>影响：</strong>违背“所有旧项目沿用旧流程，新项目使用新流程”的边界，新项目无需接受本次新增审核。</p>
+<p><strong>建议：</strong>对存量项目执行一次可审计的版本初始化；新建入口在功能启用后明确写入新版本。结合不可复用标识或带项目身份信息的基线记录，调整重启校验逻辑，不能只改创建接口而让重启再次报冲突。数据库防复用改造应包含存量迁移验证。</p>
+<p><strong>验收：</strong>删除清单中最高ID项目后创建项目，必须为新流程；重启后版本保持不变；清单中其余项目无论处于何阶段均保持旧流程。跨主机迁移后重复验证。</p></article>
+<article id="f3"><h3>F3 · P2 · 外部三审撤回受底稿状态干扰</h3>
+<p><strong>位置：</strong><code>backend/app/api/v1/reviews.py:1231–1232</code>及<code>1323–1325</code>。</p>
+<p><strong>原因：</strong>外部三审通过后，本次变更可能把工单状态改为<code>WAIT_PARALLEL_WORKPAPER</code>；原撤回接口仍只接受<code>ROUND_APPROVED_STATUS['EXTERNAL_THIRD']</code>，即<code>WAIT_OWNER_SIGNOFF_UPLOAD</code>。</p>
+<p><strong>复现：</strong>调用真实审核接口通过外部三审、底稿尚未通过→调用撤回接口，返回HTTP400。将同一记录恢复到原目标状态后，原撤回操作成功。未宣称普通三审原本即可撤回，此处确认的是外部三审回归。</p>
+<p><strong>建议：</strong>明确新等待状态属于外部三审完成后的汇合等待阶段，允许符合原权限和记录约束的撤回；回到外部三审审核状态，底稿结果保持不变。与底稿通过操作使用一致的并发控制，防止状态覆盖。</p>
+<p><strong>验收：</strong>底稿未通过/已通过两种情况下，外部三审撤回行为一致；底稿审核状态及历史不变；撤回与底稿通过并发时，不能错误进入签发。</p></article>
+<article id="f4"><h3>F4 · P2 · 响应丢失后撤回重提可能“假成功”</h3>
+<p><strong>位置：</strong><code>frontend/src/views/projects/panels/OperationWorkpaperPanel.vue:107–138</code>；<code>backend/app/api/v1/operation_workpapers.py:224–231</code>。</p>
+<p><strong>原因：</strong>前端仅在提交成功路径末尾更新requestId；当服务器提交成功、响应在网络中丢失时，catch重新加载到SUBMITTED，但旧requestId保留。随后撤回并重提仍使用该值。后端查到旧请求后直接返回旧submission_id，没有区分当前轮次已撤回。</p>
+<p><strong>复现：</strong>使用固定请求标识提交成功→模拟客户端未收到响应→撤回→以原标识和最新revision重提相同资料。接口成功返回原ID，数据库仍为WITHDRAWN且只有1轮。若修改资料，则收到“重复提交标识与资料不一致”。</p>
+<p><strong>建议：</strong>区分“同一次操作的重试”和“撤回/退回后的新业务提交”。确认已有提交或进入新提交轮次后重建requestId；后端遇到已经结束或非当前轮次的重放请求时，返回明确的轮次状态或冲突，不能让前端误报新提交成功。</p>
+<p><strong>验收：</strong>在提交响应丢失后撤回、原样重提以及修改后重提，均生成第2轮SUBMITTED；纯网络重试不重复生成轮次；包括临时文件清理失败的异常路径。</p></article>
+<article id="f5"><h3>F5 · P2 · 临时ZIP遗留占用存储</h3>
+<p><strong>位置：</strong><code>backend/app/api/v1/operation_workpapers.py:160–212</code>；<code>frontend/src/views/projects/panels/OperationWorkpaperPanel.vue:77、119–133</code>。</p>
+<p><strong>原因：</strong>每个ZIP上传后立即独立提交数据库和文件；前端只用组件内存Map记录上传ID，只在同一组件提交成功后清理未使用文件。刷新、离开页面或部分上传失败后，该Map丢失；服务器没有对应临时上传会话、过期清理或恢复入口。</p>
+<p><strong>复现：</strong>先成功上传ZIP，尚未提交便离开/刷新；重新进入后改用网盘提交。隔离测试确认资料提交为网盘，但原ZIP物理文件和WorkOrderFile记录仍存在，且没有任何提交轮次引用。</p>
+<p><strong>影响：</strong>虽未破坏提交接口的二选一校验，但无效ZIP持续占用服务器空间，用户在页面上也无法找回并清理这些临时文件。</p>
+<p><strong>建议：</strong>引入服务端临时上传会话或明确的过期回收机制，支持断线恢复；回收必须检查所有历史轮次引用并避开进行中的上传。不能为节省空间删除已经纳入审核历史的文件。</p>
+<p><strong>验收：</strong>多ZIP中途失败、刷新、关页、改用网盘均能最终清理无引用临时文件；历史引用、当前提交及正在上传的文件不被误删。</p></article>
+<h2>三、测试结果与证据</h2>
+<table><tr><th>检查项</th><th>结果</th></tr>
+<tr><td>后端完整测试：<code>python -m pytest -q</code></td><td>218 passed；1项第三方弃用警告。</td></tr>
+<tr><td>前端测试：<code>npm test</code></td><td>9 passed。</td></tr>
+<tr><td>类型检查和构建：<code>npm run build:strict</code></td><td>成功；有第三方注释和大体积chunk提示，未作为本次新增功能缺陷统计。</td></tr>
+<tr><td>隔离诊断复现</td><td>5项问题均确认。测试断言用于确认问题存在，因此显示5 passed，不能理解为问题已修复。</td></tr>
+</table>
+<p>诊断脚本保存在仓库外：<code>C:/Users/94635/.codex/oa-private/test_branch_audit.py</code>。脚本使用临时SQLite数据库和合成账号、项目；没有使用生产项目资料。运行方式：在backend目录使用已安装依赖的Python执行<code>python -m pytest -q -s C:/Users/94635/.codex/oa-private/test_branch_audit.py</code>。</p>
+<p>已通过的现有用例覆盖自审权限、提交资料二选一、进入/撤回竞争、退回理由、签发门槛、人员交接、基线校验和迁移幂等。它们未覆盖本报告的项目硬删除与ID复用、外部复核撤回、提交响应丢失以及临时文件跨页面回收。现有测试全绿不能替代这些验收。</p>
+<h2>四、修复顺序与发布建议</h2>
+<ol><li>先处理F1、F2：统一项目身份、删除/保留历史和版本冻结策略，避免审核结果串项目。</li><li>处理F3、F4：补全并行分支兼容和网络异常提交规则，并增加接口级与前端异常路径回归测试。</li><li>处理F5：完成临时文件生命周期管理，验证不会清理历史资料。</li><li>将本报告诊断场景改为验证正确行为的正式回归测试，再执行全量后端、前端和浏览器验收。</li><li>发布前按原计划核对165个旧项目清单及其摘要；对快照后创建的项目进行只读预检。本轮未重新抓取或改变新旧项目边界。</li></ol>
+<p class="ok">本轮交付仅为检测报告与仓库外复现脚本。未修复业务代码，未提交Git、推送GitHub、合并分支或部署服务器。</p>
+</main></body></html>

@@ -51,6 +51,7 @@ STATUS_TO_STEP = {
     "EXTERNAL_THIRD_REVIEWING": "外部审核复核",
     "EXTERNAL_THIRD_REJECTED": "外部审核复核",
     "WAIT_OWNER_SIGNOFF_UPLOAD": "签发审核",
+    "WAIT_PARALLEL_WORKPAPER": "待操作类底稿审核通过",
     "SIGNOFF_REVIEWING": "签发审核",
     "THIRD_APPROVED_WAIT_PRINTROOM": "报告出具",
     "PRINTROOM_PROCESSING": "报告出具",
@@ -106,6 +107,8 @@ def get_project_leader_display_name(project: Project, leader_name: str | None = 
 
 
 def get_flow_steps(project: Project) -> list[str]:
+    if project.workflow_version == "PARALLEL_WORKPAPER_V1":
+        return ["三审 ∥ 操作类底稿审核" if step == "三审" else step for step in FLOW_STEPS]
     return FLOW_STEPS
 
 

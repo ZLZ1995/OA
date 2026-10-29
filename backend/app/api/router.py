@@ -33,6 +33,8 @@ from app.api.v1.workflow_logs import router as workflow_logs_router
 from app.api.v1.workbench import router as workbench_router
 
 api_router = APIRouter()
+from app.api.v1.operation_workpapers import router as operation_workpapers_router
+api_router.include_router(operation_workpapers_router)
 api_router.include_router(health_router)
 api_router.include_router(help_router)
 api_router.include_router(auth_router)

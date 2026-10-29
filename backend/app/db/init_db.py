@@ -38,6 +38,9 @@ def init_db() -> None:
         ensure_project_columns(db)
         ensure_work_order_columns(db)
         ensure_work_order_file_columns(db)
+        from app.services.operation_workpaper import initialize_workflow_versions
+        initialize_workflow_versions(db)
+        db.commit()
         seed_fixed_roles(db)
         seed_initial_admin(db)
         from app.services.project_conflicts import bootstrap_legacy_conflicts
@@ -49,6 +52,8 @@ def ensure_project_columns(db: Session) -> None:
     if engine.dialect.name != "sqlite":
         return
     existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('projects')")).fetchall()}
+    if "workflow_version" not in existing_columns:
+        db.execute(text("ALTER TABLE projects ADD COLUMN workflow_version VARCHAR(32) NULL"))
     if "undertaking_unit" not in existing_columns:
         db.execute(text("ALTER TABLE projects ADD COLUMN undertaking_unit VARCHAR(32) DEFAULT '中勤' NOT NULL"))
     if "evaluation_business_nature" not in existing_columns:
@@ -77,6 +82,7 @@ def ensure_work_order_columns(db: Session) -> None:
         return
     existing_columns = {row[1] for row in db.execute(text("PRAGMA table_info('work_orders')")).fetchall()}
     column_sql = {
+        "operation_workpaper_reviewer_id": "ALTER TABLE work_orders ADD COLUMN operation_workpaper_reviewer_id INTEGER NULL",
         "contract_reviewer_id": "ALTER TABLE work_orders ADD COLUMN contract_reviewer_id INTEGER NULL",
         "signer_one": "ALTER TABLE work_orders ADD COLUMN signer_one VARCHAR(64) NULL",
         "signer_two": "ALTER TABLE work_orders ADD COLUMN signer_two VARCHAR(64) NULL",

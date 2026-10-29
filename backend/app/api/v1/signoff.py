@@ -24,6 +24,7 @@ from app.services.project_role_conflict_service import get_project_party_user_id
 from app.services.workflow_log_service import create_workflow_log
 from app.services.workflow_notification_service import send_workflow_notification
 from app.workflows.states import WorkOrderStatus
+from app.services.operation_workpaper import assert_signoff_ready
 
 router = APIRouter(prefix="/signoff", tags=["signoff"])
 
@@ -160,6 +161,8 @@ def mark_no_external_audit(
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("PROJECT_LEADER", "PROJECT_MEMBER", "ADMIN")),
 ) -> dict[str, str]:
+    from app.services.operation_workpaper import lock_order, signoff_destination
+    lock_order(db, work_order_id)
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
@@ -169,14 +172,14 @@ def mark_no_external_audit(
         raise HTTPException(status_code=400, detail="当前状态不可确认不涉及外部审核")
 
     project = _get_project(db, work_order)
-    work_order.current_status = WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value
+    work_order.current_status = signoff_destination(db, work_order).value
     work_order.current_handler_user_id = work_order.project_leader_id
     work_order.signoff_status = "WAIT_UPLOAD"
     create_workflow_log(
         db,
         work_order_id=work_order.id,
         from_status=WorkOrderStatus.WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM.value,
-        to_status=WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value,
+        to_status=work_order.current_status,
         action_type="MARK_NO_EXTERNAL_AUDIT",
         operator_user_id=current_user.id,
         remark="不涉及外部审核",
@@ -190,11 +193,11 @@ def mark_no_external_audit(
                     work_order=work_order,
                     sender_user=current_user,
                     receiver_user_id=receiver_user_id,
-                    action_name="WAIT_OWNER_SIGNOFF_UPLOAD",
-                    comment="请上传报告附件和合同扫描件",
+                    action_name=work_order.current_status,
+                    comment="请完成操作类底稿审核" if work_order.current_status == "WAIT_PARALLEL_WORKPAPER" else "请上传报告附件和合同扫描件",
                 )
     db.commit()
-    return {"message": "已进入上传报告附件与合同扫描件流程"}
+    return {"message": "正在等待操作类底稿审核通过" if work_order.current_status == "WAIT_PARALLEL_WORKPAPER" else "已进入上传报告附件与合同扫描件流程"}
 
 
 @router.post("/work-orders/{work_order_id}/mark-has-external")
@@ -253,6 +256,8 @@ def enter_signoff_review(
         raise HTTPException(status_code=403, detail="仅项目负责人或项目组成员可操作")
     if work_order.current_status != WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value:
         raise HTTPException(status_code=400, detail="当前状态不可进入签发审核")
+
+    assert_signoff_ready(db, work_order)
 
     project = _get_project(db, work_order)
     ensure_supported_chief_unit(project)
@@ -314,6 +319,7 @@ def approve_signoff(
     )
     if work_order.current_status != WorkOrderStatus.SIGNOFF_REVIEWING.value and not is_repair_assign:
         raise HTTPException(status_code=400, detail="当前状态不可执行签发通过")
+    assert_signoff_ready(db, work_order)
     handler = _ensure_print_room_handler(db, work_order, payload.print_room_handler_id)
     formal_report_count = _ensure_formal_report_count(work_order.formal_report_count or 0)
 

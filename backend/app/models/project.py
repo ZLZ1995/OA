@@ -8,6 +8,7 @@ class Project(Base, TimestampMixin):
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    workflow_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     project_code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     undertaking_unit: Mapped[str] = mapped_column(String(32), nullable=False, default="中勤")
     project_name: Mapped[str] = mapped_column(String(255), nullable=False)

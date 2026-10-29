@@ -507,6 +507,18 @@ def build_workflow_message_templates(
         ),
     }
 
+    workpaper_titles = {
+        "OPERATION_WORKPAPER_OPEN": "请提交操作类底稿审核",
+        "OPERATION_WORKPAPER_SUBMIT": "请审核操作类底稿",
+        "OPERATION_WORKPAPER_ENTER": "操作类底稿已开始审核，不能撤回",
+        "OPERATION_WORKPAPER_WITHDRAW": "操作类底稿审核已撤回",
+        "OPERATION_WORKPAPER_APPROVED": "操作类底稿审核已通过",
+        "OPERATION_WORKPAPER_REJECTED": "操作类底稿已退回，请补充后重提",
+        "WAIT_PARALLEL_WORKPAPER": "正在等待操作类底稿审核通过",
+    }
+    for action, heading in workpaper_titles.items():
+        templates[action] = (heading, f"项目编号：{project_code}\n项目名称：{project_name}\n工单号：{work_order_no}\n{comment_text}\n操作类底稿审核与三审独立进行，两项均通过后才能进入签发审核。")
+
     cc_title_map = {
         "WAIT_CONTRACT_UPLOAD_ASSIGNED": "合同初稿上传已发起",
         "CONTRACT_UPLOAD_COMPLETED": "合同初稿已上传",
@@ -561,7 +573,7 @@ def build_workflow_message_templates(
             ),
         ),
     )
-    cc_title = cc_title_map.get(action_name, "流程任务已流转")
+    cc_title = workpaper_titles.get(action_name, cc_title_map.get(action_name, "流程任务已流转"))
 
     return WorkflowMessageTemplate(
         title=title,
