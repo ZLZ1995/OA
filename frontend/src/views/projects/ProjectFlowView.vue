@@ -97,6 +97,7 @@ import InvoicePanel from './panels/InvoicePanel.vue'
 import ArchivePanel from './panels/ArchivePanel.vue'
 import ContractReviewPanel from './panels/ContractReviewPanel.vue'
 import OperationWorkpaperPanel from './panels/OperationWorkpaperPanel.vue'
+import { workflowPanel, entryPanel, currentTodoLabel } from '@/utils/flowNavigation'
 
 const baseFlowNodes = [
   { key: 'basic', label: '项目基本信息' },
@@ -145,7 +146,6 @@ const userRoles = computed(() => auth.user?.roles || [])
 const canProjectOperate = computed(() => Boolean(flow.value?.can_operate))
 const activePanel = computed(() => panelMap[activeNode.value] || ProjectBasicPanel)
 const todoPanelQuery = computed(() => (typeof route.query.todoPanel === 'string' ? route.query.todoPanel : ''))
-const todoLabelQuery = computed(() => (typeof route.query.todoLabel === 'string' ? route.query.todoLabel : ''))
 
 const availableNodes = computed(() => {
   const nodes = baseFlowNodes.filter(node => flow.value?.parallel_workpaper_enabled || !node.key.startsWith('operationWorkpaper'))
@@ -230,7 +230,7 @@ const activeNodeLabel = computed(() => {
 
 const todoBannerTitle = computed(() => {
   if (!flow.value) return ''
-  const label = resolveCurrentTodoLabel() || todoLabelQuery.value.trim() || flow.value.project.current_step || activeNodeLabel.value
+  const label = currentTodoLabel(resolveCurrentTodoLabel(), flow.value.project.current_step, activeNodeLabel.value)
   if (!label) return ''
   return `当前待办环节：${label} ｜ 当前办理账号：${currentHandlerAccountLabel.value}`
 })
@@ -266,15 +266,7 @@ function resolveCurrentTodoLabel() {
 }
 
 function preferredNodeForCurrentStatus() {
-  const status = flow.value?.current_work_order_status || ''
-  if (status === 'WAIT_PARALLEL_WORKPAPER') return 'operationWorkpaper'
-  if (['THIRD_APPROVED_WAIT_OWNER_CONFIRM_SEND', 'WAIT_OWNER_EXTERNAL_AUDIT_CONFIRM'].includes(status)) {
-    return 'externalAuditConfirm'
-  }
-  if (status.startsWith('WAIT_EXTERNAL_') || status.startsWith('EXTERNAL_')) {
-    return 'externalReview'
-  }
-  return ''
+  return workflowPanel(flow.value?.current_work_order_status || '')
 }
 
 function syncActiveNodeFromWorkflowStatus() {
@@ -292,7 +284,7 @@ function ensureVisibleActiveNode() {
 }
 
 function syncActiveNodeFromTodoQuery() {
-  const queryNode = todoPanelQuery.value
+  const queryNode = entryPanel(todoPanelQuery.value, flow.value?.current_work_order_status || '')
   if (!queryNode) return
 
   const visibleNode = visibleFlowNodes.value.find(node => node.key === queryNode)
@@ -354,7 +346,13 @@ async function loadWorkOrder() {
 async function load() {
   try {
     await auth.ensureUserLoaded()
-    flow.value = await getProjectFlow(projectId)
+    const nextFlow = await getProjectFlow(projectId)
+    const statusChanged = flow.value && flow.value.current_work_order_status !== nextFlow.current_work_order_status
+    flow.value = nextFlow
+    if (statusChanged) {
+      const { todoPanel, todoLabel, fromTodo, ...query } = route.query
+      await router.replace({ path: route.path, query })
+    }
     await loadWorkOrder()
     syncActiveNodeFromWorkflowStatus()
     ensureVisibleActiveNode()
