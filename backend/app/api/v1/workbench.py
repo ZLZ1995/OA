@@ -127,6 +127,7 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
                 WorkOrder.print_room_handler_id == current_user.id,
                 WorkOrder.mailing_handler_user_id == current_user.id,
                 WorkOrder.archive_reviewer_id == current_user.id,
+                WorkOrder.operation_workpaper_reviewer_id == current_user.id,
                 WorkOrder.archive_submitter_id == current_user.id,
                 WorkOrder.chief_appraiser_user_id == current_user.id,
             )
@@ -513,7 +514,7 @@ def search_workbench_projects(
             "current_handler_user_id", "initiator_user_id", "project_leader_id",
             "contract_reviewer_id", "first_reviewer_id", "second_reviewer_id",
             "third_reviewer_id", "print_room_handler_id", "mailing_handler_user_id",
-            "archive_reviewer_id", "archive_submitter_id", "chief_appraiser_user_id",
+            "archive_reviewer_id", "archive_submitter_id", "chief_appraiser_user_id", "operation_workpaper_reviewer_id",
         )
     ]))
     historical = db.query(WorkOrder.project_id).join(

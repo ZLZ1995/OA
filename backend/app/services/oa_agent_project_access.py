@@ -33,6 +33,7 @@ def accessible_project_query(db: Session, user: User):
             WorkOrder.third_reviewer_id == user.id,
             WorkOrder.chief_appraiser_user_id == user.id,
             WorkOrder.archive_reviewer_id == user.id,
+            WorkOrder.operation_workpaper_reviewer_id == user.id,
             WorkOrder.current_handler_user_id == user.id,
         )
     )

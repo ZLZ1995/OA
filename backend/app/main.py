@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -9,8 +10,22 @@ from fastapi.staticfiles import StaticFiles
 from app.api.router import api_router
 from app.core.config import settings
 from app.db.init_db import init_db
+from app.services.operation_workpaper import WorkflowActivationError
 
 logger = logging.getLogger(__name__)
+
+
+async def maintain_workpaper_uploads(stop):
+    from app.services.workpaper_temporary_files import cleanup_expired_workpaper_files
+    while not stop.is_set():
+        try:
+            await asyncio.to_thread(cleanup_expired_workpaper_files)
+        except Exception:
+            logger.exception("Temporary workpaper cleanup failed; retry next hour")
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=3600)
+        except asyncio.TimeoutError:
+            pass
 
 
 def ensure_desktop_update_directory() -> None:
@@ -29,12 +44,18 @@ async def lifespan(_: FastAPI):
         logger.info('Database initialized successfully.')
     except Exception as exc:
         logger.exception('Database initialization failed during startup: %s', exc)
-        if settings.db_init_required:
+        if settings.db_init_required or isinstance(exc, WorkflowActivationError):
             raise
         logger.warning(
             'Continue startup without database initialization because DB_INIT_REQUIRED is false.'
         )
-    yield
+    stop = asyncio.Event()
+    cleanup = asyncio.create_task(maintain_workpaper_uploads(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        await cleanup
 
 
 app = FastAPI(

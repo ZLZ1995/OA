@@ -404,6 +404,11 @@ def create_project(
     row = Project(**_prepare_project_payload(payload, current_user), project_code=project_code)
     db.add(row)
     db.flush()
+    from app.services.operation_workpaper import configured_baseline
+    baseline = configured_baseline()
+    if baseline is not None:
+        from app.core.workflow_baseline import PARALLEL_WORKPAPER_V1
+        row.workflow_version = PARALLEL_WORKPAPER_V1
 
     initial_status = WorkOrderStatus.WORK_ORDER_CREATED.value
     work_order = WorkOrder(
@@ -725,7 +730,9 @@ def get_project_flow(
 
     original_transfer = db.query(ProjectHandover).filter_by(project_id=project.id, duty="CREATOR").order_by(ProjectHandover.id).first()
     original_creator_id = original_transfer.source_user_id if original_transfer else project.business_user_id
+    from app.services.operation_workpaper import uses_parallel
     return ProjectFlowResponse(
+        parallel_workpaper_enabled=uses_parallel(db, work_order) if work_order else False,
         project=ProjectFlowProject(
             id=project.id,
             business_user_id=project.business_user_id,

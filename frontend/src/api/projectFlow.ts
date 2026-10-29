@@ -10,6 +10,7 @@ export interface ProjectUpdateLogItem {
 }
 
 export interface ProjectFlowData {
+  parallel_workpaper_enabled?: boolean
   project: {
     id: number
     business_user_id?: number | null

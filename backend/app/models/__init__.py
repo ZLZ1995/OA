@@ -1,4 +1,5 @@
 from app.models.archive import Archive
+from app.models.operation_workpaper import OperationWorkpaperReview, OperationWorkpaperSubmission, OperationWorkpaperSubmissionFile
 from app.models.contract import Contract
 from app.models.contract_review_record import ContractReviewRecord
 from app.models.department import Department

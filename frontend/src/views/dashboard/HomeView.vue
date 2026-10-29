@@ -98,6 +98,7 @@
             <p class="project-search-hint">多项条件同时满足 · 包含历史项目</p>
           </div>
         </form>
+        <OperationWorkpaperTasks />
         <el-table
           v-loading="searchLoading"
           :empty-text="searchActive ? '未找到符合条件的相关项目' : '暂无待办项目'"
@@ -452,6 +453,7 @@ import { listUserCandidates, type UserItem } from '@/api/users'
 import { getWorkbench, searchWorkbenchProjects, type WorkbenchProjectItem, type WorkbenchSearchFilters } from '@/api/workbench'
 import { useAuthStore } from '@/store/auth'
 import { useNotificationStore } from '@/store/notification'
+import OperationWorkpaperTasks from '@/components/OperationWorkpaperTasks.vue'
 
 type NotificationTab = 'all' | 'unread' | 'read' | 'initiated' | 'cc'
 type FlowPreviewNode = { key: string; label: string; keywords: string[]; group: string }

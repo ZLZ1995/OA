@@ -219,6 +219,9 @@ def upload_file(
 
     _ensure_upload_permission(db, work_order=work_order, current_user=current_user, file_category=file_category)
 
+    if file_category == "OPERATION_WORKPAPER":
+        raise HTTPException(403, "请使用操作类底稿审核专用上传入口")
+
     latest_same_slot = _get_latest_file(
         db,
         work_order_id,
@@ -305,7 +308,7 @@ def list_work_order_files(
 ) -> WorkOrderFileListResponse:
     rows = (
         db.query(WorkOrderFile)
-        .filter(WorkOrderFile.work_order_id == work_order_id)
+        .filter(WorkOrderFile.work_order_id == work_order_id, WorkOrderFile.file_category != "OPERATION_WORKPAPER")
         .order_by(WorkOrderFile.file_category.asc(), WorkOrderFile.business_stage.asc(), WorkOrderFile.version_no.desc())
         .all()
     )
@@ -480,11 +483,23 @@ def complete_contract_upload(
 def download_work_order_file(
     file_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="文件不存在")
+
+    if row.file_category == "OPERATION_WORKPAPER":
+        from app.models.operation_workpaper import OperationWorkpaperSubmission, OperationWorkpaperSubmissionFile
+        order = db.get(WorkOrder, row.work_order_id)
+        reviewed = db.query(OperationWorkpaperSubmission.id).join(
+            OperationWorkpaperSubmissionFile,
+            OperationWorkpaperSubmissionFile.submission_id == OperationWorkpaperSubmission.id,
+        ).filter(OperationWorkpaperSubmissionFile.file_id == row.id,
+            OperationWorkpaperSubmission.reviewer_id == current_user.id,
+            OperationWorkpaperSubmission.first_entered_at.is_not(None)).first()
+        if not (order and order.project_leader_id == current_user.id) and not reviewed and not any(r.role.code == "ADMIN" for r in current_user.roles):
+            raise HTTPException(403, "请由本轮审核人员进入底稿审核页面后查看文件")
 
     path = Path(settings.local_storage_dir) / row.storage_key
     if not path.exists():
