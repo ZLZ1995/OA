@@ -38,6 +38,10 @@ def init_db() -> None:
         ensure_project_columns(db)
         ensure_work_order_columns(db)
         ensure_work_order_file_columns(db)
+        if engine.dialect.name == "sqlite":
+            columns = {r[1] for r in db.execute(text("PRAGMA table_info('operation_workpaper_submissions')"))}
+            if "archive_passwords" not in columns:
+                db.execute(text("ALTER TABLE operation_workpaper_submissions ADD COLUMN archive_passwords JSON NULL"))
         from app.services.operation_workpaper import initialize_workflow_versions
         initialize_workflow_versions(db)
         db.commit()
