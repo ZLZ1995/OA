@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
-import zipfile
+from app.services.workpaper_archives import supported, valid_upload, validate_volumes
 import shutil
 from uuid import uuid4
 
@@ -36,19 +36,23 @@ class Submit(BaseModel):
     revision: int = Field(ge=0)
     material_type: Literal["ZIP", "CLOUD_LINK"]
     file_ids: list[int] = Field(default_factory=list)
+    archive_passwords: dict[str, str] = Field(default_factory=dict)
     cloud_url: str | None = Field(default=None, max_length=2048)
     cloud_code: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def exclusive_materials(self):
+        if any(key not in {str(i) for i in self.file_ids} or len(value) > 255 for key, value in self.archive_passwords.items()):
+            raise ValueError("解压密码必须对应本轮文件，且不超过255个字符")
+        self.archive_passwords = {k: v for k, v in self.archive_passwords.items() if v}
         self.cloud_url = (self.cloud_url or "").strip() or None
         self.cloud_code = (self.cloud_code or "").strip() or None
         if self.material_type == "ZIP":
             if not self.file_ids or self.cloud_url or self.cloud_code or len(set(self.file_ids)) != len(self.file_ids):
-                raise ValueError("请选择一个或多个ZIP文件，不可同时填写网盘信息")
+                raise ValueError("请选择一个或多个压缩文件，不可同时填写网盘信息")
         else:
             if self.file_ids or not self.cloud_url or not self.cloud_code:
-                raise ValueError("网盘链接和提取码均为必填项，不可同时上传ZIP文件")
+                raise ValueError("网盘链接和提取码均为必填项，不可同时上传压缩文件")
             url = urlparse(self.cloud_url)
             if url.scheme not in {"https", "http"} or not url.hostname or url.username or url.password:
                 raise ValueError("请填写有效的HTTP或HTTPS网盘链接")
@@ -147,6 +151,7 @@ def get_state(work_order_id: int, db: Session = Depends(get_db), user: User = De
             submitted_at=timestamp(row.submitted_at), first_entered_at=timestamp(row.first_entered_at), withdrawn_at=timestamp(row.withdrawn_at),
             decided_at=timestamp(row.decided_at), reason=row.decision_reason, material_type=row.material_type,
             cloud_url=row.cloud_url if can_read else None, cloud_code=row.cloud_code if can_read else None,
+            archive_passwords=(row.archive_passwords or {}) if can_read else {},
             files=[dict(id=f.id, name=f.origin_file_name) for f in files]))
     return dict(enabled=enabled, status=review.status if review else "NOT_OPEN", revision=review.revision if review else 0,
         current_submission_id=review.current_submission_id if review else None, leader_id=order.project_leader_id, history=history)
@@ -170,10 +175,10 @@ def upload_zip(work_order_id: int, upload: UploadFile = File(...), db: Session =
     review = review_for(db, order)
     if review.status not in {"DRAFT", "WITHDRAWN", "REJECTED"}:
         raise HTTPException(409, "提交后请先撤回，审核开始后不能修改")
-    if not (upload.filename or "").lower().endswith(".zip") or not zipfile.is_zipfile(upload.file):
-        raise HTTPException(422, "仅支持有效的ZIP文件")
+    if not valid_upload(upload.filename or "", upload.file):
+        raise HTTPException(422, "请选择支持的压缩文件或分卷文件")
     upload.file.seek(0)
-    key = f"{uuid4().hex}.zip"
+    key = f"{uuid4().hex}{Path(upload.filename).suffix.lower()}"
     path = Path(settings.local_storage_dir) / key
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -228,16 +233,20 @@ def submit(work_order_id: int, payload: Submit, db: Session = Depends(get_db), u
             raise HTTPException(409, "原提交轮次已结束，请使用新的提交标识重新提交")
         previous_files = {r.file_id for r in db.query(Attachment).filter_by(submission_id=previous.id).all()}
         if (previous.reviewer_id != payload.reviewer_id or previous.material_type != payload.material_type or
-                previous.cloud_url != payload.cloud_url or previous.cloud_code != payload.cloud_code or previous_files != set(payload.file_ids)):
+                (previous.archive_passwords or {}) != payload.archive_passwords or previous.cloud_url != payload.cloud_url or previous.cloud_code != payload.cloud_code or previous_files != set(payload.file_ids)):
             raise HTTPException(409, "重复提交标识与资料不一致，请刷新后重新提交")
         return dict(submission_id=previous.id)
     ensure_reviewer(db, payload.reviewer_id)
     files = db.query(WorkOrderFile).filter(WorkOrderFile.id.in_(payload.file_ids)).all()
     if len(files) != len(payload.file_ids) or any(f.work_order_id != order.id or f.file_category != CATEGORY or
-            not f.origin_file_name.lower().endswith(".zip") for f in files):
+            not supported(f.origin_file_name) for f in files):
         raise HTTPException(422, "底稿文件不属于当前工单或格式错误")
     if any(not (Path(settings.local_storage_dir) / f.storage_key).is_file() for f in files):
         raise HTTPException(422, "底稿文件已不存在，请重新上传")
+    try:
+        validate_volumes([f.origin_file_name for f in files])
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     changed = db.execute(update(Review).where(Review.id == review.id, Review.revision == payload.revision,
         Review.status.in_(["DRAFT", "WITHDRAWN", "REJECTED"])).values(status="SUBMITTED", revision=Review.revision + 1),
         execution_options={"synchronize_session": False})
@@ -247,7 +256,7 @@ def submit(work_order_id: int, payload: Submit, db: Session = Depends(get_db), u
     round_no = (db.query(func.max(Submission.round_no)).filter_by(review_id=review.id).scalar() or 0) + 1
     row = Submission(review_id=review.id, round_no=round_no, request_id=payload.request_id, submitter_id=user.id,
         reviewer_id=payload.reviewer_id, material_type=payload.material_type, cloud_url=payload.cloud_url,
-        cloud_code=payload.cloud_code, status="SUBMITTED", submitted_at=datetime.now(timezone.utc))
+        cloud_code=payload.cloud_code, archive_passwords=payload.archive_passwords, status="SUBMITTED", submitted_at=datetime.now(timezone.utc))
     db.add(row)
     db.flush()
     order.operation_workpaper_reviewer_id = payload.reviewer_id

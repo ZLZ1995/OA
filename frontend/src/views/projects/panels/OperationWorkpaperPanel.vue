@@ -14,14 +14,14 @@
         </el-form-item>
         <el-form-item label="提交方式">
           <el-radio-group v-model="materialType">
-            <el-radio value="ZIP">ZIP文件</el-radio><el-radio value="CLOUD_LINK">网盘信息</el-radio>
+            <el-radio value="ZIP">压缩文件</el-radio><el-radio value="CLOUD_LINK">网盘信息</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="materialType === 'ZIP'" label="操作类底稿">
-          <input type="file" accept=".zip" multiple :disabled="busy" @change="selectFiles" />
-          <p>支持一个或多个ZIP文件。文件在点击提交时上传。</p>
-          <ul><li v-for="file in selectedFiles" :key="file.name">{{ file.name }}</li></ul>
-          <ul><li v-for="file in retainedFiles" :key="file.id">沿用：{{ file.name }} <el-button link type="danger" @click="retainedFiles = retainedFiles.filter(item => item.id !== file.id)">移除</el-button></li></ul>
+          <input type="file" multiple :disabled="busy" @change="selectFiles" />
+          <p>支持ZIP、RAR、7Z、TAR、GZ、BZ2、XZ及分卷；请上传全部分卷。加密包密码选填，同组分卷请填写相同密码。文件在点击提交时上传。</p>
+          <ul><li v-for="file in selectedFiles" :key="file.name">{{ file.name }} <el-input v-model="passwords[file.name]" placeholder="解压密码（选填）" maxlength="255" show-password /></li></ul>
+          <ul><li v-for="file in retainedFiles" :key="file.id">沿用：{{ file.name }} <el-input v-model="passwords[file.name]" placeholder="解压密码（选填）" maxlength="255" show-password /> <el-button link type="danger" @click="retainedFiles = retainedFiles.filter(item => item.id !== file.id)">移除</el-button></li></ul>
         </el-form-item>
         <template v-else>
           <el-form-item label="网盘链接" required><el-input v-model="cloudUrl" maxlength="2048" /></el-form-item>
@@ -47,6 +47,7 @@
       <p v-if="row.first_entered_at">进入审核页面：{{ formatTime(row.first_entered_at) }}</p>
       <p v-if="row.reason">审核意见：{{ row.reason }}</p>
       <template v-if="row.cloud_url"><p>网盘链接：<a :href="row.cloud_url" target="_blank" rel="noopener noreferrer">{{ row.cloud_url }}</a></p><p>提取码：{{ row.cloud_code }}</p></template>
+      <p v-for="file in row.files" :key="`password-${file.id}`">{{ file.name }} 解压密码：{{ row.archive_passwords?.[String(file.id)] || '未填写' }}</p>
       <el-button v-for="file in row.files" :key="file.id" link type="primary" @click="downloadWorkOrderFile(file.id, file.name)">{{ file.name }}</el-button>
     </el-card>
   </section>
@@ -69,6 +70,8 @@ const error = ref('')
 const candidates = ref<{ id: number; name: string }[]>([])
 const reviewerId = ref<number>()
 const materialType = ref<'ZIP' | 'CLOUD_LINK'>('ZIP')
+const passwords = ref<Record<string, string>>({})
+const archiveName = /\.(?:zip|rar|7z|tar|gz|bz2|xz|z\d{2,3}|r\d{2,3}|(?:zip|7z)\.\d{3,})$/i
 const selectedFiles = ref<File[]>([])
 const retainedFiles = ref<{ id: number; name: string }[]>([])
 let loadedDraftRound: number | undefined
@@ -108,6 +111,7 @@ async function load(enterPage = false) {
       materialType.value = current.value.material_type
       cloudUrl.value = current.value.cloud_url || ''; cloudCode.value = current.value.cloud_code || ''
       retainedFiles.value = [...current.value.files]
+      passwords.value = Object.fromEntries(current.value.files.map((f: any) => [f.name, current.value.archive_passwords?.[String(f.id)] || '']))
       reviewerId.value = candidates.value.some(person => person.id === current.value.reviewer_id) ? current.value.reviewer_id : undefined
     }
   }
@@ -119,7 +123,7 @@ async function run(action: () => Promise<void>) {
 }
 async function submit() {
   if (!reviewerId.value) return ElMessage.warning('请选择底稿审核人员')
-  if (materialType.value === 'ZIP' && ((!selectedFiles.value.length && !retainedFiles.value.length) || selectedFiles.value.some(f => !f.name.toLowerCase().endsWith('.zip')))) return ElMessage.warning('请选择一个或多个ZIP文件')
+  if (materialType.value === 'ZIP' && ((!selectedFiles.value.length && !retainedFiles.value.length) || selectedFiles.value.some(f => !archiveName.test(f.name)))) return ElMessage.warning('请选择一个或多个压缩文件')
   if (materialType.value === 'CLOUD_LINK' && (!cloudUrl.value.trim() || !cloudCode.value.trim())) return ElMessage.warning('网盘链接和提取码均为必填项')
   if (materialType.value === 'CLOUD_LINK' && !validWorkpaperUrl(cloudUrl.value)) {
     error.value = '请输入完整的网盘链接，以 http:// 或 https:// 开头，例如 https://pan.baidu.com/s/…'
@@ -136,6 +140,7 @@ async function submit() {
       ids.push(uploaded.get(file)!)
     }
     await http.post(`${base()}/submit`, { reviewer_id: reviewerId.value, request_id: requestId,
+      archive_passwords: materialType.value === 'ZIP' ? Object.fromEntries([...retainedFiles.value.map(f => [String(f.id), passwords.value[f.name] || '']), ...selectedFiles.value.map(f => [String(uploaded.get(f)), passwords.value[f.name] || ''])]) : {},
       revision: state.value.revision, material_type: materialType.value, file_ids: ids,
       cloud_url: materialType.value === 'CLOUD_LINK' ? cloudUrl.value : null,
       cloud_code: materialType.value === 'CLOUD_LINK' ? cloudCode.value : null })

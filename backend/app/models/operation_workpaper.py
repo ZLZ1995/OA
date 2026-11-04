@@ -1,7 +1,7 @@
 """Independent operational workpaper review; never reuse final archive state."""
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -31,6 +31,7 @@ class OperationWorkpaperSubmission(Base):
     material_type: Mapped[str] = mapped_column(String(16), nullable=False)
     cloud_url: Mapped[str | None] = mapped_column(Text)
     cloud_code: Mapped[str | None] = mapped_column(String(255))
+    archive_passwords: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(24), default="SUBMITTED", nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     first_entered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
