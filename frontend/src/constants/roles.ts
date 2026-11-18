@@ -11,7 +11,6 @@ export const ROLE_CODES = [
   'CHIEF_APPRAISER_ZQ',
   'CHIEF_APPRAISER_ZLGJ',
   'PRINT_ROOM',
-  'FINANCE',
   'ARCHIVE_MANAGER'
 ] as const
 

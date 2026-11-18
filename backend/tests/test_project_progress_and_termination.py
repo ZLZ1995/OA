@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.models.project import Project
-from app.models.invoice import Invoice
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
@@ -41,7 +40,7 @@ def _seed_project(
     *,
     project_code: str,
     termination_status: str | None = None,
-    current_status: str = "WAIT_INVOICE_INFO",
+    current_status: str = "PAPER_REPORT_ISSUED",
 ) -> tuple[Project, WorkOrder]:
     project = Project(
         project_code=project_code,
@@ -84,7 +83,7 @@ def test_project_export_includes_progress_labels() -> None:
     rows = _collect_rows(db, None, None, None, None, None, None, None, None, None, None)
     progress_by_no = {row["project_no"]: row["project_progress"] for row in rows}
 
-    assert progress_by_no[active_project.project_code] == "待提交开票信息"
+    assert progress_by_no[active_project.project_code] == "纸质报告已出具，待邮寄"
     assert progress_by_no[archived_project.project_code] == "已归档"
     assert progress_by_no[voided_project.project_code] == "已作废"
 
@@ -152,167 +151,6 @@ def test_admin_sees_pending_termination_todo() -> None:
     assert result.todo_projects[0].can_approve_termination is True
 
 
-def test_invoice_submission_does_not_change_main_workflow_status() -> None:
-    from app.api.v1.finance import create_invoice
-    from app.schemas.invoice import InvoiceCreate
-
-    db = _build_session()
-    leader = _seed_user(db)
-    finance = _seed_role_user(db, "finance_create", "FINANCE")
-    project, work_order = _seed_project(db, leader, project_code="P-INVOICE")
-    work_order.current_status = "FIRST_REVIEWING"
-    work_order.current_handler_user_id = 999
-    db.commit()
-
-    create_invoice(
-        payload=InvoiceCreate(
-            work_order_id=work_order.id,
-            invoice_info="开票单位：中勤\n测试开票信息",
-            invoice_type="专票",
-            amount=100,
-            finance_handler_id=finance.id,
-        ),
-        db=db,
-        current_user=leader,
-        role_codes={"PROJECT_LEADER"},
-    )
-
-    db.refresh(work_order)
-    invoice = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).first()
-    assert invoice is not None
-    assert invoice.status == "SUBMITTED"
-    assert invoice.finance_handler_id == finance.id
-    assert work_order.current_status == "FIRST_REVIEWING"
-    assert work_order.current_handler_user_id == 999
-
-
-def test_invoice_submission_can_start_new_round_after_issued_invoice() -> None:
-    from app.api.v1.finance import create_invoice
-    from app.schemas.invoice import InvoiceCreate
-
-    db = _build_session()
-    leader = _seed_user(db)
-    finance = _seed_role_user(db, "finance_multi", "FINANCE")
-    _, work_order = _seed_project(db, leader, project_code="P-INVOICE-MULTI")
-    db.add(Invoice(
-        work_order_id=work_order.id,
-        invoice_no="INV-OLD",
-        invoice_info="old info",
-        invoice_type="专票",
-        amount=100,
-        status="ISSUED",
-    ))
-    db.commit()
-
-    create_invoice(
-        payload=InvoiceCreate(
-            work_order_id=work_order.id,
-            invoice_info="开票单位：中勤\n第二轮开票信息",
-            invoice_type="普票",
-            amount=200,
-            finance_handler_id=finance.id,
-        ),
-        db=db,
-        current_user=leader,
-        role_codes={"PROJECT_LEADER"},
-    )
-
-    invoices = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.asc()).all()
-    assert [invoice.status for invoice in invoices] == ["ISSUED", "SUBMITTED"]
-    assert invoices[1].amount == 200
-
-
-def test_invoice_submission_rejects_when_total_exceeds_project_amount() -> None:
-    from fastapi import HTTPException
-    from app.api.v1.finance import create_invoice
-    from app.schemas.invoice import InvoiceCreate
-
-    db = _build_session()
-    leader = _seed_user(db)
-    finance = _seed_role_user(db, "finance_over_limit", "FINANCE")
-    project, work_order = _seed_project(db, leader, project_code="P-INVOICE-LIMIT")
-    project.project_amount = 250
-    db.add(Invoice(
-        work_order_id=work_order.id,
-        invoice_no="INV-OLD",
-        invoice_info="old info",
-        invoice_type="专票",
-        amount=200,
-        status="ISSUED",
-    ))
-    db.commit()
-
-    try:
-        create_invoice(
-            payload=InvoiceCreate(
-                work_order_id=work_order.id,
-                invoice_info="开票单位：中勤\n超额开票信息",
-                invoice_type="普票",
-                amount=100,
-                finance_handler_id=finance.id,
-            ),
-            db=db,
-            current_user=leader,
-            role_codes={"PROJECT_LEADER"},
-        )
-    except HTTPException as exc:
-        assert exc.status_code == 400
-        assert "累计开票金额已超过项目金额" in exc.detail
-    else:
-        raise AssertionError("expected invoice amount limit to reject submission")
-
-
-def test_finance_todo_comes_from_submitted_invoice() -> None:
-    from app.api.v1.workbench import get_workbench
-
-    db = _build_session()
-    leader = _seed_user(db)
-    finance = _seed_role_user(db, "finance", "FINANCE")
-    project, work_order = _seed_project(db, leader, project_code="P-FINANCE-TODO")
-    work_order.current_status = "FIRST_REVIEWING"
-    work_order.current_handler_user_id = leader.id
-    db.add(Invoice(
-        work_order_id=work_order.id,
-        invoice_no="PENDING",
-        invoice_info="info",
-        invoice_type="专票",
-        amount=100,
-        status="SUBMITTED",
-        finance_handler_id=finance.id,
-    ))
-    db.commit()
-
-    result = get_workbench(db=db, current_user=finance)
-
-    assert [item.id for item in result.todo_projects] == [project.id]
-    assert result.todo_projects[0].current_step == "财务开票"
-
-
-def test_rejected_invoice_prompts_project_party_without_changing_main_status() -> None:
-    from app.api.v1.workbench import get_workbench
-
-    db = _build_session()
-    leader = _seed_user(db)
-    project, work_order = _seed_project(db, leader, project_code="P-INVOICE-REJECTED")
-    work_order.current_status = "FIRST_REVIEWING"
-    work_order.current_handler_user_id = 999
-    db.add(Invoice(
-        work_order_id=work_order.id,
-        invoice_no="PENDING",
-        invoice_info="info",
-        invoice_type="专票",
-        amount=100,
-        status="REJECTED",
-    ))
-    db.commit()
-
-    result = get_workbench(db=db, current_user=leader)
-
-    assert [item.id for item in result.todo_projects] == [project.id]
-    assert result.todo_projects[0].current_step == "发票开具"
-    assert result.todo_projects[0].todo_action == "开票信息被退回，请修改后重新提交"
-
-
 def test_print_room_mailing_todo_clears_after_express_submitted() -> None:
     from app.api.v1.workbench import get_workbench
 
@@ -334,33 +172,6 @@ def test_print_room_mailing_todo_clears_after_express_submitted() -> None:
     result = get_workbench(db=db, current_user=print_room)
 
     assert result.todo_projects == []
-
-
-def test_finance_todo_still_visible_during_report_mailing() -> None:
-    from app.api.v1.workbench import get_workbench
-
-    db = _build_session()
-    leader = _seed_user(db)
-    finance = _seed_role_user(db, "finance", "FINANCE")
-    project, work_order = _seed_project(db, leader, project_code="P-MAIL-INVOICE")
-    work_order.current_status = "REPORT_MAILING"
-    work_order.current_handler_user_id = leader.id
-    work_order.mailing_status = "PROJECT_CONFIRMING"
-    db.add(Invoice(
-        work_order_id=work_order.id,
-        invoice_no="PENDING",
-        invoice_info="info",
-        invoice_type="专票",
-        amount=100,
-        status="SUBMITTED",
-        finance_handler_id=finance.id,
-    ))
-    db.commit()
-
-    result = get_workbench(db=db, current_user=finance)
-
-    assert [item.id for item in result.todo_projects] == [project.id]
-    assert result.todo_projects[0].current_step == "财务开票"
 
 
 def test_project_party_todo_moves_to_archive_after_mailing_confirmed() -> None:
@@ -395,105 +206,3 @@ def test_legacy_mailing_completed_todo_displays_archive_step() -> None:
 
     assert [item.id for item in result.todo_projects] == [project.id]
     assert result.todo_projects[0].current_step == "报告归档"
-
-
-def test_submitted_invoice_todo_only_visible_to_selected_finance() -> None:
-    from app.api.v1.workbench import get_workbench
-
-    db = _build_session()
-    leader = _seed_user(db)
-    selected_finance = _seed_role_user(db, "selected_finance", "FINANCE")
-    other_finance = _seed_role_user(db, "other_finance", "FINANCE")
-    project, work_order = _seed_project(db, leader, project_code="P-SELECTED-FINANCE")
-    work_order.current_status = "FIRST_REVIEWING"
-    work_order.current_handler_user_id = leader.id
-    db.add(
-        Invoice(
-            work_order_id=work_order.id,
-            invoice_no="PENDING",
-            invoice_info="info",
-            invoice_type="专票",
-            amount=100,
-            status="SUBMITTED",
-            finance_handler_id=selected_finance.id,
-        )
-    )
-    db.commit()
-
-    selected_result = get_workbench(db=db, current_user=selected_finance)
-    other_result = get_workbench(db=db, current_user=other_finance)
-
-    assert [item.id for item in selected_result.todo_projects] == [project.id]
-    assert other_result.todo_projects == []
-
-
-def test_finance_completed_invoice_returns_to_project_party_for_confirmation() -> None:
-    from app.api.v1.workbench import get_workbench
-
-    db = _build_session()
-    leader = _seed_user(db)
-    finance = _seed_role_user(db, "finance_confirm", "FINANCE")
-    project, work_order = _seed_project(db, leader, project_code="P-INVOICE-CONFIRM")
-    work_order.current_status = "REPORT_MAILING"
-    work_order.current_handler_user_id = 999
-    db.add(
-        Invoice(
-            work_order_id=work_order.id,
-            invoice_no="PENDING",
-            invoice_info="info",
-            invoice_type="专票",
-            amount=100,
-            status="FINANCE_COMPLETED",
-            finance_handler_id=finance.id,
-            handled_by=finance.id,
-        )
-    )
-    db.commit()
-
-    leader_result = get_workbench(db=db, current_user=leader)
-    finance_result = get_workbench(db=db, current_user=finance)
-
-    assert [item.id for item in leader_result.todo_projects] == [project.id]
-    assert leader_result.todo_projects[0].current_step == "发票开具"
-    assert finance_result.todo_projects == []
-
-
-def test_project_can_confirm_invoice_then_start_next_round() -> None:
-    from app.api.v1.finance import confirm_invoice, create_invoice
-    from app.schemas.invoice import InvoiceCreate
-
-    db = _build_session()
-    leader = _seed_user(db)
-    finance = _seed_role_user(db, "finance_next", "FINANCE")
-    _, work_order = _seed_project(db, leader, project_code="P-INVOICE-NEXT")
-    db.add(
-        Invoice(
-            work_order_id=work_order.id,
-            invoice_no="PENDING",
-            invoice_info="first",
-            invoice_type="专票",
-            amount=100,
-            status="FINANCE_COMPLETED",
-            finance_handler_id=finance.id,
-            handled_by=finance.id,
-        )
-    )
-    db.commit()
-
-    first = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).first()
-    confirm_invoice(first.id, db=db, current_user=leader, role_codes={"PROJECT_LEADER"})
-    create_invoice(
-        payload=InvoiceCreate(
-            work_order_id=work_order.id,
-            invoice_info="开票单位：中勤\n第二轮开票信息",
-            invoice_type="普票",
-            amount=200,
-            finance_handler_id=finance.id,
-        ),
-        db=db,
-        current_user=leader,
-        role_codes={"PROJECT_LEADER"},
-    )
-
-    invoices = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.asc()).all()
-    assert [invoice.status for invoice in invoices] == ["ISSUED", "SUBMITTED"]

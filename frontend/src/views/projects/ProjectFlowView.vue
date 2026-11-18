@@ -93,7 +93,6 @@ import ReviewSubmitPanel from './panels/ReviewSubmitPanel.vue'
 import SignoffPanel from './panels/SignoffPanel.vue'
 import ReportIssuePanel from './panels/ReportIssuePanel.vue'
 import ReportMailingPanel from './panels/ReportMailingPanel.vue'
-import InvoicePanel from './panels/InvoicePanel.vue'
 import ArchivePanel from './panels/ArchivePanel.vue'
 import ContractReviewPanel from './panels/ContractReviewPanel.vue'
 import OperationWorkpaperPanel from './panels/OperationWorkpaperPanel.vue'
@@ -112,7 +111,6 @@ const baseFlowNodes = [
   { key: 'signoff', label: '签发审核' },
   { key: 'issue', label: '报告出具' },
   { key: 'mailing', label: '报告邮寄' },
-  { key: 'invoice', label: '发票开具' },
   { key: 'archive', label: '报告归档' },
 ]
 
@@ -129,7 +127,6 @@ const panelMap: Record<string, any> = {
   signoff: SignoffPanel,
   issue: ReportIssuePanel,
   mailing: ReportMailingPanel,
-  invoice: InvoicePanel,
   archive: ArchivePanel,
 }
 
@@ -201,9 +198,6 @@ const roleFlowNodes = computed(() => {
       return availableNodes.value.filter(node => ['basic', 'contractReview'].includes(node.key))
     }
     return availableNodes.value.filter(node => ['issue', 'mailing'].includes(node.key))
-  }
-  if (roleName === '财务' || roles.includes('FINANCE')) {
-    return availableNodes.value.filter(node => node.key === 'invoice')
   }
   if (roleName === '首席评估师' || canHandleSignoff) {
     return availableNodes.value.filter(node => node.key === 'signoff')
@@ -300,10 +294,6 @@ function syncActiveNodeFromTodoQuery() {
 }
 
 function onSelectNode(key: string) {
-  if (key === 'invoice' && flow.value?.project.project_amount == null) {
-    ElMessage.warning('请先在项目基本信息模块中录入项目金额')
-    return
-  }
   activeNode.value = key
 }
 
@@ -367,10 +357,6 @@ async function onPanelChanged() {
 }
 
 function onPanelNavigate(key: string) {
-  if (key === 'invoice' && flow.value?.project.project_amount == null) {
-    ElMessage.warning('请先在项目基本信息模块中录入项目金额')
-    return
-  }
   activeNode.value = key
 }
 

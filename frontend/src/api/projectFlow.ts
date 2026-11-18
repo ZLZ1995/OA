@@ -25,7 +25,6 @@ export interface ProjectFlowData {
     valuation_base_date?: string | null
     business_salesman?: string | null
     project_amount?: number | null
-    invoiced_amount?: number
     project_source: 'INTERNAL' | 'EXTERNAL'
     project_source_display: string
     external_project_leader_name?: string | null
@@ -38,7 +37,6 @@ export interface ProjectFlowData {
     second_reviewer_name?: string | null
     third_reviewer_name?: string | null
     print_room_handler_name?: string | null
-    invoice_handler_name?: string | null
     archive_reviewer_name?: string | null
     mailing_handler_name?: string | null
     current_step: string

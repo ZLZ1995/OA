@@ -17,7 +17,6 @@ class ProjectFlowProject(BaseModel):
     valuation_base_date: str | None = None
     business_salesman: str | None = None
     project_amount: float | None = None
-    invoiced_amount: float = 0
     project_source: str = "INTERNAL"
     project_source_display: str = "评估一部"
     external_project_leader_name: str | None = None
@@ -31,7 +30,6 @@ class ProjectFlowProject(BaseModel):
     third_reviewer_name: str | None = None
     print_room_handler_name: str | None = None
     mailing_handler_name: str | None = None
-    invoice_handler_name: str | None = None
     archive_reviewer_name: str | None = None
     current_step: str
     status_display: str

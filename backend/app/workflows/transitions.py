@@ -162,7 +162,6 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
     },
     WorkOrderStatus.PAPER_REPORT_ISSUED: {
         WorkOrderStatus.REPORT_MAILING,
-        WorkOrderStatus.WAIT_INVOICE_INFO,
         WorkOrderStatus.PRINTROOM_PROCESSING,
     },
     WorkOrderStatus.REPORT_MAILING: {
@@ -171,20 +170,7 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
     },
     WorkOrderStatus.REPORT_MAILING_COMPLETED: {
         WorkOrderStatus.REPORT_MAILING,
-        WorkOrderStatus.WAIT_INVOICE_INFO,
     },
-    WorkOrderStatus.WAIT_INVOICE_INFO: {WorkOrderStatus.INVOICE_PROCESSING},
-    WorkOrderStatus.INVOICE_INFO_REJECTED: {
-        WorkOrderStatus.INVOICE_PROCESSING,
-        WorkOrderStatus.PRINTROOM_PROCESSING,
-    },
-    WorkOrderStatus.INVOICE_PROCESSING: {
-        WorkOrderStatus.INVOICE_INFO_REJECTED,
-        WorkOrderStatus.INVOICE_ISSUED,
-        WorkOrderStatus.WAIT_ARCHIVE_SUBMIT,
-        WorkOrderStatus.ARCHIVE_REVIEWING,
-    },
-    WorkOrderStatus.INVOICE_ISSUED: {WorkOrderStatus.WAIT_ARCHIVE_SUBMIT},
     WorkOrderStatus.WAIT_ARCHIVE_SUBMIT: {WorkOrderStatus.ARCHIVE_REVIEWING},
     WorkOrderStatus.ARCHIVE_REJECTED: {WorkOrderStatus.ARCHIVE_REVIEWING},
     WorkOrderStatus.ARCHIVE_REVIEWING: {

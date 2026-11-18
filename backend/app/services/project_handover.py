@@ -8,7 +8,6 @@ from app.models.project_handover import ProjectHandover
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from app.models.workflow_log import WorkflowLog
-from app.models.invoice import Invoice
 from app.services.chief_appraiser_service import get_project_chief_role_codes
 from app.services.notification_service import create_notification
 
@@ -165,8 +164,6 @@ def validate_target(db, task, project, order, target):
         raise HTTPException(400, "请选择启用中的账号")
     codes = {r.role.code for r in target.roles}
     required = get_project_chief_role_codes(project) if task.duty == "chief_appraiser_user_id" else ROLE_CODES.get(task.duty, set())
-    if task.duty == "current_handler_user_id" and order and order.current_status == "INVOICE_PROCESSING":
-        required = {"FINANCE"}
     if task.duty == "chief_appraiser_user_id" and not required:
         raise HTTPException(400, "承做单位未配置首席角色")
     if required and not codes.intersection(required):
@@ -212,9 +209,6 @@ def assign(db, task_id, target_id, admin, reason):
                 submission = db.get(OperationWorkpaperSubmission, review.current_submission_id)
                 submission.reviewer_id = target_id
                 review.revision += 1
-        if task.duty == "current_handler_user_id" and order.current_status == "INVOICE_PROCESSING":
-            db.query(Invoice).filter(Invoice.work_order_id == order.id, Invoice.finance_handler_id == task.source_user_id,
-                Invoice.status == "PENDING").update({Invoice.finance_handler_id: target_id}, synchronize_session="fetch")
     if task.held_current_task and order and order.current_handler_user_id == task.custodian_user_id:
         order.current_handler_user_id = target_id
     task.status, task.target_user_id, task.assigned_by = "ASSIGNED", target_id, admin.id

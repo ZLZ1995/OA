@@ -6,7 +6,6 @@ export const APP_MENUS = [
   { key: 'reviews', title: '报告审核', path: '/reviews', adminOnly: false },
   { key: 'report-versions', title: '报告版本', path: '/report-versions', adminOnly: false },
   { key: 'printroom', title: '文印室管理', path: '/print-room', adminOnly: false },
-  { key: 'finance', title: '财务管理', path: '/finance', adminOnly: false },
   { key: 'archives', title: '归档管理', path: '/archives', adminOnly: false },
   { key: 'project-exports', title: '项目清单导出', path: '/project-exports', adminOnly: true },
   { key: 'project-conflicts', title: '项目冲突提醒', path: '/project-conflicts', adminOnly: true },

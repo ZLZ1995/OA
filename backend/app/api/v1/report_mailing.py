@@ -79,10 +79,6 @@ def start_report_mailing(
         raise HTTPException(status_code=403, detail="仅项目负责人、创建人或项目组成员可发起报告邮寄")
     if work_order.current_status not in {
         WorkOrderStatus.PAPER_REPORT_ISSUED.value,
-        WorkOrderStatus.WAIT_INVOICE_INFO.value,
-        WorkOrderStatus.INVOICE_INFO_REJECTED.value,
-        WorkOrderStatus.INVOICE_PROCESSING.value,
-        WorkOrderStatus.INVOICE_ISSUED.value,
         WorkOrderStatus.REPORT_MAILING.value,
         WorkOrderStatus.REPORT_MAILING_COMPLETED.value,
     }:

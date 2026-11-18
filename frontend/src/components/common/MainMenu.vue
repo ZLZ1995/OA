@@ -90,7 +90,7 @@ const ADMIN_MENUS: MenuItem[] = [
   { key: 'issue-feedbacks', title: '问题反馈', path: '/issue-feedbacks' },
   { key: 'project-exports', title: '项目清单导出', path: '/project-exports' },
 ]
-const processSteps = ['项目创建', '项目组成员', '合同初审上传', '合同初审审核', '报告送审', '一审', '二审', '三审', '报告出具', '报告邮寄', '发票开具', '报告归档', '已归档', '其他']
+const processSteps = ['项目创建', '项目组成员', '合同初审上传', '合同初审审核', '报告送审', '一审', '二审', '三审', '报告出具', '报告邮寄', '报告归档', '已归档', '其他']
 
 defineProps<{ compact?: boolean }>()
 const route = useRoute()

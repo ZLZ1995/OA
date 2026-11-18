@@ -42,6 +42,9 @@ def create_archive(
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
 
+    if work_order.mailing_status != "COMPLETED":
+        raise HTTPException(status_code=400, detail="报告邮寄完成后才可归档")
+
     exists = db.query(Archive).filter(Archive.work_order_id == payload.work_order_id).first()
     if exists:
         raise HTTPException(status_code=400, detail="该工单已归档")
@@ -94,6 +97,8 @@ def submit_archive(
         raise HTTPException(status_code=404, detail="工单不存在")
     _ensure_project_operator(db, work_order, current_user)
     _ensure_print_room_completed(db, work_order)
+    if work_order.mailing_status != "COMPLETED":
+        raise HTTPException(status_code=400, detail="报告邮寄完成后才可归档")
     _ensure_archive_reviewer(db, payload.reviewer_user_id)
     validate_support_role_not_project_party(
         payload.reviewer_user_id,
@@ -185,6 +190,8 @@ def finalize_archive(
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     _ensure_project_operator(db, work_order, current_user)
+    if work_order.mailing_status != "COMPLETED":
+        raise HTTPException(status_code=400, detail="报告邮寄完成后才可归档")
     if work_order.archive_submission_type != "APPROVED":
         raise HTTPException(status_code=400, detail="底稿审核通过后才可归档")
     project = db.query(Project).filter(Project.id == work_order.project_id).first()

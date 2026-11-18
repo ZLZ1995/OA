@@ -517,7 +517,7 @@ def report_error_to_print_room(
     if not any(item.role.code == "ADMIN" for item in current_user.roles):
         _ensure_project_operator(db, work_order, current_user.id)
     from_status = WorkOrderStatus(work_order.current_status)
-    if from_status not in {WorkOrderStatus.WAIT_INVOICE_INFO, WorkOrderStatus.PAPER_REPORT_ISSUED, WorkOrderStatus.INVOICE_INFO_REJECTED}:
+    if from_status not in {WorkOrderStatus.PAPER_REPORT_ISSUED}:
         raise HTTPException(status_code=400, detail="当前状态不可退回文印室")
     to_status = WorkOrderStatus.PRINTROOM_PROCESSING
     work_order.current_status = to_status.value
@@ -571,7 +571,7 @@ def issue_official_contract(
     contract.issued_at = datetime.now(timezone.utc)
 
     from_status = WorkOrderStatus(work_order.current_status)
-    if from_status not in {WorkOrderStatus.PRINTROOM_PROCESSING, WorkOrderStatus.PAPER_REPORT_ISSUED, WorkOrderStatus.WAIT_INVOICE_INFO}:
+    if from_status not in {WorkOrderStatus.PRINTROOM_PROCESSING, WorkOrderStatus.PAPER_REPORT_ISSUED}:
         raise HTTPException(status_code=400, detail="当前状态不可填写正式合同编号")
 
     create_workflow_log(
@@ -627,14 +627,14 @@ def issue_paper_report(
         row.printed_at = datetime.now(timezone.utc)
         row.remark = payload.remark
 
-    work_order.current_status = WorkOrderStatus.WAIT_INVOICE_INFO.value
+    work_order.current_status = WorkOrderStatus.PAPER_REPORT_ISSUED.value
     work_order.current_handler_user_id = work_order.project_leader_id
 
     create_workflow_log(
         db,
         work_order_id=work_order.id,
         from_status=from_status.value,
-        to_status=WorkOrderStatus.WAIT_INVOICE_INFO.value,
+        to_status=WorkOrderStatus.PAPER_REPORT_ISSUED.value,
         action_type="ISSUE_PAPER_REPORT",
         operator_user_id=current_user.id,
         remark=payload.remark,

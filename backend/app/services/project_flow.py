@@ -55,13 +55,9 @@ STATUS_TO_STEP = {
     "SIGNOFF_REVIEWING": "签发审核",
     "THIRD_APPROVED_WAIT_PRINTROOM": "报告出具",
     "PRINTROOM_PROCESSING": "报告出具",
-    "PAPER_REPORT_ISSUED": "发票开具",
+    "PAPER_REPORT_ISSUED": "报告邮寄",
     "REPORT_MAILING": "报告邮寄",
     "REPORT_MAILING_COMPLETED": "报告归档",
-    "WAIT_INVOICE_INFO": "发票开具",
-    "INVOICE_INFO_REJECTED": "发票开具",
-    "INVOICE_PROCESSING": "发票开具",
-    "INVOICE_ISSUED": "发票开具",
     "WAIT_ARCHIVE_SUBMIT": "报告归档",
     "ARCHIVE_REVIEWING": "报告归档",
     "ARCHIVE_REJECTED": "报告归档",
@@ -82,7 +78,6 @@ FLOW_STEPS = [
     "签发审核",
     "报告出具",
     "报告邮寄",
-    "发票开具",
     "报告归档",
     "已归档",
 ]
@@ -153,8 +148,6 @@ def get_user_role_in_project(project: Project, work_order: WorkOrder | None, cur
         return "合同审核人"
     if any(item.role.code == "PRINT_ROOM" for item in current_user.roles):
         return "文印室"
-    if any(item.role.code == "FINANCE" for item in current_user.roles):
-        return "财务"
     if work_order and work_order.archive_reviewer_id == current_user.id:
         return "档案管理员"
     if any(item.role.code == "ARCHIVE_MANAGER" for item in current_user.roles):
@@ -179,8 +172,6 @@ def build_todo_action(step: str, user_role: str) -> str | None:
         return "请处理报告出具"
     if user_role == "文印室" and step == "报告邮寄":
         return "请填写快递单号"
-    if user_role == "财务" and step == "发票开具":
-        return "请处理开票"
     if user_role == "档案管理员" and step == "报告归档":
         return "请审核归档材料"
     if user_role == "项目负责人" and step == "二审":
@@ -199,7 +190,6 @@ def build_todo_action(step: str, user_role: str) -> str | None:
             "签发审核": "请等待签发审核结果",
             "报告出具": "请跟进报告出具",
             "报告邮寄": "请填写和确认邮寄信息",
-            "发票开具": "请提交开票信息",
             "报告归档": "请办理归档",
         }
         return mapping.get(step)

@@ -75,9 +75,6 @@
       <el-form-item label="文印室人员姓名">
         <el-input :model-value="flowInfo.project.print_room_handler_name || '-'" disabled />
       </el-form-item>
-      <el-form-item label="开票人姓名">
-        <el-input :model-value="flowInfo.project.invoice_handler_name || '-'" disabled />
-      </el-form-item>
       <el-form-item label="档案管理员姓名">
         <el-input :model-value="flowInfo.project.archive_reviewer_name || '-'" disabled />
       </el-form-item>
@@ -125,7 +122,6 @@
         <el-descriptions-item label="二审人员姓名">{{ flowInfo.project.second_reviewer_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="三审人员姓名">{{ flowInfo.project.third_reviewer_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="文印室人员姓名">{{ flowInfo.project.print_room_handler_name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="开票人姓名">{{ flowInfo.project.invoice_handler_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="档案管理员姓名">{{ flowInfo.project.archive_reviewer_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="报告编号">{{ flowInfo.project.report_no || '-' }}</el-descriptions-item>
         <el-descriptions-item label="合同编号">{{ flowInfo.project.contract_no || '-' }}</el-descriptions-item>

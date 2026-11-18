@@ -199,12 +199,12 @@ const canPrintRoom = computed(() => Boolean(
 const canReportErrorBack = computed(() => Boolean(
   props.userRoles?.some(role => ['PROJECT_LEADER', 'PROJECT_MEMBER', 'ADMIN'].includes(role)) &&
   !isPrintRoomRole.value &&
-  ['WAIT_INVOICE_INFO', 'PAPER_REPORT_ISSUED', 'INVOICE_INFO_REJECTED'].includes(props.flowInfo?.current_work_order_status || '')
+  ['PAPER_REPORT_ISSUED'].includes(props.flowInfo?.current_work_order_status || '')
 ))
 const canProjectMailingStart = computed(() => Boolean(
   props.userRoles?.some(role => ['PROJECT_LEADER', 'PROJECT_MEMBER', 'ADMIN'].includes(role)) &&
   !isPrintRoomRole.value &&
-  ['PAPER_REPORT_ISSUED', 'WAIT_INVOICE_INFO', 'INVOICE_INFO_REJECTED', 'INVOICE_PROCESSING', 'INVOICE_ISSUED', 'REPORT_MAILING', 'REPORT_MAILING_COMPLETED'].includes(props.flowInfo?.current_work_order_status || '')
+  ['PAPER_REPORT_ISSUED', 'REPORT_MAILING', 'REPORT_MAILING_COMPLETED'].includes(props.flowInfo?.current_work_order_status || '')
 ))
 const isUploading = computed(() => uploadProgress.value?.status === 'uploading')
 

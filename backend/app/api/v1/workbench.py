@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.invoice import Invoice
 from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
 from app.models.project_member import ProjectMember
@@ -51,8 +50,6 @@ def _todo_action_text(
     step: str,
     can_approve_delete: bool,
     can_approve_termination: bool,
-    rejected_invoice: object | None,
-    confirming_invoice: object | None,
     is_project_party: bool,
 ) -> str:
     if can_approve_delete:
@@ -67,10 +64,6 @@ def _todo_action_text(
         if work_order.current_handler_user_id == work_order.project_leader_id:
             return "请选择三审老师并提交审核"
         return "待二审老师决定三审流向"
-    if rejected_invoice and is_project_party:
-        return "开票信息被退回，请修改后重新提交"
-    if confirming_invoice and is_project_party:
-        return "财务已完成开票，请确认或退回修改"
     if step == "合同初稿审核" and work_order.contract_reviewer_id == work_order.current_handler_user_id:
         return "请处理合同初稿审核"
     contract_print_room_status = get_contract_print_room_status(db, work_order)
@@ -216,11 +209,6 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
         )
 
     role_pool_filters = []
-    if "FINANCE" in role_codes or "ADMIN" in role_codes:
-        pending_invoice_work_orders = db.query(Invoice.work_order_id).filter(Invoice.status.in_(["SUBMITTED", "PROJECT_RETURNED"]))
-        if "ADMIN" not in role_codes:
-            pending_invoice_work_orders = pending_invoice_work_orders.filter(Invoice.finance_handler_id == current_user.id)
-        role_pool_filters.append(WorkOrder.id.in_(pending_invoice_work_orders))
     if "ARCHIVE_MANAGER" in role_codes or "ADMIN" in role_codes:
         role_pool_filters.append(
             and_(
@@ -303,15 +291,6 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
     for project, work_order in todo_rows:
         if project.id in seen:
             continue
-        rejected_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "REJECTED").first()
-        pending_invoice_filters = [
-            Invoice.work_order_id == work_order.id,
-            Invoice.status.in_(["SUBMITTED", "PROJECT_RETURNED"]),
-        ]
-        if "ADMIN" not in role_codes:
-            pending_invoice_filters.append(Invoice.finance_handler_id == current_user.id)
-        pending_invoice = db.query(Invoice.id).filter(*pending_invoice_filters).first()
-        confirming_invoice = db.query(Invoice.id).filter(Invoice.work_order_id == work_order.id, Invoice.status == "FINANCE_COMPLETED").first()
 
         is_project_party = (
             work_order.project_leader_id == current_user.id
@@ -353,27 +332,15 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
             and "ADMIN" not in role_codes
         ):
             continue
-        if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id and not rejected_invoice and not confirming_invoice:
+        if project.business_user_id == current_user.id and work_order.current_handler_user_id != current_user.id:
             if work_order.current_status not in {"WAIT_CONTRACT_REVIEW_SUBMIT", "CONTRACT_REJECTED", "REPORT_MAILING", "REPORT_MAILING_COMPLETED", "WAIT_ARCHIVE_SUBMIT", "ARCHIVE_REJECTED"}:
                 continue
 
-        if (
-            pending_invoice
-            and "FINANCE" not in role_codes
-            and "ADMIN" not in role_codes
-            and not (
-                work_order.current_status in {"REPORT_MAILING", "REPORT_MAILING_COMPLETED"}
-                and work_order.mailing_handler_user_id == current_user.id
-            )
-        ):
-            continue
 
         if (
             work_order.current_status in {"REPORT_MAILING", "REPORT_MAILING_COMPLETED"}
             and not is_project_party
             and not is_print_room_assignee
-            and not (pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes))
-            and not (confirming_invoice and is_project_party)
             and "ADMIN" not in role_codes
         ):
             continue
@@ -404,14 +371,8 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
             and work_order.project_leader_id == current_user.id
         ):
             step = "合同初稿审核"
-        elif pending_invoice and ("FINANCE" in role_codes or "ADMIN" in role_codes):
-            step = "财务开票"
-        elif confirming_invoice and is_project_party:
-            step = "发票开具"
         elif work_order.current_status == "REPORT_MAILING":
             step = "报告邮寄"
-        elif rejected_invoice and is_project_party:
-            step = "发票开具"
         elif work_order.archive_reviewer_id == current_user.id and work_order.archive_submission_type in {"ONLINE", "OFFLINE"}:
             step = "底稿审核"
         elif work_order.archive_submitter_id == current_user.id and work_order.archive_submission_type in {"APPROVED", "REJECTED"}:
@@ -456,8 +417,6 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
             step=step,
             can_approve_delete=can_approve_delete,
             can_approve_termination=can_approve_termination,
-            rejected_invoice=rejected_invoice,
-            confirming_invoice=confirming_invoice,
             is_project_party=is_project_party,
         )
         todo_projects.append(
@@ -520,15 +479,12 @@ def search_workbench_projects(
     historical = db.query(WorkOrder.project_id).join(
         WorkflowLog, WorkflowLog.work_order_id == WorkOrder.id,
     ).filter(WorkflowLog.operator_user_id == uid)
-    finance = db.query(WorkOrder.project_id).join(
-        Invoice, Invoice.work_order_id == WorkOrder.id,
-    ).filter(or_(Invoice.finance_handler_id == uid, Invoice.handled_by == uid))
     members = db.query(ProjectMember.project_id).filter(ProjectMember.user_id == uid)
     query = db.query(Project.id).outerjoin(User, User.id == Project.business_user_id).filter(
         Project.deleted_at.is_(None),
         or_(Project.business_user_id == uid, Project.project_leader_id == uid,
             Project.id.in_(members), Project.id.in_(assigned),
-            Project.id.in_(historical), Project.id.in_(finance)),
+            Project.id.in_(historical)),
     )
 
     def contains(column, value):
