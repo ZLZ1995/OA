@@ -252,7 +252,7 @@ def test_workflow_notification_stays_read_not_processed() -> None:
 def test_workflow_notification_uses_new_titles_and_fallback() -> None:
     db = _build_session()
     sender = _seed_user(db, "sender", ["PROJECT_LEADER"])
-    receiver = _seed_user(db, "receiver", ["FINANCE"])
+    receiver = _seed_user(db, "receiver", ["PROJECT_LEADER"])
     project = Project(
         project_code="P-WF-3",
         undertaking_unit="中勤",
@@ -270,7 +270,7 @@ def test_workflow_notification_uses_new_titles_and_fallback() -> None:
         work_order_no="WO-WF-3",
         project_id=project.id,
         title="Workflow Order",
-        current_status="INVOICE_PROCESSING",
+        current_status="PAPER_REPORT_ISSUED",
         current_handler_user_id=receiver.id,
         initiator_user_id=sender.id,
         project_leader_id=sender.id,
@@ -285,7 +285,7 @@ def test_workflow_notification_uses_new_titles_and_fallback() -> None:
         work_order=work_order,
         sender_user=sender,
         receiver_user_id=receiver.id,
-        action_name="FINANCE_COMPLETE_INVOICE",
+        action_name="ISSUE_PAPER_REPORT",
     )
     send_workflow_notification(
         db,
@@ -298,5 +298,5 @@ def test_workflow_notification_uses_new_titles_and_fallback() -> None:
     db.commit()
 
     rows = db.query(UserNotification).order_by(UserNotification.id.asc()).all()
-    assert rows[0].title == "请核对并确认开票"
+    assert rows[0].title == "请处理后续流程"
     assert rows[1].title == "请处理流程任务"

@@ -474,7 +474,7 @@ const reportTypeOptions: ReportType[] = ['评估报告', '估值报告', '咨询
 const router = useRouter()
 const auth = useAuthStore()
 const notifications = useNotificationStore()
-const todoTableRef = ref<InstanceType<typeof ElTable>>()
+const todoTableRef = ref<{ setCurrentRow: (row: WorkbenchProjectItem) => void } | null>(null)
 const myProjects = ref<WorkbenchProjectItem[]>([])
 const todoProjects = ref<WorkbenchProjectItem[]>([])
 const emptyProjectSearch = (): WorkbenchSearchFilters => ({ keyword: '', project_no: '', project_name: '', client_name: '', creator: '' })
@@ -609,7 +609,6 @@ const FLOW_PREVIEW_STEPS: FlowPreviewNode[] = [
   { key: 'signoff', label: '签发审核', keywords: ['签发审核'], group: '审核流转' },
   { key: 'reportIssue', label: '报告出具', keywords: ['报告出具'], group: '交付办理' },
   { key: 'reportMailing', label: '报告邮寄', keywords: ['报告邮寄'], group: '交付办理' },
-  { key: 'invoice', label: '发票开具', keywords: ['发票开具', '开票'], group: '交付办理' },
   { key: 'archive', label: '报告归档', keywords: ['报告归档', '归档'], group: '归档完成' },
 ]
 
@@ -1054,7 +1053,7 @@ async function saveProject() {
   }
 }
 
-const TODO_PANEL_PRIORITY = ['contractReview', 'externalAuditConfirm', 'externalReview', 'review', 'signoff', 'issue', 'mailing', 'invoice', 'archive'] as const
+const TODO_PANEL_PRIORITY = ['contractReview', 'externalAuditConfirm', 'externalReview', 'review', 'signoff', 'issue', 'mailing', 'archive'] as const
 
 function normalizeTodoText(value?: string | null) {
   return (value || '').trim().toUpperCase()
@@ -1076,7 +1075,6 @@ function resolveTodoPanel(row: WorkbenchProjectItem) {
   if (combined.includes('签发')) matched.add('signoff')
   if (combined.includes('出具') || combined.includes('文印')) matched.add('issue')
   if (combined.includes('邮寄') || combined.includes('寄送')) matched.add('mailing')
-  if (combined.includes('发票') || combined.includes('开票')) matched.add('invoice')
   if (combined.includes('归档') || combined.includes('档案')) matched.add('archive')
 
   return TODO_PANEL_PRIORITY.find(item => matched.has(item)) || row.workpaper_panel

@@ -58,7 +58,7 @@
           "key": "business-detail",
           "title": "业务流程细化",
           "image_url": "/api/v1/help/assets/overall-detail.png",
-          "description": "展示合同上传、审核流转、签发、文印、邮寄、开票、归档等业务节点的具体衔接。",
+          "description": "展示合同上传、审核流转、签发、文印、邮寄、归档等业务节点的具体衔接。",
           "sort_order": 2
         }
       ]
@@ -93,13 +93,6 @@
           "image_url": "/api/v1/help/assets/role-issue-mail.png",
           "description": "展示首席签发、文印处理、报告出具和邮寄确认等阶段的角色分工。",
           "sort_order": 4
-        },
-        {
-          "key": "role-invoice-archive",
-          "title": "开票与归档",
-          "image_url": "/api/v1/help/assets/role-invoice-archive.png",
-          "description": "说明财务与档案管理员在开票、确认、归档审核、最终归档中的职责关系。",
-          "sort_order": 5
         }
       ]
     },

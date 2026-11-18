@@ -32,7 +32,7 @@ def can_project_owner_delete_direct(work_order: WorkOrder | None) -> bool:
     if not work_order:
         return True
     current_step = normalize_project_step(work_order.current_status, False)
-    return current_step not in {"报告出具", "报告邮寄", "发票开具", "报告归档", "已归档"}
+    return current_step not in {"报告出具", "报告邮寄", "报告归档", "已归档"}
 
 
 def ensure_admin_approver_not_self(current_user_id: int, approver_user_id: int) -> None:

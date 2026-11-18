@@ -8,7 +8,6 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
-from app.api.v1.finance import calculate_project_invoice_total
 from app.db.session import get_db
 from app.models.archive import Archive
 from app.models.print_room_record import PrintRoomRecord
@@ -86,13 +85,9 @@ EXPORT_PROGRESS_LABELS = {
     "SIGNOFF_REVIEWING": "签发审核中",
     "THIRD_APPROVED_WAIT_PRINTROOM": "待补充正式报告与合同扫描件",
     "PRINTROOM_PROCESSING": "文印室报告出具中",
-    "PAPER_REPORT_ISSUED": "纸质报告已出具，待开票",
+    "PAPER_REPORT_ISSUED": "纸质报告已出具，待邮寄",
     "REPORT_MAILING": "报告邮寄中",
     "REPORT_MAILING_COMPLETED": "报告邮寄完成，待归档",
-    "WAIT_INVOICE_INFO": "待提交开票信息",
-    "INVOICE_INFO_REJECTED": "开票信息退回待修改",
-    "INVOICE_PROCESSING": "财务开票中",
-    "INVOICE_ISSUED": "发票已开具，待归档",
     "WAIT_ARCHIVE_SUBMIT": "待提交归档",
     "ARCHIVE_REVIEWING": "归档审核中",
     "ARCHIVE_REJECTED": "归档退回待修改",
@@ -248,7 +243,6 @@ def _collect_rows(
             upsert_conflict_snapshot_and_detect(db, project, work_order, latest_contract_file.uploaded_at)
         archived_at = project.archived_at or (archive.archive_at if archive else None)
         amount = float(project.project_amount) if project.project_amount is not None else None
-        invoiced_amount = calculate_project_invoice_total(db, project.id)
         signers = "、".join(item for item in [work_order.signer_one if work_order else None, work_order.signer_two if work_order else None] if item)
         first_reviewer_name = _user_name(db, work_order.first_reviewer_id) if work_order else ""
         second_reviewer_name = _user_name(db, work_order.second_reviewer_id) if work_order else ""
@@ -318,7 +312,6 @@ def _collect_rows(
                 "project_source_display": get_project_source_display(project_source_value),
                 "external_project_leader_name": external_leader_value,
                 "amount": amount if amount is not None else "",
-                "invoiced_amount": invoiced_amount,
                 "signer_names": signers,
                 "first_reviewer_name": first_reviewer_name,
                 "second_reviewer_name": second_reviewer_name,
@@ -439,7 +432,6 @@ def export_project_rows_excel(
         "项目来源",
         "文本项目负责人",
         "收费金额",
-        "累计开票金额",
         "签字评估师姓名",
         "一审人员姓名",
         "二审人员姓名",
@@ -463,7 +455,6 @@ def export_project_rows_excel(
                 row["project_source_display"],
                 row["external_project_leader_name"],
                 row["amount"],
-                row["invoiced_amount"],
                 row["signer_names"],
                 row["first_reviewer_name"],
                 row["second_reviewer_name"],

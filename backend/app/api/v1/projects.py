@@ -7,12 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.api.v1.contract_reviews import get_contract_review_status_display
-from app.api.v1.finance import calculate_project_invoice_total
 from app.db.session import get_db
 from app.models.archive import Archive
 from app.models.contract import Contract
 from app.models.contract_review_record import ContractReviewRecord
-from app.models.invoice import Invoice
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_delete_request import ProjectDeleteRequest
@@ -126,7 +124,6 @@ def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrd
         return {}
 
     print_room_record = db.query(PrintRoomRecord).filter(PrintRoomRecord.work_order_id == work_order.id).first()
-    invoice = db.query(Invoice).filter(Invoice.work_order_id == work_order.id).order_by(Invoice.id.desc()).first()
     contract = db.query(Contract).filter(Contract.work_order_id == work_order.id).first()
     mailing_record = db.query(ReportMailingRecord).filter(ReportMailingRecord.work_order_id == work_order.id).order_by(ReportMailingRecord.id.desc()).first()
 
@@ -159,10 +156,6 @@ def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrd
         WorkOrderStatus.PAPER_REPORT_ISSUED.value,
         WorkOrderStatus.REPORT_MAILING.value,
         WorkOrderStatus.REPORT_MAILING_COMPLETED.value,
-        WorkOrderStatus.WAIT_INVOICE_INFO.value,
-        WorkOrderStatus.INVOICE_PROCESSING.value,
-        WorkOrderStatus.INVOICE_INFO_REJECTED.value,
-        WorkOrderStatus.INVOICE_ISSUED.value,
         WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value,
         WorkOrderStatus.ARCHIVE_REVIEWING.value,
         WorkOrderStatus.ARCHIVE_REJECTED.value,
@@ -182,7 +175,6 @@ def _get_readonly_flow_fields(db: Session, project: Project, work_order: WorkOrd
         "third_reviewer_name": third_reviewer_name,
         "print_room_handler_name": user_name(work_order.print_room_handler_id),
         "mailing_handler_name": user_name(work_order.mailing_handler_user_id),
-        "invoice_handler_name": user_name((invoice.handled_by or invoice.finance_handler_id) if invoice else None),
         "archive_reviewer_name": user_name(work_order.archive_reviewer_id),
         "mailing_receiver_name": mailing_record.receiver_name if mailing_record else None,
         "mailing_receiver_phone": mailing_record.receiver_phone if mailing_record else None,
@@ -747,7 +739,6 @@ def get_project_flow(
             valuation_base_date=project.valuation_base_date.strftime("%Y-%m-%d") if project.valuation_base_date else None,
             business_salesman=project.business_salesman,
             project_amount=project.project_amount,
-            invoiced_amount=calculate_project_invoice_total(db, project.id),
             project_source=normalize_project_source(project.project_source),
             project_source_display=get_project_source_display(project.project_source),
             external_project_leader_name=normalize_external_project_leader_name(project.external_project_leader_name),
@@ -761,7 +752,6 @@ def get_project_flow(
             third_reviewer_name=readonly_fields.get("third_reviewer_name"),
             print_room_handler_name=readonly_fields.get("print_room_handler_name"),
             mailing_handler_name=readonly_fields.get("mailing_handler_name"),
-            invoice_handler_name=readonly_fields.get("invoice_handler_name"),
             archive_reviewer_name=readonly_fields.get("archive_reviewer_name"),
             current_step=step,
             status_display=step,

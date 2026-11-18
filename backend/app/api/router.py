@@ -7,7 +7,6 @@ from app.api.v1.contract_reviews import router as contract_reviews_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.desktop_updates import router as desktop_updates_router
 from app.api.v1.files import router as files_router
-from app.api.v1.finance import router as finance_router
 from app.api.v1.health import router as health_router
 from app.api.v1.help import router as help_router
 from app.api.v1.issue_feedbacks import router as issue_feedbacks_router
@@ -55,7 +54,6 @@ api_router.include_router(reviews_router, dependencies=[Depends(require_ready_as
 api_router.include_router(signoff_router, dependencies=[Depends(require_ready_assignments)])
 api_router.include_router(print_room_router, dependencies=[Depends(require_ready_assignments)])
 api_router.include_router(report_mailing_router, dependencies=[Depends(require_ready_assignments)])
-api_router.include_router(finance_router, dependencies=[Depends(require_ready_assignments)])
 api_router.include_router(archives_router, dependencies=[Depends(require_ready_assignments)])
 api_router.include_router(issue_feedbacks_router)
 api_router.include_router(reminders_router)

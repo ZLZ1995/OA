@@ -328,7 +328,7 @@ def build_workflow_message_templates(
                 f"客户名称：{client_name}\n"
                 f"工单号：{work_order_no}\n"
                 f"当前节点：{current_step}\n"
-                "下一步：请处理开票或邮寄"
+                "下一步：请处理报告邮寄"
             ),
         ),
         "SUBMIT_MAILING": (
@@ -367,7 +367,7 @@ def build_workflow_message_templates(
             ),
         ),
         "PROJECT_CONFIRM_MAILING": (
-            "请处理开票或归档",
+            "请办理归档",
             (
                 f"{sender_user.real_name}已确认报告邮寄完成，请继续办理后续流程。\n"
                 f"项目编号：{project_code}\n"
@@ -375,76 +375,7 @@ def build_workflow_message_templates(
                 f"客户名称：{client_name}\n"
                 f"工单号：{work_order_no}\n"
                 f"当前节点：{current_step}\n"
-                "下一步：请继续办理开票或归档"
-            ),
-        ),
-        "SUBMIT_INVOICE_INFO": (
-            "请处理发票开具",
-            (
-                f"{sender_user.real_name}已提交开票信息，请你办理开票。\n"
-                f"项目编号：{project_code}\n"
-                f"项目名称：{project_name}\n"
-                f"客户名称：{client_name}\n"
-                f"工单号：{work_order_no}\n"
-                f"当前节点：{current_step}\n"
-                f"备注：{comment_text}"
-            ),
-        ),
-        "REJECT_INVOICE_INFO": (
-            "请修改后重提开票信息",
-            (
-                f"{sender_user.real_name}已退回开票信息，请修改后重新提交。\n"
-                f"项目编号：{project_code}\n"
-                f"项目名称：{project_name}\n"
-                f"客户名称：{client_name}\n"
-                f"工单号：{work_order_no}\n"
-                f"当前节点：{current_step}\n"
-                f"退回说明：{comment_text}"
-            ),
-        ),
-        "FINANCE_COMPLETE_INVOICE": (
-            "请核对并确认开票",
-            (
-                f"{sender_user.real_name}已完成开票，请你确认开票结果。\n"
-                f"项目编号：{project_code}\n"
-                f"项目名称：{project_name}\n"
-                f"客户名称：{client_name}\n"
-                f"工单号：{work_order_no}\n"
-                f"当前节点：{current_step}"
-            ),
-        ),
-        "PROJECT_CONFIRM_INVOICE": (
-            "请处理后续流程",
-            (
-                f"{sender_user.real_name}已确认发票结果，请继续办理后续流程。\n"
-                f"项目编号：{project_code}\n"
-                f"项目名称：{project_name}\n"
-                f"客户名称：{client_name}\n"
-                f"工单号：{work_order_no}\n"
-                f"当前节点：{current_step}"
-            ),
-        ),
-        "PROJECT_RETURN_INVOICE": (
-            "发票已退回，请处理",
-            (
-                f"{sender_user.real_name}已将发票退回给你，请重新处理。\n"
-                f"项目编号：{project_code}\n"
-                f"项目名称：{project_name}\n"
-                f"客户名称：{client_name}\n"
-                f"工单号：{work_order_no}\n"
-                f"当前节点：{current_step}\n"
-                f"退回说明：{comment_text}"
-            ),
-        ),
-        "WITHDRAW_INVOICE_INFO": (
-            "请处理后续流程",
-            (
-                f"{sender_user.real_name}已撤回开票信息，请继续办理后续流程。\n"
-                f"项目编号：{project_code}\n"
-                f"项目名称：{project_name}\n"
-                f"客户名称：{client_name}\n"
-                f"工单号：{work_order_no}\n"
-                f"当前节点：{current_step}"
+                "下一步：请办理归档"
             ),
         ),
         "ARCHIVE_SUBMIT_ONLINE": (
@@ -544,12 +475,6 @@ def build_workflow_message_templates(
         "RESUBMIT_MAILING": "报告邮寄已重新提交",
         "PRINT_ROOM_SUBMIT_EXPRESS": "邮寄信息已填写",
         "PROJECT_CONFIRM_MAILING": "报告邮寄已确认",
-        "SUBMIT_INVOICE_INFO": "开票信息已提交",
-        "REJECT_INVOICE_INFO": "开票信息已退回",
-        "FINANCE_COMPLETE_INVOICE": "发票已开具",
-        "PROJECT_CONFIRM_INVOICE": "开票结果已确认",
-        "PROJECT_RETURN_INVOICE": "发票已退回",
-        "WITHDRAW_INVOICE_INFO": "开票信息已撤回",
         "ARCHIVE_SUBMIT_ONLINE": "归档审核已提交",
         "ARCHIVE_SUBMIT_OFFLINE": "线下归档已提交",
         "ARCHIVE_APPROVE": "归档审核已完成",

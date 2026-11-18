@@ -23,7 +23,6 @@ FIXED_ROLES: list[tuple[str, str, str]] = [
     ("CHIEF_APPRAISER_ZQ", "中勤首席评估师", "中勤签发审核角色"),
     ("CHIEF_APPRAISER_ZLGJ", "中立国际首席评估师", "中立国际签发审核角色"),
     ("PRINT_ROOM", "文印室", "文印室角色"),
-    ("FINANCE", "财务人员", "财务角色"),
     ("ARCHIVE_MANAGER", "档案管理员", "档案管理角色"),
 ]
 
@@ -33,6 +32,8 @@ SUPER_ADMIN_REAL_NAME = settings.initial_admin_real_name
 
 
 def init_db() -> None:
+    from app.db.retire_invoice_flow import backup_sqlite_if_needed, retire_invoice_flow
+    backup_sqlite_if_needed()
     Base.metadata.create_all(bind=engine)
     with Session(engine) as db:
         ensure_project_columns(db)
@@ -46,6 +47,7 @@ def init_db() -> None:
         initialize_workflow_versions(db)
         db.commit()
         seed_fixed_roles(db)
+        retire_invoice_flow(db)
         seed_initial_admin(db)
         from app.services.project_conflicts import bootstrap_legacy_conflicts
         bootstrap_legacy_conflicts(db)

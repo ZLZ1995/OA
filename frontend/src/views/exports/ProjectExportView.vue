@@ -125,7 +125,6 @@
       <el-table-column prop="project_source_display" label="项目来源" min-width="100" />
       <el-table-column prop="external_project_leader_name" label="文本项目负责人" min-width="140" />
       <el-table-column prop="amount" label="收费金额" min-width="110" />
-      <el-table-column prop="invoiced_amount" label="累计开票金额" min-width="130" />
       <el-table-column prop="signer_names" label="签字评估师姓名" min-width="160" show-overflow-tooltip />
       <el-table-column prop="first_reviewer_name" label="一审人员姓名" min-width="120" />
       <el-table-column prop="second_reviewer_name" label="二审人员姓名" min-width="120" />
@@ -222,7 +221,6 @@ const scrollColumns = [
   { prop: 'project_source_display', label: '项目来源', width: 100 },
   { prop: 'external_project_leader_name', label: '文本项目负责人', width: 140 },
   { prop: 'amount', label: '收费金额', width: 110 },
-  { prop: 'invoiced_amount', label: '累计开票金额', width: 130 },
   { prop: 'signer_names', label: '签字评估师姓名', width: 160 },
   { prop: 'first_reviewer_name', label: '一审人员姓名', width: 120 },
   { prop: 'second_reviewer_name', label: '二审人员姓名', width: 120 },

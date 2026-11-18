@@ -50,7 +50,7 @@ def initialize_workflow_versions(db: Session):
         if review is not None:
             continue
         if order.current_status in {"SIGNOFF_REVIEWING", "THIRD_APPROVED_WAIT_PRINTROOM", "PRINTROOM_PROCESSING", "PAPER_REPORT_ISSUED",
-                "REPORT_MAILING", "REPORT_MAILING_COMPLETED", "WAIT_INVOICE_INFO", "INVOICE_PROCESSING", "INVOICE_ISSUED",
+                "REPORT_MAILING", "REPORT_MAILING_COMPLETED",
                 "WAIT_ARCHIVE_SUBMIT", "ARCHIVE_REVIEWING", "ARCHIVED"}:
             raise WorkflowActivationError(f"New project {order.project_id} advanced beyond the new gate before activation; activation aborted")
         second = db.query(ReviewRecord.id).filter_by(work_order_id=order.id, review_round="SECOND", action="APPROVE").first()

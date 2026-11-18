@@ -59,6 +59,7 @@ def test_offline_archive_submission_routes_to_selected_archive_manager() -> None
         project_id=project.id,
         title="WO",
         current_status=WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value,
+        mailing_status="COMPLETED",
         current_handler_user_id=leader.id,
         initiator_user_id=leader.id,
         project_leader_id=leader.id,
@@ -153,6 +154,25 @@ def test_archive_submit_requires_print_room_issue_completed() -> None:
             copy_count=1,
         )
     )
+    db.commit()
+
+    try:
+        submit_archive(
+            payload=ArchiveSubmitRequest(
+                work_order_id=work_order.id,
+                reviewer_user_id=archive_manager.id,
+                submission_type="ONLINE",
+            ),
+            db=db,
+            current_user=leader,
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "报告邮寄完成" in exc.detail
+    else:
+        raise AssertionError("expected archive submission to be blocked before mailing confirmation")
+
+    work_order.mailing_status = "COMPLETED"
     db.commit()
 
     result = submit_archive(

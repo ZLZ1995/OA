@@ -32,7 +32,6 @@ const routes: RouteRecordRaw[] = [
       { path: 'report-versions', component: () => import('@/views/report-versions/ReportVersionView.vue') },
       { path: 'project-members', component: () => import('@/views/project-members/ProjectMemberView.vue') },
       { path: 'print-room', component: () => import('@/views/printroom/PrintRoomHandleView.vue') },
-      { path: 'finance', component: () => import('@/views/finance/FinanceView.vue') },
       { path: 'archives', component: () => import('@/views/archives/ArchiveView.vue') },
       { path: 'help/overview', component: () => import('@/views/help/HelpOverviewView.vue') },
       { path: 'help/business-flow', component: () => import('@/views/help/HelpBusinessFlowView.vue') },

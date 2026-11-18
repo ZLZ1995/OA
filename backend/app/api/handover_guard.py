@@ -5,7 +5,6 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.models.work_order import WorkOrder
-from app.models.invoice import Invoice
 from app.models.archive import Archive
 from app.models.contract_review_record import ContractReviewRecord
 from app.services.project_handover import assert_review_assignments_ready
@@ -29,7 +28,7 @@ async def require_ready_assignments(request: Request, db: Session = Depends(get_
     except (ValueError, TypeError):
         raise HTTPException(400, "项目或工单编号格式无效")
     # Record-based endpoints must resolve the actual order, never trust a body override.
-    for key, model in (("invoice_id", Invoice), ("archive_id", Archive), ("record_id", ContractReviewRecord)):
+    for key, model in (("archive_id", Archive), ("record_id", ContractReviewRecord)):
         if key in request.path_params:
             try:
                 record = db.get(model, int(request.path_params[key]))

@@ -16,7 +16,6 @@ from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
 from app.schemas.archive import ArchiveDecisionRequest, ArchiveSubmitRequest
 from app.schemas.contract_review import ContractReviewDecisionRequest, ContractReviewSubmitRequest
-from app.schemas.invoice import InvoiceCreate
 from app.schemas.project import ProjectCreate
 from app.schemas.project_member import ProjectMemberBatchCreate, ProjectMemberCompleteRequest
 from app.schemas.print_room import IssuePaperReportRequest
@@ -61,7 +60,6 @@ def _seed_roles_and_users(db: Session) -> dict[str, User]:
         "CHIEF_APPRAISER_ZQ": _seed_role(db, "CHIEF_APPRAISER_ZQ", "中勤首席评估师"),
         "CHIEF_APPRAISER_ZLGJ": _seed_role(db, "CHIEF_APPRAISER_ZLGJ", "中立国际首席评估师"),
         "PRINT_ROOM": _seed_role(db, "PRINT_ROOM", "文印室"),
-        "FINANCE": _seed_role(db, "FINANCE", "财务人员"),
         "ARCHIVE_MANAGER": _seed_role(db, "ARCHIVE_MANAGER", "档案管理员"),
     }
     return {
@@ -75,7 +73,6 @@ def _seed_roles_and_users(db: Session) -> dict[str, User]:
         "third": _seed_user(db, "third", "三审", [roles["THIRD_REVIEWER"]]),
         "chief": _seed_user(db, "chief", "首席评估师", [roles["CHIEF_APPRAISER_ZQ"]]),
         "print_room": _seed_user(db, "printroom", "文印室", [roles["PRINT_ROOM"]]),
-        "finance": _seed_user(db, "finance", "财务", [roles["FINANCE"]]),
         "archive": _seed_user(db, "archive", "档案", [roles["ARCHIVE_MANAGER"]]),
     }
 
@@ -439,7 +436,7 @@ def test_smoke_05_print_room_and_mailing_move_to_archive_submit() -> None:
         _={"PRINT_ROOM"},
     )
     db.refresh(work_order)
-    assert work_order.current_status == WorkOrderStatus.WAIT_INVOICE_INFO.value
+    assert work_order.current_status == WorkOrderStatus.PAPER_REPORT_ISSUED.value
 
     submit_report_mailing(
         work_order_id=work_order.id,
@@ -465,29 +462,13 @@ def test_smoke_05_print_room_and_mailing_move_to_archive_submit() -> None:
     assert work_order.mailing_status == "COMPLETED"
 
 
-def test_smoke_06_invoice_and_archive_complete_business_chain() -> None:
+def test_smoke_06_mailing_and_archive_complete_business_chain() -> None:
     from app.api.v1.archives import approve_archive, finalize_archive, submit_archive
-    from app.api.v1.finance import complete_invoice, confirm_invoice, create_invoice
 
     db = _build_session()
     users, project, work_order = _create_project_bundle(db)
-    work_order.current_status = WorkOrderStatus.WAIT_INVOICE_INFO.value
-    db.commit()
-
-    invoice = create_invoice(
-        payload=InvoiceCreate(
-            work_order_id=work_order.id,
-            invoice_info="开票单位：中勤\n测试客户",
-            invoice_type="专票",
-            amount=300,
-            finance_handler_id=users["finance"].id,
-        ),
-        db=db,
-        current_user=users["leader"],
-        role_codes={"PROJECT_LEADER"},
-    )
-    complete_invoice(invoice.id, db=db, current_user=users["finance"], _={"FINANCE"})
-    confirm_invoice(invoice.id, db=db, current_user=users["leader"], role_codes={"PROJECT_LEADER"})
+    work_order.current_status = WorkOrderStatus.WAIT_ARCHIVE_SUBMIT.value
+    work_order.mailing_status = "COMPLETED"
     db.add(
         PrintRoomRecord(
             work_order_id=work_order.id,
