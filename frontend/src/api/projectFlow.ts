@@ -58,6 +58,8 @@ export interface ProjectFlowData {
   signer_one?: string | null
   signer_two?: string | null
   formal_report_count?: number | null
+  contract_print_handler_name?: string | null
+  contract_print_handler_id?: number | null
   print_room_handler_id?: number | null
   archive_reviewer_id?: number | null
   archive_submitter_id?: number | null

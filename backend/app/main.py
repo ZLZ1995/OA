@@ -19,6 +19,11 @@ async def maintain_workpaper_uploads(stop):
     from app.services.workpaper_temporary_files import cleanup_expired_workpaper_files
     while not stop.is_set():
         try:
+            from app.services.contract_revision import retry_contract_cleanup
+            await asyncio.to_thread(retry_contract_cleanup)
+        except Exception:
+            logger.exception("Contract cleanup failed; retry next hour")
+        try:
             await asyncio.to_thread(cleanup_expired_workpaper_files)
         except Exception:
             logger.exception("Temporary workpaper cleanup failed; retry next hour")

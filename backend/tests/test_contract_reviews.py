@@ -437,3 +437,172 @@ def test_contract_review_reject_moves_back_to_project_side() -> None:
     assert result.action_type == "REJECT_CONTRACT"
     assert work_order.current_status == "CONTRACT_REJECTED"
     assert work_order.current_handler_user_id == work_order.project_leader_id
+
+
+@pytest.mark.parametrize("parallel", [False, True])
+def test_replace_approved_contract_twice(tmp_path, monkeypatch, parallel):
+    from io import BytesIO
+    from fastapi import UploadFile
+    from app.api.v1 import contract_reviews as api
+    from app.api.v1.files import download_work_order_file
+    from app.core.config import settings
+    from app.services.contract_revision import contract_status
+    from app.services.contract_print_room_flow import get_contract_print_room_status
+
+    monkeypatch.setattr(settings, "local_storage_dir", str(tmp_path))
+    db = _build_session()
+    leader = _seed_user(db, "leader", [])
+    reviewer = _seed_user(db, "reviewer", [_seed_role(db, "CONTRACT_REVIEWER", "Reviewer")])
+    printer = _seed_user(db, "printer", [_seed_role(db, "PRINT_ROOM", "Print")])
+    other = _seed_user(db, "other", [])
+    _, order = _seed_project_and_work_order(db, leader, leader)
+    record = api.submit_contract_review(ContractReviewSubmitRequest(work_order_id=order.id,
+                                        reviewer_user_id=reviewer.id), db, leader)
+    (tmp_path / "contract.pdf").write_bytes(b"original")
+    for version in (2, 3):
+        approval = api.approve_and_transfer_contract_review(record.id,
+            ContractReviewApproveTransferRequest(print_room_handler_id=printer.id), db, reviewer, set())
+        if parallel:
+            order.current_status = "FIRST_REVIEWING"
+            order.current_handler_user_id = other.id
+            db.commit()
+        old = db.get(WorkOrderFile, record.contract_file_id)
+        old_path = tmp_path / old.storage_key
+        def revise(user, state="WAIT_PRINT_ROOM_PROCESS", data=b"replacement"):
+            return api.revise_approved_contract(order.id, approval.id, state,
+                UploadFile(filename="contract.pdf", file=BytesIO(data)), db, user)
+        for who, state, data, code in [
+            (other, "WAIT_PRINT_ROOM_PROCESS", b"new", 403),
+            (leader, "NONE", b"new", 409),
+            (leader, "WAIT_PRINT_ROOM_PROCESS", b"", 400),
+        ]:
+            with pytest.raises(HTTPException) as exc:
+                revise(who, state, data)
+            db.rollback()
+            assert exc.value.status_code == code
+            assert old.is_current and old_path.exists()
+        previous_submit = record
+        record = revise(leader)
+        assert not old_path.exists()
+        assert not old.is_current
+        assert record.reviewer_user_id == reviewer.id
+        assert contract_status(db, order) == "CONTRACT_REVIEWING"
+        assert get_contract_print_room_status(db, order) is None
+        assert order.current_handler_user_id == (other.id if parallel else reviewer.id)
+        if parallel:
+            assert order.current_status == "FIRST_REVIEWING"
+        new = db.get(WorkOrderFile, record.contract_file_id)
+        assert new.version_no == version
+        assert (tmp_path / new.storage_key).read_bytes() == b"replacement"
+        with pytest.raises(HTTPException) as exc:
+            download_work_order_file(old.id, db, leader)
+        assert exc.value.status_code == 410
+        with pytest.raises(HTTPException):
+            revise(leader)
+        with pytest.raises(HTTPException):
+            api.approve_contract_review(previous_submit.id, ContractReviewDecisionRequest(), db, reviewer, set())
+        db.rollback()
+
+
+def test_revision_guards_and_cleanup_retry(tmp_path, monkeypatch):
+    from io import BytesIO
+    from pathlib import Path
+    from fastapi import UploadFile
+    from app.api.v1 import contract_reviews as api
+    from app.core.config import settings
+    from app.services.contract_revision import PENDING_DELETE, DELETED, purge_replaced_contracts
+
+    monkeypatch.setattr(settings, "local_storage_dir", str(tmp_path))
+    db = _build_session()
+    leader = _seed_user(db, "leader", [])
+    reviewer = _seed_user(db, "reviewer", [_seed_role(db, "CONTRACT_REVIEWER", "Reviewer")])
+    _, order = _seed_project_and_work_order(db, leader, leader)
+    submit = api.submit_contract_review(ContractReviewSubmitRequest(work_order_id=order.id,
+                                        reviewer_user_id=reviewer.id), db, leader)
+    approval = api.approve_contract_review(submit.id, ContractReviewDecisionRequest(), db, reviewer, set())
+    old = db.get(WorkOrderFile, submit.contract_file_id)
+    original = tmp_path / old.storage_key
+    original.write_bytes(b"original")
+
+    def revise():
+        upload = UploadFile(filename="new.pdf", file=BytesIO(b"new"))
+        return api.revise_approved_contract(order.id, approval.id, "NONE", upload, db, leader)
+
+    reviewer.is_active = False
+    db.commit()
+    with pytest.raises(HTTPException, match="原审核人"):
+        revise()
+    reviewer.is_active = True
+    stamped = WorkOrderFile(work_order_id=order.id, file_category="STAMPED_CONTRACT_SCAN",
+        business_stage="PRINT_ROOM_CONTRACT_SCAN", version_no=1, is_current=True,
+        uploaded_by=leader.id, uploaded_at=order.created_at, storage_key="stamped.pdf", origin_file_name="stamped.pdf")
+    db.add(stamped)
+    db.commit()
+    with pytest.raises(HTTPException, match="盖章"):
+        revise()
+    stamped.is_current = False
+    db.commit()
+
+    def fail_notification(*args, **kwargs):
+        raise RuntimeError("notification failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(api, "send_workflow_notification", fail_notification)
+        with pytest.raises(RuntimeError):
+            revise()
+    assert old.is_current and order.current_status == "CONTRACT_APPROVED"
+    assert list(tmp_path.iterdir()) == [original]
+
+    unlink = Path.unlink
+    def fail_old(path, **kwargs):
+        if path == original:
+            raise PermissionError("file busy")
+        return unlink(path, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", fail_old)
+        revised = revise()
+    assert old.source_type == PENDING_DELETE and original.exists()
+    purge_replaced_contracts(db)
+    assert old.source_type == DELETED and not original.exists()
+    assert revised.contract_file.id != old.id
+
+
+def test_concurrent_revision_commits_once(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from io import BytesIO
+    from threading import Barrier
+    from fastapi import UploadFile
+    from app.api.v1 import contract_reviews as api
+    from app.core.config import settings
+    from app.models.user_notification import UserNotification
+
+    monkeypatch.setattr(settings, "local_storage_dir", str(tmp_path / "files"))
+    engine = create_engine("sqlite:///" + str(tmp_path / "oa.db"))
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        leader = _seed_user(db, "leader", [])
+        reviewer = _seed_user(db, "reviewer", [_seed_role(db, "CONTRACT_REVIEWER", "Reviewer")])
+        _, order = _seed_project_and_work_order(db, leader, leader)
+        first = api.submit_contract_review(ContractReviewSubmitRequest(
+            work_order_id=order.id, reviewer_user_id=reviewer.id), db, leader)
+        approval = api.approve_contract_review(first.id, ContractReviewDecisionRequest(), db, reviewer, set())
+        leader_id, order_id, approval_id = leader.id, order.id, approval.id
+
+    ready = Barrier(2)
+    def send(_):
+        with Session(engine) as db:
+            actor = db.get(User, leader_id)
+            ready.wait(timeout=10)
+            try:
+                api.revise_approved_contract(order_id, approval_id, "NONE",
+                    UploadFile(filename="same.pdf", file=BytesIO(b"new")), db, actor)
+                return 200
+            except HTTPException as exc:
+                return exc.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(send, range(2))) == [200, 409]
+    with Session(engine) as db:
+        assert db.query(WorkOrderFile).filter_by(is_current=True).one().version_no == 2
+        assert db.query(UserNotification).filter_by(title="请处理合同审核", process_status="PENDING").count() == 1

@@ -12,6 +12,7 @@ from app.models.review_record import ReviewRecord
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
+from app.services.contract_revision import lock_work_order
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
 from app.schemas.review import (
@@ -663,7 +664,7 @@ def _submit_review_impl(
     current_user: User,
     role_codes: set[str] | None = None,
 ) -> ReviewRecordResponse:
-    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    work_order = lock_work_order(db, payload.work_order_id)
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     role_codes = role_codes or {item.role.code for item in current_user.roles}

@@ -97,6 +97,10 @@ def build_workflow_message_templates(
                 "下一步：请上传合同初稿"
             ),
         ),
+        "CANCEL_CONTRACT_PRINT": (
+            "旧版合同已撤回，请停止文印",
+            f"{project_name}的合同已重新送审。请停止办理上一版合同。",
+        ),
         "CONTRACT_UPLOAD_COMPLETED": (
             "请处理合同审核",
             (

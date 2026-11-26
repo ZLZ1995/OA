@@ -16,6 +16,7 @@ from app.models.work_order import WorkOrder
 from app.models.workflow_log import WorkflowLog
 from app.schemas.workbench import WorkbenchProjectItem, WorkbenchResponse, WorkbenchSearchResponse
 from app.services.chief_appraiser_service import CHIEF_APPRAISER_ROLE_CODES, work_order_matches_project_chief
+from app.services.contract_revision import contract_status
 from app.services.contract_print_room_flow import get_contract_print_room_status
 from app.services.project_flow import get_project_leader_display_name, get_user_role_in_project, normalize_project_step
 
@@ -56,6 +57,8 @@ def _todo_action_text(
         return "待确认删除"
     if can_approve_termination:
         return f"待审核：{project.termination_reason}"
+    if step == "合同初稿审核" and work_order.contract_reviewer_id == current_user.id and contract_status(db, work_order) == "CONTRACT_REVIEWING":
+        return "请处理合同初稿审核"
     if work_order.current_status == "FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND":
         if work_order.current_handler_user_id == work_order.project_leader_id:
             return "请选择二审老师并提交审核"
@@ -70,7 +73,7 @@ def _todo_action_text(
     if (
         step == "合同初稿审核"
         and contract_print_room_status == "WAIT_PRINT_ROOM_PROCESS"
-        and work_order.print_room_handler_id == current_user.id
+        and work_order.contract_print_assignee == current_user.id
     ):
         return "请上传合同盖章扫描件并发送项目负责人"
     if (
@@ -117,6 +120,7 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
                 WorkOrder.first_reviewer_id == current_user.id,
                 WorkOrder.second_reviewer_id == current_user.id,
                 WorkOrder.third_reviewer_id == current_user.id,
+                WorkOrder.contract_print_handler_id == current_user.id,
                 WorkOrder.print_room_handler_id == current_user.id,
                 WorkOrder.mailing_handler_user_id == current_user.id,
                 WorkOrder.archive_reviewer_id == current_user.id,
@@ -229,6 +233,7 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
             )
         )
     if "PRINT_ROOM" in role_codes or "ADMIN" in role_codes:
+        role_pool_filters.append(WorkOrder.contract_print_handler_id == current_user.id)
         role_pool_filters.append(
             and_(
                 WorkOrder.print_room_handler_id == current_user.id,
@@ -292,6 +297,7 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
         if project.id in seen:
             continue
 
+        reviewing_contract = work_order.contract_reviewer_id == current_user.id and contract_status(db, work_order) == "CONTRACT_REVIEWING"
         is_project_party = (
             work_order.project_leader_id == current_user.id
             or work_order.project_id in member_project_id_set
@@ -302,7 +308,7 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
         is_contract_print_room_assignee = (
             ("PRINT_ROOM" in role_codes or "ADMIN" in role_codes)
             and contract_print_room_status == "WAIT_PRINT_ROOM_PROCESS"
-            and work_order.print_room_handler_id == current_user.id
+            and work_order.contract_print_assignee == current_user.id
         )
         is_report_print_room_assignee = (
             ("PRINT_ROOM" in role_codes or "ADMIN" in role_codes)
@@ -325,7 +331,8 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
         is_print_room_assignee = is_contract_print_room_assignee or is_report_print_room_assignee or is_mailing_print_room_assignee
         if (
             "PRINT_ROOM" in role_codes
-            and work_order.print_room_handler_id == current_user.id
+            and current_user.id in {work_order.print_room_handler_id, work_order.contract_print_handler_id}
+            and not reviewing_contract
             and not is_print_room_assignee
             and work_order.current_handler_user_id != current_user.id
             and not is_project_party
@@ -339,6 +346,7 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
 
         if (
             work_order.current_status in {"REPORT_MAILING", "REPORT_MAILING_COMPLETED"}
+            and not reviewing_contract
             and not is_project_party
             and not is_print_room_assignee
             and "ADMIN" not in role_codes
@@ -357,13 +365,13 @@ def _get_workbench(db: Session, current_user: User, project_ids: list[int] | Non
             step = "待确认删除"
         elif can_approve_termination:
             step = "项目终止/废止审核"
-        elif work_order.current_status == "CONTRACT_REVIEWING" and work_order.contract_reviewer_id == current_user.id:
+        elif reviewing_contract:
             step = "合同初稿审核"
         elif work_order.current_status == "SIGNOFF_REVIEWING" and work_order_matches_project_chief(current_user, project, work_order):
             step = "签发审核"
         elif (
             contract_print_room_status == "WAIT_PRINT_ROOM_PROCESS"
-            and work_order.print_room_handler_id == current_user.id
+            and work_order.contract_print_assignee == current_user.id
         ):
             step = "合同初稿审核"
         elif (
@@ -472,7 +480,7 @@ def search_workbench_projects(
         getattr(WorkOrder, field) == uid for field in (
             "current_handler_user_id", "initiator_user_id", "project_leader_id",
             "contract_reviewer_id", "first_reviewer_id", "second_reviewer_id",
-            "third_reviewer_id", "print_room_handler_id", "mailing_handler_user_id",
+            "third_reviewer_id", "contract_print_handler_id", "print_room_handler_id", "mailing_handler_user_id",
             "archive_reviewer_id", "archive_submitter_id", "chief_appraiser_user_id", "operation_workpaper_reviewer_id",
         )
     ]))

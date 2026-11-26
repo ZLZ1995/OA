@@ -88,10 +88,12 @@ def _serialize_contract_review_records(db: Session, work_order_id: int | None) -
 
 def _resolve_contract_review_status_from_history(records: list[ContractReviewRecordResponse]) -> tuple[str | None, str | None]:
     for item in records:
-        if item.action_type == "APPROVE_CONTRACT":
+        if item.action_type in {"APPROVE_CONTRACT", "APPROVE_AND_TRANSFER_PRINT_ROOM"}:
             return "CONTRACT_APPROVED", "合同初稿审核通过"
         if item.action_type == "REJECT_CONTRACT":
             return "CONTRACT_REJECTED", "合同初稿审核退回"
+        if item.action_type == "REOPEN_CONTRACT_REVIEW":
+            return "WAIT_CONTRACT_REVIEW_SUBMIT", "待提交合同审核"
         if item.action_type == "SUBMIT_CONTRACT":
             return "CONTRACT_REVIEWING", "合同初稿审核中"
     return None, None
@@ -799,6 +801,8 @@ def get_project_flow(
         signer_one=work_order.signer_one if work_order else None,
         signer_two=work_order.signer_two if work_order else None,
         formal_report_count=work_order.formal_report_count if work_order else None,
+        contract_print_handler_name=db.query(User.real_name).filter(User.id == work_order.contract_print_assignee).scalar() if work_order and work_order.contract_print_assignee else None,
+        contract_print_handler_id=work_order.contract_print_assignee if work_order else None,
         print_room_handler_id=work_order.print_room_handler_id if work_order else None,
         mailing_handler_user_id=work_order.mailing_handler_user_id if work_order else None,
         archive_reviewer_id=work_order.archive_reviewer_id if work_order else None,

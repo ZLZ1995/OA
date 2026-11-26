@@ -210,6 +210,11 @@ const roleFlowNodes = computed(() => {
 
 const visibleFlowNodes = computed(() => {
   const nodes = [...roleFlowNodes.value]
+  if (flow.value?.contract_review_status === 'CONTRACT_REVIEWING' &&
+      flow.value.contract_reviewer_id === auth.user?.id && !nodes.some(n => n.key === 'contractReview')) {
+    const review = availableNodes.value.find(n => n.key === 'contractReview')
+    if (review) nodes.push(review)
+  }
   if (flow.value?.parallel_workpaper_enabled && userRoles.value.includes('ARCHIVE_MANAGER') && !nodes.some(n => n.key === 'operationWorkpaperReview')) {
     const review = availableNodes.value.find(n => n.key === 'operationWorkpaperReview')
     if (review) nodes.push(review)
@@ -231,6 +236,8 @@ const todoBannerTitle = computed(() => {
 
 const currentHandlerAccountLabel = computed(() => {
   if (!flow.value) return '无'
+  if (activeNode.value === 'contractReview' && flow.value.contract_review_status === 'CONTRACT_REVIEWING')
+    return flow.value.contract_reviewer_name || '合同审核人'
   const status = flow.value.current_work_order_status || ''
   if (status === 'ARCHIVED') return '无'
   return flow.value.current_handler_username || (flow.value.current_handler_user_id ? '待确认' : '待分配')
@@ -239,6 +246,7 @@ const currentHandlerAccountLabel = computed(() => {
 function resolveCurrentTodoLabel() {
   if (!flow.value) return ''
   const status = flow.value.current_work_order_status
+  if (activeNode.value === 'contractReview' && flow.value.contract_review_status === 'CONTRACT_REVIEWING') return '合同初稿审核'
   const isCurrentHandler = Boolean(auth.user?.id && flow.value.current_handler_user_id === auth.user.id)
   const isProjectLeader = Boolean(auth.user?.id && flow.value.project.project_leader_id === auth.user.id)
   if (status === 'FIRST_APPROVED_WAIT_LEADER_SUBMIT_SECOND') {
@@ -260,6 +268,8 @@ function resolveCurrentTodoLabel() {
 }
 
 function preferredNodeForCurrentStatus() {
+  if (flow.value?.contract_review_status === 'CONTRACT_REVIEWING' &&
+      auth.user?.id === flow.value.contract_reviewer_id) return 'contractReview'
   return workflowPanel(flow.value?.current_work_order_status || '')
 }
 

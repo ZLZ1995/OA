@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class ContractReviewFileResponse(BaseModel):
     id: int
+    downloadable: bool = True
     origin_file_name: str
     file_size: int | None = None
     uploaded_at: datetime | None = None

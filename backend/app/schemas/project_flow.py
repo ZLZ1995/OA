@@ -62,6 +62,8 @@ class ProjectFlowResponse(BaseModel):
     signer_one: str | None = None
     signer_two: str | None = None
     formal_report_count: int | None = None
+    contract_print_handler_name: str | None = None
+    contract_print_handler_id: int | None = None
     print_room_handler_id: int | None = None
     mailing_handler_user_id: int | None = None
     archive_reviewer_id: int | None = None

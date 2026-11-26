@@ -6,11 +6,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import SUPER_ADMIN_USERNAME, get_current_user, require_roles
 from app.api.v1.contract_reviews import get_contract_review_status_display
 from app.db.session import get_db
+from app.models.contract_review_record import ContractReviewRecord
 from app.models.contract import Contract
 from app.models.print_room_record import PrintRoomRecord
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.user import User
+from app.services.contract_revision import lock_work_order, set_contract_status
 from app.models.work_order import WorkOrder
 from app.models.work_order_file import WorkOrderFile
 from app.schemas.print_room import (
@@ -162,7 +164,7 @@ def get_contract_print_room_info(
         .all()
     )
     is_admin = any(item.role.code == "ADMIN" for item in current_user.roles)
-    is_print_room_handler = bool(work_order.print_room_handler_id and work_order.print_room_handler_id == current_user.id)
+    is_print_room_handler = bool(work_order.contract_print_assignee and work_order.contract_print_assignee == current_user.id)
     is_project_leader = work_order.project_leader_id == current_user.id
     current_status = work_order.current_status
     print_room_status = get_contract_print_room_status(db, work_order)
@@ -174,7 +176,7 @@ def get_contract_print_room_info(
         print_room_status_display=get_contract_review_status_display(print_room_status),
         project_leader=_participant(db, work_order.project_leader_id),
         contract_reviewer=_participant(db, work_order.contract_reviewer_id),
-        print_room_handler=_participant(db, work_order.print_room_handler_id),
+        print_room_handler=_participant(db, work_order.contract_print_assignee),
         original_contract_files=[_serialize_contract_file(db, row) for row in contract_files],
         stamped_contract_scan_files=[_serialize_contract_file(db, row) for row in stamped_files],
         can_upload_scan=print_room_status == WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value and (is_print_room_handler or is_admin),
@@ -191,10 +193,11 @@ def send_contract_to_project_leader(
     current_user: User = Depends(get_current_user),
     _: set[str] = Depends(require_roles("PRINT_ROOM", "ADMIN")),
 ) -> dict[str, str]:
-    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    work_order = lock_work_order(db, payload.work_order_id)
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
-    _ensure_print_room_handler(work_order, current_user)
+    if not _is_admin(current_user) and work_order.contract_print_assignee != current_user.id:
+        raise HTTPException(403, "仅当前合同文印人员可处理")
     if get_contract_print_room_status(db, work_order) != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
         raise HTTPException(status_code=400, detail="当前状态不可发送项目负责人")
     if not _has_current_stamped_contract_scan(db, work_order.id):
@@ -237,7 +240,7 @@ def return_contract_to_print_room(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
-    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    work_order = lock_work_order(db, payload.work_order_id)
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     if not payload.remark or not payload.remark.strip():
@@ -253,7 +256,7 @@ def return_contract_to_print_room(
         raise HTTPException(status_code=400, detail="非法状态迁移")
     if work_order.current_status == from_status.value:
         work_order.current_status = to_status.value
-        work_order.current_handler_user_id = work_order.print_room_handler_id
+        work_order.current_handler_user_id = work_order.contract_print_assignee
     create_workflow_log(
         db,
         work_order_id=work_order.id,
@@ -264,13 +267,13 @@ def return_contract_to_print_room(
         remark=payload.remark,
     )
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
-    if project and work_order.print_room_handler_id:
+    if project and work_order.contract_print_assignee:
         send_workflow_notification(
             db,
             project=project,
             work_order=work_order,
             sender_user=current_user,
-            receiver_user_id=work_order.print_room_handler_id,
+            receiver_user_id=work_order.contract_print_assignee,
             action_name="RETURN_TO_PRINT_ROOM",
             comment=payload.remark,
         )
@@ -284,7 +287,7 @@ def confirm_contract_complete(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
-    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    work_order = lock_work_order(db, payload.work_order_id)
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     if not _is_admin(current_user) and work_order.project_leader_id != current_user.id:
@@ -318,7 +321,7 @@ def reopen_contract_review(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
-    work_order = db.query(WorkOrder).filter(WorkOrder.id == payload.work_order_id).first()
+    work_order = lock_work_order(db, payload.work_order_id)
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
     if not _is_admin(current_user) and work_order.project_leader_id != current_user.id:
@@ -326,14 +329,18 @@ def reopen_contract_review(
     if get_contract_print_room_status(db, work_order) != WorkOrderStatus.CONTRACT_PROCESS_COMPLETED.value:
         raise HTTPException(status_code=400, detail="合同流程未确认办结，不可重新审核")
 
-    from_status = WorkOrderStatus(work_order.current_status)
+    from_status = WorkOrderStatus.CONTRACT_PROCESS_COMPLETED
     to_status = WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT
     if not can_transit(from_status, to_status):
         raise HTTPException(status_code=400, detail="非法状态迁移")
 
     remark = payload.remark or "原合同作废，重新进入合同送审"
-    work_order.current_status = to_status.value
-    work_order.current_handler_user_id = work_order.project_leader_id
+    set_contract_status(work_order, to_status.value, work_order.project_leader_id)
+    db.query(WorkOrderFile).filter_by(work_order_id=work_order.id,
+        file_category=STAMPED_CONTRACT_SCAN_FILE_CATEGORY, is_current=True).update({"is_current": False})
+    db.add(ContractReviewRecord(work_order_id=work_order.id, project_id=work_order.project_id,
+        action_type="REOPEN_CONTRACT_REVIEW", operator_user_id=current_user.id,
+        reviewer_user_id=work_order.contract_reviewer_id or current_user.id, comment=remark))
     create_workflow_log(
         db,
         work_order_id=work_order.id,
@@ -345,13 +352,13 @@ def reopen_contract_review(
     )
 
     project = db.query(Project).filter(Project.id == work_order.project_id).first()
-    if project and work_order.print_room_handler_id:
+    if project and work_order.contract_print_assignee:
         send_workflow_notification(
             db,
             project=project,
             work_order=work_order,
             sender_user=current_user,
-            receiver_user_id=work_order.print_room_handler_id,
+            receiver_user_id=work_order.contract_print_assignee,
             action_name="REOPEN_CONTRACT_REVIEW",
             comment=f"{remark}。原合同作废，OA流程已重新进入合同送审环节。",
         )

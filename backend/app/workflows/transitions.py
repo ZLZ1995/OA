@@ -29,6 +29,7 @@ ALLOWED_TRANSITIONS: dict[WorkOrderStatus, set[WorkOrderStatus]] = {
         WorkOrderStatus.CONTRACT_REVIEWING,
     },
     WorkOrderStatus.CONTRACT_APPROVED: {
+        WorkOrderStatus.CONTRACT_REVIEWING,
         WorkOrderStatus.WAIT_CONTRACT_REVIEW_SUBMIT,
         WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS,
         WorkOrderStatus.FIRST_REVIEWING,

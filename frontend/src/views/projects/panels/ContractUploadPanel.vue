@@ -1,4 +1,5 @@
 <template>
+  <ContractRevisionDialog :flow-info="flowInfo" :stamped="hasStamped" @changed="onRevised" />
   <el-alert
     v-if="!canEdit"
     type="info"
@@ -70,6 +71,7 @@
 </template>
 
 <script setup lang="ts">
+import ContractRevisionDialog from "./ContractRevisionDialog.vue"
 import { computed, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
 import UploadProgressInline from '@/components/common/UploadProgressInline.vue'
@@ -95,8 +97,14 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ (e: 'changed'): void; (e: 'navigate', key: string): void }>()
 
+async function onRevised() {
+  emit('changed')
+  await load()
+}
+
 const loading = ref(false)
 const submitting = ref(false)
+const hasStamped = ref(false)
 const contracts = ref<WorkOrderFileItem[]>([])
 const reviewerOptions = ref<UserItem[]>([])
 const reviewerId = ref<number>()
@@ -104,10 +112,10 @@ const comment = ref('')
 const replaceInputs = new Map<number, HTMLInputElement>()
 const uploadProgress = ref<UploadProgressState | null>(null)
 
-const statusCode = computed(() => props.flowInfo?.current_work_order_status || '')
-const isLocked = computed(() => statusCode.value === 'CONTRACT_APPROVED')
+const statusCode = computed(() => props.flowInfo?.contract_review_status || props.flowInfo?.current_work_order_status || '')
+const isLocked = computed(() => ['CONTRACT_APPROVED', 'WAIT_PRINT_ROOM_PROCESS', 'WAIT_PROJECT_LEADER_CONTRACT_CONFIRM', 'CONTRACT_PROCESS_COMPLETED'].includes(statusCode.value))
 const canEditContract = computed(() => props.canEdit && !isLocked.value && statusCode.value !== 'CONTRACT_REVIEWING')
-const canSubmitContract = computed(() => props.canEdit && !isLocked.value)
+const canSubmitContract = computed(() => canEditContract.value)
 const isUploading = computed(() => uploadProgress.value?.status === 'uploading')
 const statusTagType = computed(() => {
   if (statusCode.value === 'CONTRACT_APPROVED') return 'success'
@@ -129,7 +137,8 @@ async function load() {
   loading.value = true
   try {
     const files = (await listWorkOrderFiles(props.workOrderId)).items
-    contracts.value = files.filter(file => file.business_stage === 'CONTRACT_DRAFT' || file.file_category === 'CONTRACT_DRAFT')
+    hasStamped.value = files.some(file => file.file_category === 'STAMPED_CONTRACT_SCAN' && file.is_current)
+    contracts.value = files.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.is_current)
     reviewerId.value = props.flowInfo?.contract_reviewer_id || reviewerId.value
     reviewerOptions.value = (await listUserCandidates('CONTRACT_REVIEWER')).items.filter(user => !projectPartyIds.value.has(user.id))
   } finally {

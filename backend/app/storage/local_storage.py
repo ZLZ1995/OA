@@ -13,6 +13,13 @@ def save_upload_file(upload: UploadFile) -> tuple[str, int]:
     root.mkdir(parents=True, exist_ok=True)
     path = root / key
 
-    content = upload.file.read()
-    path.write_bytes(content)
-    return key, len(content)
+    output = path.open("xb")
+    try:
+        with output:
+            while chunk := upload.file.read(1024 * 1024):
+                output.write(chunk)
+            size = output.tell()
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    return key, size

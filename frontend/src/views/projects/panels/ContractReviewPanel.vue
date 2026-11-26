@@ -1,4 +1,5 @@
 <template>
+  <ContractRevisionDialog :flow-info="flowInfo" :stamped="stampedFiles.length > 0" @changed="onRevised" />
   <el-alert
     v-if="!workOrderId"
     type="warning"
@@ -104,7 +105,7 @@
       <div class="contract-stage-layout">
         <div class="contract-stage-main">
           <el-descriptions :column="2" border style="margin-bottom: 16px">
-            <el-descriptions-item label="当前文印室人员">{{ flowInfo?.project.print_room_handler_name || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="当前文印室人员">{{ flowInfo?.contract_print_handler_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="项目负责人">{{ flowInfo?.project.project_leader_display_name || '-' }}</el-descriptions-item>
           </el-descriptions>
           <el-form label-width="140px">
@@ -205,7 +206,7 @@
         <template #default="{ row }">
           <template v-if="row.contract_file">
             <span>{{ row.contract_file.origin_file_name }}</span>
-            <el-button type="primary" link @click="download(row.contract_file)">下载</el-button>
+            <el-button v-if="row.contract_file.downloadable !== false" type="primary" link @click="download(row.contract_file)">下载</el-button>
           </template>
           <span v-else>-</span>
         </template>
@@ -225,6 +226,7 @@
 </template>
 
 <script setup lang="ts">
+import ContractRevisionDialog from "./ContractRevisionDialog.vue"
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import type { ProjectFlowData } from '@/api/projectFlow'
@@ -256,6 +258,11 @@ const emit = defineEmits<{
 }>()
 const auth = useAuthStore()
 
+async function onRevised() {
+  emit('changed')
+  await load()
+}
+
 const loading = ref(false)
 const records = ref<(ContractReviewRecordItem & { actionLabel: string })[]>([])
 const contractFiles = ref<WorkOrderFileItem[]>([])
@@ -274,14 +281,14 @@ const contractPrintRoomStatus = computed(() => props.flowInfo?.contract_print_ro
 
 const canReview = computed(() => Boolean(
   currentUserId.value &&
-  props.flowInfo?.current_work_order_status === 'CONTRACT_REVIEWING' &&
+  props.flowInfo?.contract_review_status === 'CONTRACT_REVIEWING' &&
   props.flowInfo?.contract_reviewer_id === currentUserId.value &&
   props.userRoles?.some(role => ['CONTRACT_REVIEWER', 'ADMIN'].includes(role))
 ))
 
 const canPrintRoomProcess = computed(() => Boolean(
   contractPrintRoomStatus.value === 'WAIT_PRINT_ROOM_PROCESS' &&
-  (props.flowInfo?.print_room_handler_id === currentUserId.value || isAdmin.value)
+  (props.flowInfo?.contract_print_handler_id === currentUserId.value || isAdmin.value)
 ))
 
 const canProjectLeaderConfirm = computed(() => Boolean(
@@ -306,7 +313,7 @@ const canReopenContractReview = computed(() => Boolean(
 
 const canTransferApprovedContract = computed(() => Boolean(
   currentUserId.value &&
-  props.flowInfo?.current_work_order_status === 'CONTRACT_APPROVED' &&
+  props.flowInfo?.contract_review_status === 'CONTRACT_APPROVED' &&
   !props.flowInfo?.contract_print_room_status &&
   (
     props.flowInfo?.contract_reviewer_id === currentUserId.value ||
@@ -325,7 +332,7 @@ function actionLabel(actionType: ContractReviewRecordItem['action_type']) {
   if (actionType === 'APPROVE_CONTRACT') return '审核通过'
   if (actionType === 'APPROVE_AND_TRANSFER_PRINT_ROOM') return '审核通过并转文印室'
   if (actionType === 'TRANSFER_APPROVED_PRINT_ROOM') return '转送文印室'
-  if (actionType === 'REOPEN_CONTRACT_REVIEW') return '报告重新审核'
+  if (actionType === 'REOPEN_CONTRACT_REVIEW') return '合同重新审核'
   return '退回修改'
 }
 
@@ -348,10 +355,12 @@ async function load() {
     records.value = recordData.items.map(item => ({ ...item, actionLabel: actionLabel(item.action_type) }))
     contractFiles.value = fileData.items.filter(file => file.file_category === 'CONTRACT_DRAFT' && file.is_current)
     stampedFiles.value = fileData.items.filter(file => file.file_category === 'STAMPED_CONTRACT_SCAN' && file.business_stage === 'PRINT_ROOM_CONTRACT_SCAN' && file.is_current)
-    reviewAttachment.value = fileData.items.filter(file => file.file_category === 'CONTRACT_REVIEW_ATTACHMENT').sort((a, b) => b.id - a.id)[0] || null
+    reviewAttachment.value = fileData.items.filter(file => file.file_category === 'CONTRACT_REVIEW_ATTACHMENT' &&
+      (file.business_stage === 'CONTRACT_REVIEW_' + currentSubmitRecord.value?.id ||
+       (file.business_stage === 'CONTRACT_REVIEW' && file.id > (currentSubmitRecord.value?.contract_file_id || 0)))).sort((a, b) => b.id - a.id)[0] || null
     printRoomOptions.value = printUsers.items
-    if (!printRoomHandlerId.value && props.flowInfo?.print_room_handler_id) {
-      printRoomHandlerId.value = props.flowInfo.print_room_handler_id
+    if (!printRoomHandlerId.value && props.flowInfo?.contract_print_handler_id) {
+      printRoomHandlerId.value = props.flowInfo.contract_print_handler_id
     }
   } finally {
     loading.value = false
@@ -359,11 +368,11 @@ async function load() {
 }
 
 async function onAttachmentSelected(file: UploadFile) {
-  if (!props.workOrderId || !file.raw) return
+  if (!props.workOrderId || !file.raw || !currentSubmitRecord.value) return
   reviewAttachment.value = await uploadWorkOrderFile({
     work_order_id: props.workOrderId,
     file_category: 'CONTRACT_REVIEW_ATTACHMENT',
-    business_stage: 'CONTRACT_REVIEW',
+    business_stage: 'CONTRACT_REVIEW_' + currentSubmitRecord.value?.id,
     file: file.raw
   })
   ElMessage.success('审核附件已上传')
@@ -375,6 +384,7 @@ async function onStampedScanSelected(file: UploadFile) {
     work_order_id: props.workOrderId,
     file_category: 'STAMPED_CONTRACT_SCAN',
     business_stage: 'PRINT_ROOM_CONTRACT_SCAN',
+    contract_file_id: contractFiles.value[0]?.id,
     file: file.raw
   })
   ElMessage.success('盖章扫描件已上传')
