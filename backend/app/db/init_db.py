@@ -93,6 +93,7 @@ def ensure_work_order_columns(db: Session) -> None:
         "signer_one": "ALTER TABLE work_orders ADD COLUMN signer_one VARCHAR(64) NULL",
         "signer_two": "ALTER TABLE work_orders ADD COLUMN signer_two VARCHAR(64) NULL",
         "formal_report_count": "ALTER TABLE work_orders ADD COLUMN formal_report_count INTEGER NULL",
+        "contract_print_handler_id": "ALTER TABLE work_orders ADD COLUMN contract_print_handler_id INTEGER NULL",
         "print_room_handler_id": "ALTER TABLE work_orders ADD COLUMN print_room_handler_id INTEGER NULL",
         "mailing_handler_user_id": "ALTER TABLE work_orders ADD COLUMN mailing_handler_user_id INTEGER NULL",
         "archive_reviewer_id": "ALTER TABLE work_orders ADD COLUMN archive_reviewer_id INTEGER NULL",

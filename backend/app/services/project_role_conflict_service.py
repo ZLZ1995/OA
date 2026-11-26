@@ -65,6 +65,7 @@ def validate_member_not_conflicting_with_assigned_roles(target_user_id: int, wor
         work_order.second_reviewer_id,
         work_order.third_reviewer_id,
         work_order.print_room_handler_id,
+        work_order.contract_print_handler_id,
         work_order.archive_reviewer_id,
     }
     if target_user_id in {item for item in assigned_role_user_ids if item}:

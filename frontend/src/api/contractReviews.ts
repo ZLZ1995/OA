@@ -13,7 +13,7 @@ export interface ContractReviewRecordItem {
   comment?: string | null
   contract_file_id?: number | null
   review_attachment_file_id?: number | null
-  contract_file?: Pick<WorkOrderFileItem, 'id' | 'origin_file_name' | 'file_size' | 'uploaded_at'> | null
+  contract_file?: (Pick<WorkOrderFileItem, 'id' | 'origin_file_name' | 'file_size' | 'uploaded_at'> & { downloadable?: boolean }) | null
   review_attachment_file?: Pick<WorkOrderFileItem, 'id' | 'origin_file_name' | 'file_size' | 'uploaded_at'> | null
   created_at: string
 }
@@ -56,4 +56,12 @@ export async function transferApprovedContractToPrintRoom(
 export async function rejectContractReview(recordId: number, payload: { comment?: string; review_attachment_file_id?: number }) {
   const { data } = await http.post(`/contract-reviews/${recordId}/reject`, payload)
   return data as ContractReviewRecordItem
+}
+
+export async function reviseApprovedContract(orderId: number, approvalId: number, printStatus: string, file: File) {
+  const form = new FormData()
+  form.append('approval_id', String(approvalId))
+  form.append('expected_print_status', printStatus)
+  form.append('upload', file)
+  await http.post('/contract-reviews/work-orders/' + orderId + '/revise', form, { timeout: 30 * 60 * 1000 })
 }

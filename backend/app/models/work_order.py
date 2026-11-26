@@ -23,6 +23,12 @@ class WorkOrder(Base, TimestampMixin):
     signer_one: Mapped[str | None] = mapped_column(String(64), nullable=True)
     signer_two: Mapped[str | None] = mapped_column(String(64), nullable=True)
     formal_report_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contract_print_handler_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    @property
+    def contract_print_assignee(self):
+        return self.contract_print_handler_id or self.print_room_handler_id
+
     print_room_handler_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     mailing_handler_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     archive_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
@@ -17,6 +18,7 @@ from app.models.work_order_file import WorkOrderFile
 from app.schemas.file import WorkOrderFileListResponse, WorkOrderFileResponse
 from app.services.archive_sync_service import SIGNOFF_SYNC_SOURCE_TYPE, is_signoff_source_category, refresh_archive_synced_file_by_source
 from app.services.chief_appraiser_service import CHIEF_APPRAISER_ROLE_CODES
+from app.services.contract_revision import DELETED, PENDING_DELETE, contract_status, lock_work_order
 from app.services.contract_print_room_flow import get_contract_print_room_status
 from app.services.project_conflicts import upsert_conflict_snapshot_and_detect
 from app.storage.local_storage import save_upload_file
@@ -147,7 +149,7 @@ def _ensure_upload_permission(
     if file_category == "ELECTRONIC_DRAFT":
         return
     if file_category == CONTRACT_DRAFT_FILE_CATEGORY:
-        if work_order.current_status in {WorkOrderStatus.CONTRACT_REVIEWING.value, WorkOrderStatus.CONTRACT_APPROVED.value}:
+        if contract_status(db, work_order) in {"CONTRACT_REVIEWING", "CONTRACT_APPROVED", "WAIT_PRINT_ROOM_PROCESS", "WAIT_PROJECT_LEADER_CONTRACT_CONFIRM", "CONTRACT_PROCESS_COMPLETED"}:
             raise HTTPException(status_code=400, detail="合同初稿在审核中或已通过，已锁定")
         _ensure_project_contract_operator(db, work_order, current_user)
         return
@@ -175,7 +177,7 @@ def _ensure_upload_permission(
     if file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY:
         if get_contract_print_room_status(db, work_order) != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
             raise HTTPException(status_code=400, detail="仅待文印室处理状态可上传盖章扫描件")
-        if current_user.id != work_order.print_room_handler_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
+        if current_user.id != work_order.contract_print_assignee and not any(item.role.code == "ADMIN" for item in current_user.roles):
             raise HTTPException(status_code=403, detail="仅当前文印室人员可上传盖章扫描件")
         return
 
@@ -211,12 +213,25 @@ def upload_file(
             *CHIEF_APPRAISER_ROLE_CODES,
         )
     ),
+    contract_file_id: Annotated[int | None, Form()] = None,
 ) -> WorkOrderFileResponse:
     work_order = db.query(WorkOrder).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="工单不存在")
 
+    if file_category in {CONTRACT_DRAFT_FILE_CATEGORY, STAMPED_CONTRACT_SCAN_FILE_CATEGORY}:
+        work_order = lock_work_order(db, work_order_id)
     _ensure_upload_permission(db, work_order=work_order, current_user=current_user, file_category=file_category)
+
+    if file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY:
+        draft = _get_latest_file(db, work_order_id, file_category=CONTRACT_DRAFT_FILE_CATEGORY,
+                                 business_stage=CONTRACT_DRAFT_STAGE)
+        previously_revised = db.query(WorkOrderFile.id).filter(
+            WorkOrderFile.work_order_id == work_order_id,
+            WorkOrderFile.source_type.in_([PENDING_DELETE, DELETED]),
+        ).first()
+        if (contract_file_id is not None or previously_revised) and (not draft or draft.id != contract_file_id):
+            raise HTTPException(409, "合同版本已变化，请刷新后核对盖章件")
 
     if file_category == "OPERATION_WORKPAPER":
         raise HTTPException(403, "请使用操作类底稿审核专用上传入口")
@@ -333,6 +348,11 @@ def delete_work_order_file(
     row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="文件不存在")
+    if row.file_category in {CONTRACT_DRAFT_FILE_CATEGORY, STAMPED_CONTRACT_SCAN_FILE_CATEGORY}:
+        lock_work_order(db, row.work_order_id)
+        db.refresh(row)
+        if not row.is_current:
+            raise HTTPException(409, "文件版本已更新，请刷新")
     if row.locked:
         raise HTTPException(status_code=400, detail="该文件已锁定，不允许删除")
     if not row.is_current:
@@ -344,7 +364,7 @@ def delete_work_order_file(
     if row.file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY:
         if get_contract_print_room_status(db, work_order) != WorkOrderStatus.WAIT_PRINT_ROOM_PROCESS.value:
             raise HTTPException(status_code=400, detail="当前状态不可替换盖章扫描件")
-        if current_user.id != work_order.print_room_handler_id and not any(item.role.code == "ADMIN" for item in current_user.roles):
+        if current_user.id != work_order.contract_print_assignee and not any(item.role.code == "ADMIN" for item in current_user.roles):
             raise HTTPException(status_code=403, detail="仅当前文印室人员可替换盖章扫描件")
 
     _ensure_review_package_unlocked(work_order, row)
@@ -386,6 +406,11 @@ def replace_work_order_file(
     row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="文件不存在")
+    if row.file_category in {CONTRACT_DRAFT_FILE_CATEGORY, STAMPED_CONTRACT_SCAN_FILE_CATEGORY}:
+        lock_work_order(db, row.work_order_id)
+        db.refresh(row)
+        if not row.is_current:
+            raise HTTPException(409, "文件版本已更新，请刷新")
     if row.locked:
         raise HTTPException(status_code=400, detail="该文件已锁定，不允许替换")
 
@@ -394,9 +419,10 @@ def replace_work_order_file(
         raise HTTPException(status_code=404, detail="工单不存在")
 
     if row.file_category == CONTRACT_DRAFT_FILE_CATEGORY:
-        if work_order.current_status in {WorkOrderStatus.CONTRACT_REVIEWING.value, WorkOrderStatus.CONTRACT_APPROVED.value}:
-            raise HTTPException(status_code=400, detail="合同初稿在审核中或已通过，已锁定")
-        _ensure_project_contract_operator(db, work_order, current_user)
+        _ensure_upload_permission(db, work_order=work_order, current_user=current_user, file_category=row.file_category)
+
+    if row.file_category == STAMPED_CONTRACT_SCAN_FILE_CATEGORY:
+        _ensure_upload_permission(db, work_order=work_order, current_user=current_user, file_category=row.file_category)
 
     if row.file_category == FINAL_CONTRACT_SCAN_FILE_CATEGORY:
         if work_order.current_status == WorkOrderStatus.WAIT_OWNER_SIGNOFF_UPLOAD.value:
@@ -486,6 +512,9 @@ def download_work_order_file(
     row = db.query(WorkOrderFile).filter(WorkOrderFile.id == file_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="文件不存在")
+
+    if row.source_type in {PENDING_DELETE, DELETED}:
+        raise HTTPException(410, "此版合同已撤回")
 
     if row.file_category == "OPERATION_WORKPAPER":
         from app.models.operation_workpaper import OperationWorkpaperSubmission, OperationWorkpaperSubmissionFile

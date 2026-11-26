@@ -17,6 +17,7 @@ DUTIES = {
     "contract_reviewer_id": "合同审核人", "first_reviewer_id": "一审老师",
     "second_reviewer_id": "二审老师", "third_reviewer_id": "三审老师",
     "chief_appraiser_user_id": "首席评估师", "archive_reviewer_id": "归档审核人",
+    "contract_print_handler_id": "合同文印办理人",
     "print_room_handler_id": "文印办理人", "mailing_handler_user_id": "邮寄办理人",
     "current_handler_user_id": "当前办理人",
 }
@@ -25,6 +26,7 @@ ROLE_CODES = {
     "contract_reviewer_id": {"CONTRACT_REVIEWER"}, "first_reviewer_id": {"FIRST_REVIEWER"},
     "second_reviewer_id": {"SECOND_REVIEWER"}, "third_reviewer_id": {"THIRD_REVIEWER"},
     "archive_reviewer_id": {"ARCHIVE_MANAGER"}, "print_room_handler_id": {"PRINT_ROOM"},
+    "contract_print_handler_id": {"PRINT_ROOM"},
     "mailing_handler_user_id": {"PRINT_ROOM"},
 }
 REVIEW_DUTIES = set(ROLE_CODES) | {"chief_appraiser_user_id"}

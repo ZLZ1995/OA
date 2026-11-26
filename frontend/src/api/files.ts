@@ -45,11 +45,13 @@ export async function uploadWorkOrderFile(payload: {
   work_order_id: number
   file_category: string
   business_stage: string
+  contract_file_id?: number
   file: File
   onProgress?: UploadProgressCallback
 }) {
   const formData = new FormData()
   formData.append('work_order_id', String(payload.work_order_id))
+  if (payload.contract_file_id) formData.append('contract_file_id', String(payload.contract_file_id))
   formData.append('file_category', payload.file_category)
   formData.append('business_stage', payload.business_stage)
   formData.append('upload', payload.file)
